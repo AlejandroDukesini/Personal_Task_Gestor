@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf node_modules server/node_modules web/node_modules package-lock.json)",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "gestion-tareas",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sistema de Productividad Personal Local-First (Tareas, Hábitos, Calendario, Objetivos)",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "postinstall": "npm run db:setup -w server",
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w server && npm run build -w client",
+    "start": "npm run start -w server",
+    "db:studio": "npm run db:studio -w server",
+    "db:reset": "npm run db:reset -w server",
+    "db:seed": "npm run db:seed -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

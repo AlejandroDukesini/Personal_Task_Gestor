@@ -1,0 +1,156 @@
+// Esquema Prisma - Sistema de Productividad Personal (SQLite local)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Settings {
+  id           Int      @id @default(1)
+  theme        String   @default("system") // light | dark | system
+  language     String   @default("es")
+  dateFormat   String   @default("dd/MM/yyyy")
+  primaryColor String   @default("#6366f1")
+  fontScale    Float    @default(1)
+  pinHash      String?
+  pinEnabled   Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  color       String     @default("#6366f1")
+  icon        String?    @default("Folder")
+  description String?
+  parentId    String?
+  parent      Category?  @relation("Subcategories", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("Subcategories")
+  tasks       Task[]
+  habits      Habit[]
+  events      Event[]
+  goals       Goal[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Tag {
+  id    String @id @default(cuid())
+  name  String @unique
+  color String @default("#64748b")
+  icon  String?
+  tasks TaskTag[]
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  priority    String     @default("medium") // low | medium | high | critical
+  status      String     @default("pending") // pending | in_progress | completed | cancelled
+  progress    Int        @default(0)
+  startDate   DateTime?
+  dueDate     DateTime?
+  dueTime     String?
+  notes       String?
+  position    Int        @default(0)
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags        TaskTag[]
+  reminders   Reminder[]
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model TaskTag {
+  taskId String
+  tagId  String
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([taskId, tagId])
+}
+
+model Habit {
+  id            String     @id @default(cuid())
+  name          String
+  description   String?
+  color         String     @default("#10b981")
+  icon          String?    @default("Activity")
+  frequency     String     @default("daily") // daily | weekly | monthly | custom
+  daysOfWeek    String?    // "0,1,2,3,4,5,6" cuando frequency=custom
+  dailyTarget   Int        @default(1)
+  weeklyTarget  Int?
+  startDate     DateTime   @default(now())
+  endDate       DateTime?
+  categoryId    String?
+  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  logs          HabitLog[]
+  reminders     Reminder[]
+  archived      Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model HabitLog {
+  id        String   @id @default(cuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime
+  count     Int      @default(1)
+  note      String?
+  createdAt DateTime @default(now())
+  @@unique([habitId, date])
+}
+
+model Event {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  start       DateTime
+  end         DateTime
+  allDay      Boolean    @default(false)
+  color       String?
+  location    String?
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  reminders   Reminder[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Reminder {
+  id            String   @id @default(cuid())
+  triggerAt     DateTime
+  minutesBefore Int?
+  type          String   @default("in_app") // in_app | banner | sound
+  delivered     Boolean  @default(false)
+  taskId        String?
+  task          Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  habitId       String?
+  habit         Habit?   @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  eventId       String?
+  event         Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+}
+
+model Goal {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  type         String    @default("monthly") // daily | weekly | monthly | yearly
+  targetValue  Float     @default(100)
+  currentValue Float     @default(0)
+  unit         String?
+  startDate    DateTime  @default(now())
+  endDate      DateTime
+  categoryId   String?
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  completed    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

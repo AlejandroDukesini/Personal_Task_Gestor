@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 248 250 252;
+  --surface: 255 255 255;
+  --muted: 241 245 249;
+  --border: 226 232 240;
+  --text: 15 23 42;
+  --subtle: 100 116 139;
+  --primary: 99 102 241;
+  --primary-fg: 255 255 255;
+  --danger: 239 68 68;
+  --success: 16 185 129;
+  --warning: 245 158 11;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 9 9 11;
+  --surface: 24 24 27;
+  --muted: 39 39 42;
+  --border: 39 39 42;
+  --text: 244 244 245;
+  --subtle: 161 161 170;
+  --primary: 129 140 248;
+  --primary-fg: 17 24 39;
+  --danger: 248 113 113;
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  color-scheme: dark;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--border)); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--subtle)); }
+
+/* FullCalendar overrides */
+.fc {
+  --fc-border-color: rgb(var(--border));
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: rgb(var(--muted));
+  --fc-list-event-hover-bg-color: rgb(var(--muted));
+  --fc-today-bg-color: rgba(99,102,241,.07);
+  font-family: inherit;
+  color: rgb(var(--text));
+}
+.fc .fc-toolbar-title { font-size: 1.1rem; font-weight: 600; }
+.fc .fc-button {
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border));
+  color: rgb(var(--text));
+  text-transform: capitalize;
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 500;
+}
+.fc .fc-button:hover { background: rgb(var(--muted)); }
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: rgb(var(--primary));
+  color: rgb(var(--primary-fg));
+  border-color: rgb(var(--primary));
+}
+.fc-event {
+  border: none !important;
+  padding: 2px 4px;
+  font-size: 12px;
+  border-radius: 6px;
+}

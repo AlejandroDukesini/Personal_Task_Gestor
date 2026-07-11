@@ -17,18 +17,20 @@ import {
   Laptop,
 } from "lucide-react";
 import { useTheme } from "@/store/theme";
+import { useConfig } from "@/store/config";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/tareas", icon: CheckSquare, label: "Tareas" },
-  { to: "/habitos", icon: Activity, label: "Hábitos" },
-  { to: "/calendario", icon: Calendar, label: "Calendario" },
-  { to: "/categorias", icon: Folder, label: "Categorías" },
-  { to: "/etiquetas", icon: Tag, label: "Etiquetas" },
-  { to: "/objetivos", icon: Target, label: "Objetivos" },
-  { to: "/estadisticas", icon: BarChart3, label: "Estadísticas" },
-  { to: "/configuracion", icon: SettingsIcon, label: "Configuración" },
+  { to: "/", icon: LayoutDashboard, label: "nav.dashboard" },
+  { to: "/tareas", icon: CheckSquare, label: "nav.tasks" },
+  { to: "/habitos", icon: Activity, label: "nav.habits" },
+  { to: "/calendario", icon: Calendar, label: "nav.calendar" },
+  { to: "/categorias", icon: Folder, label: "nav.categories" },
+  { to: "/etiquetas", icon: Tag, label: "nav.tags" },
+  { to: "/objetivos", icon: Target, label: "nav.goals" },
+  { to: "/estadisticas", icon: BarChart3, label: "nav.stats" },
+  { to: "/configuracion", icon: SettingsIcon, label: "nav.settings" },
 ];
 
 export function AppLayout() {
@@ -77,14 +79,22 @@ function Sidebar() {
 }
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
+  const t = useT();
+  const appName = useConfig((s) => s.appName);
+  const appLogo = useConfig((s) => s.appLogo);
+  const isImage = !!appLogo && appLogo.startsWith("data:");
   return (
     <div className="h-full flex flex-col">
       <div className="h-14 flex items-center justify-between px-4 border-b border-border">
-        <div className="flex items-center gap-2 font-semibold">
-          <div className="h-8 w-8 rounded-lg bg-primary text-primary-fg flex items-center justify-center text-sm font-bold">
-            P
+        <div className="flex items-center gap-2 font-semibold min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-primary text-primary-fg flex items-center justify-center text-sm font-bold overflow-hidden shrink-0">
+            {isImage ? (
+              <img src={appLogo!} alt={appName} className="h-full w-full object-cover" />
+            ) : (
+              appLogo || appName.charAt(0).toUpperCase() || "P"
+            )}
           </div>
-          <span>Productividad</span>
+          <span className="truncate">{appName}</span>
         </div>
         {onClose && (
           <button onClick={onClose} className="md:hidden text-subtle">
@@ -108,12 +118,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             }
           >
             <it.icon size={18} />
-            {it.label}
+            {t(it.label)}
           </NavLink>
         ))}
       </nav>
       <div className="p-3 border-t border-border text-xs text-subtle">
-        v1.0.0 · datos locales
+        v1.0.0 · {t("nav.localData")}
       </div>
     </div>
   );
@@ -121,6 +131,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
 function Topbar({ onMenu }: { onMenu: () => void }) {
   const { theme, setTheme } = useTheme();
+  const t = useT();
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Laptop;
   return (
@@ -128,7 +139,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
       <button
         onClick={onMenu}
         className="md:hidden mr-3 p-1.5 rounded-md hover:bg-muted text-subtle"
-        aria-label="Abrir menú"
+        aria-label={t("nav.openMenu")}
       >
         <Menu size={18} />
       </button>

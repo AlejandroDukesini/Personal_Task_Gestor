@@ -1,0 +1,9 @@
+ALPHA
+
+CONFIGURACIÓN
+- Generación de PIN no se guarda, al actualizar la página sigue sin tener una "clave"
+- El idioma no cambia
+
+El nombre del programa en la parte superior izquierda no se puede modificar (ni el nombre que dice PRODUCTIVIDAD y tampoco la imagen que es una P)
+Tambien sería bueno, que al decir buen día sea adaptado según a la hora del residente (si es en colombia pues bogota) y pueda tambien cambiarse, y si es de noche, buenas noches
+y al lado del saludo el nombre del usuario (tambien debe haber crud para cambiar logo, nombre y pin)

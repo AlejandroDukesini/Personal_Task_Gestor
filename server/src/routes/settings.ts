@@ -12,6 +12,10 @@ const updateSchema = z.object({
   dateFormat: z.string().optional(),
   primaryColor: z.string().optional(),
   fontScale: z.number().optional(),
+  appName: z.string().min(1).max(40).optional(),
+  appLogo: z.string().max(500000).nullable().optional(),
+  userName: z.string().max(40).nullable().optional(),
+  timezone: z.string().max(64).optional(),
 });
 
 router.get(

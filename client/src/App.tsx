@@ -12,15 +12,19 @@ import { Goals } from "./pages/Goals";
 import { Stats } from "./pages/Stats";
 import { SettingsPage } from "./pages/Settings";
 import { useTheme } from "./store/theme";
+import { useConfig } from "./store/config";
+import { PinGate } from "./components/PinGate";
 
 export default function App() {
   const applyDom = useTheme((s) => s.applyDom);
+  const loadConfig = useConfig((s) => s.load);
   useEffect(() => {
     applyDom();
-  }, [applyDom]);
+    loadConfig().catch(() => {});
+  }, [applyDom, loadConfig]);
 
   return (
-    <>
+    <PinGate>
       <Notifier />
       <Routes>
         <Route element={<AppLayout />}>
@@ -35,6 +39,6 @@ export default function App() {
           <Route path="/configuracion" element={<SettingsPage />} />
         </Route>
       </Routes>
-    </>
+    </PinGate>
   );
 }

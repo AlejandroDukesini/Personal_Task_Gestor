@@ -127,6 +127,10 @@ export interface Settings {
   dateFormat: string;
   primaryColor: string;
   fontScale: number;
+  appName: string;
+  appLogo?: string | null;
+  userName?: string | null;
+  timezone: string;
   pinEnabled: boolean;
   pinSet: boolean;
 }

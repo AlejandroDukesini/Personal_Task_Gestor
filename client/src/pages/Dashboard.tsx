@@ -29,6 +29,8 @@ import { useResource } from "@/hooks/useResource";
 import { api } from "@/services/api";
 import type { Habit, Stats, Task, Event, Goal } from "@/types";
 import { priorityColor, priorityLabel, relativeDay } from "@/lib/utils";
+import { useConfig, hourInTimezone } from "@/store/config";
+import { useT, localeFor } from "@/lib/i18n";
 
 export function Dashboard() {
   const stats = useResource(() => api.get<Stats>("/stats/summary"));
@@ -37,12 +39,33 @@ export function Dashboard() {
   const events = useResource(() => api.get<Event[]>("/events"));
   const goals = useResource(() => api.get<Goal[]>("/goals"));
 
-  const today = useMemo(() => new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }), []);
+  const t = useT();
+  const language = useConfig((s) => s.language);
+  const timezone = useConfig((s) => s.timezone);
+  const userName = useConfig((s) => s.userName);
+
+  const today = useMemo(
+    () =>
+      new Date().toLocaleDateString(localeFor(language), {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      }),
+    [language]
+  );
+
+  const greeting = useMemo(() => {
+    const hour = hourInTimezone(timezone);
+    const key =
+      hour < 12 ? "greeting.morning" : hour < 19 ? "greeting.afternoon" : "greeting.evening";
+    const base = t(key);
+    return userName ? `${base}, ${userName}` : base;
+  }, [timezone, userName, language]);
 
   return (
     <>
       <PageHeader
-        title={`Buen día`}
+        title={greeting}
         description={today.charAt(0).toUpperCase() + today.slice(1)}
       />
 
@@ -50,25 +73,25 @@ export function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Kpi
           icon={CheckCircle2}
-          label="Hoy completadas"
+          label={t("dash.completedToday")}
           value={stats.data?.completedToday ?? 0}
           color="#10b981"
         />
         <Kpi
           icon={ListTodo}
-          label="Pendientes"
+          label={t("dash.pending")}
           value={stats.data?.pendingTasks ?? 0}
           color="#6366f1"
         />
         <Kpi
           icon={Activity}
-          label="Hábitos activos"
+          label={t("dash.activeHabits")}
           value={stats.data?.activeHabits ?? 0}
           color="#0ea5e9"
         />
         <Kpi
           icon={TrendingUp}
-          label="Semana"
+          label={t("dash.week")}
           value={stats.data?.completedThisWeek ?? 0}
           color="#f59e0b"
         />
@@ -78,7 +101,7 @@ export function Dashboard() {
         {/* Productividad */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Productividad (últimos 30 días)</CardTitle>
+            <CardTitle>{t("dash.productivity")}</CardTitle>
           </CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -114,7 +137,7 @@ export function Dashboard() {
         {/* Hábitos semana */}
         <Card>
           <CardHeader>
-            <CardTitle>Hábitos esta semana</CardTitle>
+            <CardTitle>{t("dash.habitsWeek")}</CardTitle>
           </CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -123,7 +146,7 @@ export function Dashboard() {
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "rgb(var(--subtle))" }}
                   tickFormatter={(d) =>
-                    new Date(d).toLocaleDateString("es-ES", { weekday: "short" }).slice(0, 2)
+                    new Date(d).toLocaleDateString(localeFor(language), { weekday: "short" }).slice(0, 2)
                   }
                 />
                 <YAxis hide />
@@ -144,9 +167,9 @@ export function Dashboard() {
         {/* Tareas pendientes */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
-            <CardTitle>Tareas pendientes</CardTitle>
+            <CardTitle>{t("dash.pendingTasks")}</CardTitle>
             <Link to="/tareas" className="text-xs text-primary flex items-center gap-1">
-              Ver todas <ArrowRight size={12} />
+              {t("dash.seeAll")} <ArrowRight size={12} />
             </Link>
           </CardHeader>
           <CardContent className="space-y-2 max-h-96 overflow-y-auto">
@@ -180,7 +203,7 @@ export function Dashboard() {
               </motion.div>
             ))}
             {tasks.data?.length === 0 && (
-              <p className="text-sm text-subtle text-center py-6">No hay tareas pendientes ✨</p>
+              <p className="text-sm text-subtle text-center py-6">{t("dash.noPending")}</p>
             )}
           </CardContent>
         </Card>
@@ -188,9 +211,9 @@ export function Dashboard() {
         {/* Hábitos hoy */}
         <Card>
           <CardHeader className="flex items-center justify-between">
-            <CardTitle>Hábitos hoy</CardTitle>
+            <CardTitle>{t("dash.habitsToday")}</CardTitle>
             <Link to="/habitos" className="text-xs text-primary flex items-center gap-1">
-              Ver <ArrowRight size={12} />
+              {t("dash.see")} <ArrowRight size={12} />
             </Link>
           </CardHeader>
           <CardContent className="space-y-2 max-h-96 overflow-y-auto">
@@ -213,7 +236,7 @@ export function Dashboard() {
               </div>
             ))}
             {habits.data?.length === 0 && (
-              <p className="text-sm text-subtle text-center py-6">Sin hábitos</p>
+              <p className="text-sm text-subtle text-center py-6">{t("dash.noHabits")}</p>
             )}
           </CardContent>
         </Card>
@@ -221,7 +244,7 @@ export function Dashboard() {
         {/* Próximos eventos */}
         <Card>
           <CardHeader>
-            <CardTitle>Próximos eventos</CardTitle>
+            <CardTitle>{t("dash.upcomingEvents")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {(events.data ?? [])
@@ -234,7 +257,7 @@ export function Dashboard() {
                 </div>
               ))}
             {(events.data ?? []).filter((e) => new Date(e.end) >= new Date()).length === 0 && (
-              <p className="text-sm text-subtle text-center py-6">Sin eventos próximos</p>
+              <p className="text-sm text-subtle text-center py-6">{t("dash.noEvents")}</p>
             )}
           </CardContent>
         </Card>
@@ -242,9 +265,9 @@ export function Dashboard() {
         {/* Objetivos */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
-            <CardTitle>Progreso de objetivos</CardTitle>
+            <CardTitle>{t("dash.goalsProgress")}</CardTitle>
             <Link to="/objetivos" className="text-xs text-primary flex items-center gap-1">
-              Ver todos <ArrowRight size={12} />
+              {t("dash.seeAllM")} <ArrowRight size={12} />
             </Link>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -266,7 +289,7 @@ export function Dashboard() {
               );
             })}
             {goals.data?.length === 0 && (
-              <p className="text-sm text-subtle text-center py-6">Sin objetivos definidos</p>
+              <p className="text-sm text-subtle text-center py-6">{t("dash.noGoals")}</p>
             )}
           </CardContent>
         </Card>

@@ -16,6 +16,10 @@ model Settings {
   dateFormat   String   @default("dd/MM/yyyy")
   primaryColor String   @default("#6366f1")
   fontScale    Float    @default(1)
+  appName      String   @default("Productividad")
+  appLogo      String? // emoji, letra o data URL para el logo
+  userName     String? // nombre del usuario para el saludo
+  timezone     String   @default("America/Bogota")
   pinHash      String?
   pinEnabled   Boolean  @default(false)
   updatedAt    DateTime @updatedAt

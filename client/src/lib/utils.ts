@@ -11,12 +11,23 @@ export function hexToRgb(hex: string): string {
   return `${(bigint >> 16) & 255} ${(bigint >> 8) & 255} ${bigint & 255}`;
 }
 
+// Aclara un color hacia el blanco (mezcla lineal). Se usa para derivar la
+// variante del color primario en modo oscuro, garantizando contraste AA
+// (>= 4.5:1) del texto/enlaces primarios sobre superficies oscuras.
+export function lightenHexToRgb(hex: string, amount = 0.25): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  return `${mix((n >> 16) & 255)} ${mix((n >> 8) & 255)} ${mix(n & 255)}`;
+}
+
 export function priorityColor(p: string) {
   switch (p) {
-    case "critical": return "bg-red-500/15 text-red-500 border border-red-500/30";
-    case "high": return "bg-orange-500/15 text-orange-500 border border-orange-500/30";
-    case "medium": return "bg-amber-400/15 text-amber-500 border border-amber-400/30";
-    default: return "bg-slate-400/15 text-slate-500 border border-slate-400/20";
+    case "critical": return "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30";
+    case "high": return "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30";
+    case "medium": return "bg-amber-400/15 text-amber-600 dark:text-amber-400 border border-amber-400/30";
+    default: return "bg-slate-400/15 text-slate-600 dark:text-slate-300 border border-slate-400/20";
   }
 }
 

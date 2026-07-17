@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Theme } from "@/types";
-import { hexToRgb } from "@/lib/utils";
+import { hexToRgb, lightenHexToRgb } from "@/lib/utils";
 
 interface ThemeState {
   theme: Theme;
@@ -29,7 +29,12 @@ export const useTheme = create<ThemeState>()(
           theme === "dark" ||
           (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
         root.classList.toggle("dark", isDark);
-        root.style.setProperty("--primary", hexToRgb(primaryColor));
+        // En modo oscuro se aclara el primario para asegurar contraste AA del
+        // texto/enlaces primarios sobre superficies oscuras (WCAG 4.5:1).
+        root.style.setProperty(
+          "--primary",
+          isDark ? lightenHexToRgb(primaryColor) : hexToRgb(primaryColor)
+        );
         root.style.fontSize = `${16 * fontScale}px`;
       },
     }),

@@ -5,9 +5,10 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 
 <p align="center">
   <img alt="Lighthouse SEO 100" src="https://img.shields.io/badge/Lighthouse_SEO-100-brightgreen?logo=lighthouse&logoColor=white">
-  <img alt="Lighthouse Accessibility 100" src="https://img.shields.io/badge/Accessibility-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Best Practices 100" src="https://img.shields.io/badge/Best_Practices-100-brightgreen?logo=lighthouse&logoColor=white">
-  <img alt="Lighthouse Performance Desktop 100" src="https://img.shields.io/badge/Performance_(Desktop)-100-brightgreen?logo=lighthouse&logoColor=white">
+  <img alt="Lighthouse Accessibility 92" src="https://img.shields.io/badge/Accessibility-92-green?logo=lighthouse&logoColor=white">
+  <img alt="Lighthouse Performance 87" src="https://img.shields.io/badge/Performance-87-yellow?logo=lighthouse&logoColor=white">
+  <a href="https://task-gestor.netlify.app/"><img alt="Demo en vivo" src="https://img.shields.io/badge/Demo-en_vivo-6366f1?logo=netlify&logoColor=white"></a>
   <br>
   <img alt="React" src="https://img.shields.io/badge/React_18-20232A?logo=react&logoColor=61DAFB">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
@@ -64,24 +65,24 @@ Bajo la premisa **Local-First**, el objetivo de ingeniería no es "aguantar carg
 
 ### 🎨 Frontend — Google Lighthouse
 
-Auditoría de Lighthouse sobre el `build` de producción servido localmente (Chrome headless), en perfiles móvil y escritorio:
+Auditoría de Lighthouse ejecutada **contra el sitio desplegado en producción** ([task-gestor.netlify.app](https://task-gestor.netlify.app/), con CDN de Netlify), en perfiles móvil y escritorio. Cualquiera puede reproducir estas cifras auditando la URL:
 
 | Categoría | 📱 Móvil | 🖥️ Escritorio |
 | :--- | :---: | :---: |
-| **Performance** | 82 * | **100** |
-| **Accessibility** | **100** | **100** |
-| **Best Practices** | **100** | **100** |
 | **SEO** | **100** | **100** |
+| **Best Practices** | **100** | **100** |
+| **Accessibility** | 92 | 92 |
+| **Performance** | 73 * | 87 * |
 
-<sub>\* En móvil, Lighthouse simula una CPU 4× más lenta; la puntuación de *Performance* oscila ~80 según la carga de la máquina, mientras que el LCP se mantiene estable. El resto de categorías son consistentes en 100.</sub>
+<sub>\* En móvil Lighthouse simula una CPU 4× más lenta y una red 4G; la puntuación de *Performance* varía según red/CPU, pero los Web Vitals se mantienen dentro de los umbrales "buenos". La Accessibilidad (92) tiene dos hallazgos menores pendientes (`color-contrast` y `heading-order`) documentados como mejora futura.</sub>
 
-**Core Web Vitals:**
+**Core Web Vitals (producción):**
 
 | Métrica | 📱 Móvil | 🖥️ Escritorio | Umbral "Bueno" |
 | :--- | :---: | :---: | :---: |
-| **LCP** (Largest Contentful Paint) | 3.1 s | **0.8 s** | < 2.5 s |
-| **TBT** (Total Blocking Time) | ~300 ms | **~50 ms** | < 200 ms |
-| **CLS** (Cumulative Layout Shift) | 0.00 | 0.02 | < 0.1 |
+| **LCP** (Largest Contentful Paint) | 3.1 s | **1.4 s** | < 2.5 s |
+| **TBT** (Total Blocking Time) | 280 ms | 100 ms | < 200 ms |
+| **CLS** (Cumulative Layout Shift) | 0.00 | 0.037 | < 0.1 |
 
 ### 📦 Optimización del Bundle — Code Splitting
 
@@ -98,7 +99,7 @@ El punto de entrada empaquetaba **toda** la aplicación (incluidas librerías pe
 
 ### 🔎 SEO Técnico Profesional (Lighthouse SEO 100/100)
 
-El `index.html` no se sirve "pelado": implementa una capa de SEO técnico de nivel producción que consigue **puntuación perfecta de SEO (100) y Accesibilidad (100)** en Lighthouse, con **cero auditorías fallidas**. Todo está declarado de forma estática, por lo que es visible para los *crawlers* incluso antes de que hidrate React.
+El `index.html` no se sirve "pelado": implementa una capa de SEO técnico de nivel producción que consigue **puntuación perfecta de SEO (100/100)** en Lighthouse — móvil y escritorio — con **cero auditorías de SEO fallidas**, verificado sobre el sitio en vivo. Todo está declarado de forma estática, por lo que es visible para los *crawlers* incluso antes de que hidrate React.
 
 | Optimización | Implementación | Beneficio |
 | :--- | :--- | :--- |

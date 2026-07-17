@@ -1,0 +1,15 @@
+# La app es 100% estática (local-first, los datos viven en el navegador), así que
+# Netlify solo construye el paquete `client`. El `server` de Express no se despliega.
+[build]
+  base = "client"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# El enrutado lo maneja React Router en el cliente.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

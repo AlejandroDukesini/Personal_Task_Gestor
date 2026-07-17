@@ -1,29 +1,23 @@
-const BASE = "/api";
+// La app es local-first: no hay servidor. Las peticiones se resuelven contra el
+// almacenamiento del navegador, conservando la misma interfaz que tenía el
+// cliente HTTP para que las páginas no cambien.
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
-    ...options,
-  });
-  if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`;
-    try {
-      const j = await res.json();
-      msg = j.message || j.error || msg;
-    } catch {}
-    throw new Error(msg);
-  }
+import { handleRequest } from "./localApi";
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // Mismo viaje que hacía JSON.stringify por la red: normaliza fechas y descarta
+  // valores no serializables antes de tocar el almacenamiento.
+  const payload = body === undefined ? undefined : JSON.parse(JSON.stringify(body));
+
+  const res = await handleRequest(method, path, payload);
   if (res.status === 204) return undefined as T;
-  return res.json();
+  return res.body as T;
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  get: <T>(path: string) => request<T>("GET", path),
+  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
+  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
+  delete: <T>(path: string) => request<T>("DELETE", path),
 };

@@ -6,8 +6,8 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 <p align="center">
   <img alt="Lighthouse SEO 100" src="https://img.shields.io/badge/Lighthouse_SEO-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Best Practices 100" src="https://img.shields.io/badge/Best_Practices-100-brightgreen?logo=lighthouse&logoColor=white">
-  <img alt="Lighthouse Accessibility 92" src="https://img.shields.io/badge/Accessibility-92-green?logo=lighthouse&logoColor=white">
-  <img alt="Lighthouse Performance 87" src="https://img.shields.io/badge/Performance-87-yellow?logo=lighthouse&logoColor=white">
+  <img alt="Lighthouse Accessibility 100" src="https://img.shields.io/badge/Accessibility-100-brightgreen?logo=lighthouse&logoColor=white">
+  <img alt="Lighthouse Performance 92" src="https://img.shields.io/badge/Performance-92-brightgreen?logo=lighthouse&logoColor=white">
   <a href="https://task-gestor.netlify.app/"><img alt="Demo en vivo" src="https://img.shields.io/badge/Demo-en_vivo-6366f1?logo=netlify&logoColor=white"></a>
   <br>
   <img alt="React" src="https://img.shields.io/badge/React_18-20232A?logo=react&logoColor=61DAFB">
@@ -71,10 +71,10 @@ Auditoría de Lighthouse ejecutada **contra el sitio desplegado en producción**
 | :--- | :---: | :---: |
 | **SEO** | **100** | **100** |
 | **Best Practices** | **100** | **100** |
-| **Accessibility** | 92 | 92 |
-| **Performance** | 73 * | 87 * |
+| **Accessibility** | **100** | **100** |
+| **Performance** | 73 * | **92** * |
 
-<sub>\* En móvil Lighthouse simula una CPU 4× más lenta y una red 4G; la puntuación de *Performance* varía según red/CPU, pero los Web Vitals se mantienen dentro de los umbrales "buenos". La Accessibilidad (92) tiene dos hallazgos menores pendientes (`color-contrast` y `heading-order`) documentados como mejora futura.</sub>
+<sub>\* En móvil Lighthouse simula una CPU 4× más lenta y una red 4G; la puntuación de *Performance* varía según red/CPU, pero los Web Vitals se mantienen dentro de los umbrales "buenos". Las auditorías de contraste de color (`color-contrast`) y jerarquía de encabezados (`heading-order`) pasan sin errores.</sub>
 
 **Core Web Vitals (producción):**
 

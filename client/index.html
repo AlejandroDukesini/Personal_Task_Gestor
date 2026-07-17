@@ -2,18 +2,112 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- ================= SEO PRIMARIO ================= -->
+    <title>Sistema de Productividad Personal | Tareas, Hábitos y Calendario Local-First</title>
+    <meta
+      name="description"
+      content="Plataforma Local-First de productividad personal: gestiona tareas, hábitos, calendario, objetivos y estadísticas con total privacidad. Construida con React, TypeScript, Prisma y SQLite."
+    />
+    <meta
+      name="keywords"
+      content="gestor de tareas, productividad personal, seguimiento de hábitos, calendario, local-first, código abierto, React, TypeScript, Prisma, task manager, habit tracker"
+    />
+    <meta name="author" content="Alejandro Dukesini" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" content="#6366f1" />
+    <link rel="canonical" href="https://task-gestor.netlify.app/" />
+
+    <!-- ================= ICONOS / PWA ================= -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- ================= OPEN GRAPH (Facebook / LinkedIn / WhatsApp) ================= -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sistema de Productividad Personal" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:url" content="https://task-gestor.netlify.app/" />
+    <meta
+      property="og:title"
+      content="Sistema de Productividad Personal | Tareas, Hábitos y Calendario Local-First"
+    />
+    <meta
+      property="og:description"
+      content="Gestiona tareas, hábitos, calendario, objetivos y estadísticas con total privacidad. Local-First con React, TypeScript y Prisma."
+    />
+    <meta property="og:image" content="https://task-gestor.netlify.app/og-image.png" />
+    <meta property="og:image:width" content="1607" />
+    <meta property="og:image:height" content="816" />
+    <meta property="og:image:alt" content="Panel del Sistema de Productividad Personal" />
+
+    <!-- ================= TWITTER / X CARD ================= -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Sistema de Productividad Personal | Local-First"
+    />
+    <meta
+      name="twitter:description"
+      content="Tareas, hábitos, calendario, objetivos y estadísticas con total privacidad. React + TypeScript + Prisma."
+    />
+    <meta name="twitter:image" content="https://task-gestor.netlify.app/og-image.png" />
+    <meta name="twitter:image:alt" content="Panel del Sistema de Productividad Personal" />
+
+    <!-- ================= FUENTES (con preconnect para rendimiento) ================= -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <title>Productividad Personal</title>
+
+    <!-- ================= DATOS ESTRUCTURADOS (JSON-LD / Schema.org) ================= -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Sistema de Productividad Personal",
+        "url": "https://task-gestor.netlify.app/",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Web, Windows, macOS, Linux",
+        "browserRequirements": "Requires JavaScript. Requires HTML5.",
+        "inLanguage": "es",
+        "description": "Plataforma Local-First de productividad personal que integra gestión de tareas, seguimiento de hábitos, calendario unificado, objetivos y estadísticas, garantizando la privacidad total de los datos del usuario.",
+        "featureList": [
+          "Gestión de tareas con vistas Lista, Kanban y Calendario",
+          "Seguimiento de hábitos con cálculo automático de rachas",
+          "Calendario unificado (mes, semana, día y agenda)",
+          "Objetivos y metas con progreso porcentual",
+          "Estadísticas y gráficos analíticos",
+          "Arquitectura Local-First con backup a JSON/CSV"
+        ],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "Alejandro Dukesini",
+          "url": "https://github.com/AlejandroDukesini"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width: 640px; margin: 3rem auto; padding: 0 1.5rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+        <h1>Sistema de Productividad Personal</h1>
+        <p>
+          Plataforma <strong>Local-First</strong> para gestionar tareas, hábitos,
+          calendario, objetivos y estadísticas con total privacidad. Esta aplicación
+          requiere JavaScript para funcionar. Por favor, actívalo en tu navegador.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

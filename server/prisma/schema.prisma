@@ -69,6 +69,12 @@ model Task {
   completedAt DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+
+  // Índices compuestos para las rutas calientes del dashboard y del listado.
+  // (status, completedAt) sirve las agregaciones de /stats/summary como
+  // COVERING INDEX; (categoryId) acelera el filtrado de tareas por categoría.
+  @@index([status, completedAt])
+  @@index([categoryId])
 }
 
 model TaskTag {

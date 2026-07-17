@@ -1,0 +1,6 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Sitemap (actualiza el dominio si despliegas en otra URL)
+Sitemap: https://task-gestor.netlify.app/sitemap.xml

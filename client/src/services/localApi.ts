@@ -45,10 +45,31 @@ function find<T extends { id: string }>(rows: T[], id: string): T {
   return row;
 }
 
+/**
+ * Claves que nunca deben escribirse por asignación dinámica: `__proto__`
+ * dispara el setter del prototipo y contaminaría Object.prototype.
+ */
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Descarta recursivamente claves peligrosas de un objeto de datos externo. */
+function stripDangerousKeys<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripDangerousKeys) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (!FORBIDDEN_KEYS.has(k)) out[k] = stripDangerousKeys(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 /** Aplica solo las claves definidas, como hace Prisma con `data`. */
 function assign<T extends object>(row: T, data: Partial<T>): T {
   for (const [k, v] of Object.entries(data)) {
-    if (v !== undefined) (row as any)[k] = v;
+    // Los esquemas zod ya descartan claves desconocidas; el filtro es una
+    // segunda barrera por si alguna ruta futura pasa datos sin validar.
+    if (v !== undefined && !FORBIDDEN_KEYS.has(k)) (row as any)[k] = v;
   }
   return row;
 }
@@ -226,29 +247,109 @@ const goalSchema = z.object({
 
 // ------------------------------------------------------------------ ajustes
 
+/**
+ * El logo se guarda embebido como data URL. Se acepta solo imagen rasterizada
+ * en base64: evita almacenar `data:text/html`, `data:image/svg+xml` u otros
+ * tipos activos que podrían ejecutarse si en el futuro el logo se renderizara
+ * fuera de un `<img>` (hoy es inerte, pero la lista blanca cierra la vía).
+ */
+const LOGO_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
+
+const appLogoSchema = z
+  .string()
+  .max(500000)
+  .refine((v) => v === "" || LOGO_DATA_URL.test(v) || !v.startsWith("data:"), {
+    message: "Formato de logo no permitido",
+  });
+
 const settingsSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
-  language: z.string().optional(),
-  dateFormat: z.string().optional(),
-  primaryColor: z.string().optional(),
-  fontScale: z.number().optional(),
+  language: z.string().max(16).optional(),
+  dateFormat: z.string().max(32).optional(),
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{3,8}$/, "Color inválido")
+    .optional(),
+  fontScale: z.number().min(0.5).max(2).optional(),
   appName: z.string().min(1).max(40).optional(),
-  appLogo: z.string().max(500000).nullable().optional(),
+  appLogo: appLogoSchema.nullable().optional(),
   userName: z.string().max(40).nullable().optional(),
   timezone: z.string().max(64).optional(),
 });
 
-/**
- * SHA-256 igual que el `crypto` de Node del servidor.
- * Ojo: en una app 100% estática el PIN es un bloqueo de conveniencia, no una
- * medida de seguridad — el hash vive en el mismo navegador que lo verifica.
- */
-async function hashPin(pin: string): Promise<string> {
-  const bytes = new TextEncoder().encode(pin);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
+// ------------------------------------------------------------------- PIN
+//
+// AVISO DE DISEÑO: en una app 100% estática el PIN es un bloqueo de
+// conveniencia, no un control de seguridad. El hash vive en el mismo
+// localStorage que los datos que protege, así que quien tenga acceso al
+// navegador puede leer los datos sin pasar por la pantalla de bloqueo.
+// Lo que sí se puede hacer -- y se hace aquí -- es encarecer el ataque
+// offline contra el hash (que sí revela el PIN, a menudo reutilizado):
+// PBKDF2 con sal aleatoria en lugar de SHA-256 a una sola ronda, que para
+// 4 dígitos se rompe probando las 10.000 combinaciones.
+
+const PBKDF2_ITERATIONS = 210000; // Alineado con la guía OWASP para PBKDF2-SHA256.
+const PBKDF2_PREFIX = "pbkdf2$sha256$";
+
+const toHex = (buf: ArrayBuffer) =>
+  Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+
+const fromHex = (hex: string) =>
+  Uint8Array.from(hex.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? []);
+
+/** Comparación en tiempo constante: no filtra cuántos caracteres coinciden. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function pbkdf2(pin: string, salt: Uint8Array, iterations: number): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, [
+    "deriveBits",
+  ]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: salt as BufferSource, iterations },
+    key,
+    256
+  );
+  return toHex(bits);
+}
+
+/** Formato almacenado: `pbkdf2$sha256$<iteraciones>$<salHex>$<hashHex>`. */
+async function hashPin(pin: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await pbkdf2(pin, salt, PBKDF2_ITERATIONS);
+  return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}$${toHex(salt.buffer)}$${hash}`;
+}
+
+/** SHA-256 a una ronda: solo para validar hashes creados por versiones previas. */
+async function legacySha256(pin: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return toHex(digest);
+}
+
+/**
+ * Verifica contra el formato nuevo y contra el heredado. Devuelve además un
+ * `upgrade` para volver a sellar el PIN con PBKDF2 tras un acierto sobre un
+ * hash antiguo, de modo que la migración es transparente para el usuario.
+ */
+async function verifyPin(pin: string, stored: string | null): Promise<{ ok: boolean; upgrade?: string }> {
+  if (!stored) return { ok: false };
+
+  if (stored.startsWith(PBKDF2_PREFIX)) {
+    const [, , iterStr, saltHex, expected] = stored.split("$");
+    const iterations = Number(iterStr);
+    if (!Number.isFinite(iterations) || !saltHex || !expected) return { ok: false };
+    const actual = await pbkdf2(pin, fromHex(saltHex), iterations);
+    return { ok: timingSafeEqual(actual, expected) };
+  }
+
+  const ok = timingSafeEqual(await legacySha256(pin), stored);
+  return ok ? { ok, upgrade: await hashPin(pin) } : { ok };
 }
 
 function safeSettings(db: Db) {
@@ -707,10 +808,16 @@ const routes: [string, string, Handler][] = [
     );
   }],
   ["POST", "/settings/pin/verify", async ({ body }) => {
-    const { pin } = parse(z.object({ pin: z.string() }), body);
-    const db = loadDb();
-    const hash = await hashPin(pin);
-    return ok({ ok: !!db.settings.pinHash && db.settings.pinHash === hash });
+    const { pin } = parse(z.object({ pin: z.string().max(128) }), body);
+    const { ok: valid, upgrade } = await verifyPin(pin, loadDb().settings.pinHash);
+    // Migración silenciosa del hash heredado (SHA-256) al formato PBKDF2.
+    if (valid && upgrade) {
+      mutate((db) => {
+        db.settings.pinHash = upgrade;
+        db.settings.updatedAt = nowIso();
+      });
+    }
+    return ok({ ok: valid });
   }],
   ["POST", "/settings/pin", async ({ body }) => {
     const { pin } = parse(z.object({ pin: z.string().min(4).max(32) }), body);
@@ -806,18 +913,32 @@ const routes: [string, string, Handler][] = [
     });
   }],
   ["POST", "/backup/import", ({ body }) => {
+    // Un backup es un fichero que el usuario puede haber recibido de terceros:
+    // se trata como entrada no confiable. Se acota el número de filas (evita
+    // agotar la cuota de localStorage con un JSON gigante) y se exige que cada
+    // fila sea un objeto con `id` de texto, en lugar de aceptar `any`.
+    const MAX_ROWS = 20000;
+    const row = z.object({ id: z.string().min(1).max(128) }).passthrough();
+    const rows = z.array(row).max(MAX_ROWS).optional();
+
     const { data, replace } = parse(
       z.object({
         data: z.object({
-          categories: z.array(z.any()).optional(),
-          tags: z.array(z.any()).optional(),
-          tasks: z.array(z.any()).optional(),
-          taskTags: z.array(z.any()).optional(),
-          habits: z.array(z.any()).optional(),
-          habitLogs: z.array(z.any()).optional(),
-          events: z.array(z.any()).optional(),
-          reminders: z.array(z.any()).optional(),
-          goals: z.array(z.any()).optional(),
+          categories: rows,
+          tags: rows,
+          tasks: rows,
+          taskTags: z
+            .array(z.object({ taskId: z.string().min(1).max(128), tagId: z.string().min(1).max(128) }))
+            .max(MAX_ROWS)
+            .optional(),
+          habits: rows,
+          habitLogs: rows,
+          events: rows,
+          reminders: rows,
+          goals: rows,
+          // `settings` viaja en el fichero por compatibilidad, pero nunca se
+          // aplica: importar ajustes ajenos permitiría, por ejemplo, sustituir
+          // el hash del PIN por uno conocido por el atacante.
           settings: z.any().optional(),
         }),
         replace: z.boolean().optional(),
@@ -839,7 +960,7 @@ const routes: [string, string, Handler][] = [
       }
       const upsert = <T extends { id: string }>(rows: T[], incoming: any[]) => {
         for (const item of incoming) {
-          const { tags: _tags, category: _category, ...rest } = item;
+          const { tags: _tags, category: _category, ...rest } = stripDangerousKeys(item);
           const i = rows.findIndex((r) => r.id === rest.id);
           if (i >= 0) rows[i] = { ...rows[i], ...rest };
           else rows.push(rest);

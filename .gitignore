@@ -3,12 +3,19 @@ dist/
 build/
 *.tsbuildinfo
 .env
+.env.*
+!.env.example
 .env.local
 *.log
 .DS_Store
 server/prisma/dev.db
 server/prisma/dev.db-journal
+server/prisma/*.db
+server/prisma/*.db-journal
 server/prisma/migrations/
 client/dist/
 .vscode/
 .idea/
+
+# Informe de auditoría de seguridad (uso interno)
+cibersegurity.txt

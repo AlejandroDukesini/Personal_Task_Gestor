@@ -83,7 +83,19 @@ export function SettingsPage() {
   }
 
   function generatePin() {
-    const p = String(Math.floor(1000 + Math.random() * 9000));
+    // Math.random() no es criptográficamente seguro: su estado interno es
+    // predecible a partir de salidas previas, así que un PIN generado con él
+    // es adivinable. crypto.getRandomValues sí usa el CSPRNG del navegador.
+    // Muestreo por rechazo para que los 9000 valores sean equiprobables
+    // (un simple % 9000 sesgaría los primeros valores del rango).
+    const buf = new Uint32Array(1);
+    let n: number;
+    const limit = Math.floor(0xffffffff / 9000) * 9000;
+    do {
+      crypto.getRandomValues(buf);
+      n = buf[0];
+    } while (n >= limit);
+    const p = String(1000 + (n % 9000));
     setPin(p);
     toast.success(t("toast.pinGenerated", { pin: p }));
   }
@@ -123,11 +135,33 @@ export function SettingsPage() {
   }
 
   async function importFile(file: File) {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    // Un backup puede venir de fuera: se valida tamaño y forma antes de tocar
+    // el almacenamiento, y se confirma con el usuario antes de leerlo entero.
+    const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast.error("El archivo supera el límite de 10 MB.");
+      return;
+    }
     if (!confirm("¿Importar este archivo? Los datos existentes con el mismo ID se reemplazarán.")) return;
-    await api.post("/backup/import", { ...data, replace: false });
-    toast.success(t("toast.imported"));
+
+    let data: unknown;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      toast.error("El archivo no es un JSON válido.");
+      return;
+    }
+    if (!data || typeof data !== "object" || !("data" in data)) {
+      toast.error("El archivo no tiene el formato de una copia de seguridad.");
+      return;
+    }
+
+    try {
+      await api.post("/backup/import", { data: (data as any).data, replace: false });
+      toast.success(t("toast.imported"));
+    } catch {
+      toast.error("No se pudo importar: el contenido del archivo no es válido.");
+    }
   }
 
   const previewIsImage = logoText.trim() === "" && isImageLogo;

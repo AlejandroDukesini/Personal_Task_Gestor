@@ -3,6 +3,9 @@
 
 Una plataforma modular de productividad personal al estilo **Notion + Todoist + Google Calendar + Habit Tracker**, diseñada bajo el concepto **Local-First** para garantizar total privacidad, rapidez y control de tus datos sin depender de servidores en la nube.
 
+/server funcionaría en producción
+Actualmente en servicios gratuitos se muestra archivos estáticos.
+
 <p align="center">
   <img alt="Lighthouse SEO 100" src="https://img.shields.io/badge/Lighthouse_SEO-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Best Practices 100" src="https://img.shields.io/badge/Best_Practices-100-brightgreen?logo=lighthouse&logoColor=white">

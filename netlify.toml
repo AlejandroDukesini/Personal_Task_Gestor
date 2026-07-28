@@ -13,3 +13,53 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# ---------------------------------------------------------------------------
+# Cabeceras de seguridad (se aplican a todas las respuestas del sitio).
+#
+# Al ser una SPA estática, estas cabeceras son la única capa de defensa del
+# perímetro: no hay servidor propio donde aplicarlas. Cada valor está elegido
+# para no romper la app tal y como está construida hoy.
+# ---------------------------------------------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Content-Security-Policy: reduce el impacto de un XSS a un fallo inerte.
+    #   script-src 'self'      -> el build de Vite solo emite scripts externos;
+    #                             no hay inline JS (el bloque JSON-LD no es
+    #                             ejecutable y CSP no lo bloquea).
+    #   style-src 'unsafe-inline' -> obligatorio: framer-motion, recharts y
+    #                             FullCalendar escriben atributos style en línea.
+    #                             Es el punto débil aceptado de esta política.
+    #   img-src data: blob:    -> el logo de la app se guarda como data URL y las
+    #                             exportaciones JSON/CSV usan blob:.
+    #   connect-src 'self'     -> la app no hace ninguna llamada de red saliente.
+    #   frame-ancestors 'none' -> anti-clickjacking.
+    #   base-uri 'none'        -> impide reescribir rutas relativas vía <base>.
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+
+    # Anti-clickjacking heredado, para navegadores sin frame-ancestors.
+    X-Frame-Options = "DENY"
+
+    # Impide que el navegador adivine el MIME (XSS por content sniffing).
+    X-Content-Type-Options = "nosniff"
+
+    # App de datos personales: no filtrar la URL visitada a terceros.
+    Referrer-Policy = "no-referrer"
+
+    # Mínimo privilegio sobre las APIs del navegador: la app no usa ninguna.
+    Permissions-Policy = "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), xr-spatial-tracking=()"
+
+    # Fuerza HTTPS durante un año (Netlify ya sirve TLS en todo el dominio).
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+    # Aísla la ventana y los recursos de contextos de origen cruzado.
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Resource-Policy = "same-origin"
+
+# El HTML no debe cachearse: garantiza que un despliegue con cabeceras o
+# correcciones de seguridad nuevas llegue al usuario de inmediato.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"

@@ -164,3 +164,231 @@ model Goal {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
+
+// ---------------------------------------------------------------- finanzas
+// Estructura creada por la migración versionada
+// prisma/migrations/finance/V1__finance.sql (generada desde
+// client/src/services/finance/sql.ts; un test verifica que coinciden).
+// Los modelos se mapean 1:1 a esas tablas. Importes en céntimos (Int):
+// nunca Float para dinero. Las restricciones CHECK viven en el SQL.
+
+model FinAccount {
+  id             String   @id
+  name           String
+  type           String
+  currency       String
+  initialBalance Int      @default(0) @map("initial_balance")
+  description    String?
+  color          String
+  icon           String
+  archived       Boolean  @default(false)
+  includeInTotal Boolean  @default(true) @map("include_in_total")
+  createdAt      String   @map("created_at")
+  updatedAt      String   @map("updated_at")
+
+  transactions   FinTransaction[] @relation("TxAccount")
+  incoming       FinTransaction[] @relation("TxToAccount")
+  recurring      FinRecurring[]   @relation("RecAccount")
+  recurringIn    FinRecurring[]   @relation("RecToAccount")
+  goals          FinGoalAccount[]
+  budgets        FinBudgetAccount[]
+
+  @@map("fin_accounts")
+}
+
+model FinCategory {
+  id           String   @id
+  name         String
+  kind         String
+  color        String
+  icon         String
+  archived     Boolean  @default(false)
+  createdAt    String   @map("created_at")
+  updatedAt    String   @map("updated_at")
+
+  transactions FinTransaction[]
+  recurring    FinRecurring[]
+  budgets      FinBudgetCategory[]
+
+  @@map("fin_categories")
+}
+
+model FinGoal {
+  id           String   @id
+  name         String
+  description  String?
+  targetAmount Int      @map("target_amount")
+  currency     String
+  startDate    String   @map("start_date")
+  deadline     String?
+  icon         String
+  color        String
+  status       String
+  createdAt    String   @map("created_at")
+  updatedAt    String   @map("updated_at")
+
+  accounts     FinGoalAccount[]
+  transactions FinTransaction[]
+  recurring    FinRecurring[]
+
+  @@map("fin_goals")
+}
+
+model FinGoalAccount {
+  goalId    String     @map("goal_id")
+  accountId String     @map("account_id")
+  goal      FinGoal    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  account   FinAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@id([goalId, accountId])
+  @@map("fin_goal_accounts")
+}
+
+model FinRecurring {
+  id          String       @id
+  name        String
+  kind        String
+  amount      Int
+  accountId   String       @map("account_id")
+  toAccountId String?      @map("to_account_id")
+  categoryId  String?      @map("category_id")
+  goalId      String?      @map("goal_id")
+  frequency   String
+  startDate   String       @map("start_date")
+  endDate     String?      @map("end_date")
+  status      String
+  note        String?
+  createdAt   String       @map("created_at")
+  updatedAt   String       @map("updated_at")
+
+  account      FinAccount   @relation("RecAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  toAccount    FinAccount?  @relation("RecToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  category     FinCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  goal         FinGoal?     @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  skips        FinRecurringSkip[]
+  transactions FinTransaction[]
+
+  @@map("fin_recurring")
+}
+
+model FinRecurringSkip {
+  recurringId String       @map("recurring_id")
+  date        String
+  recurring   FinRecurring @relation(fields: [recurringId], references: [id], onDelete: Cascade)
+
+  @@id([recurringId, date])
+  @@map("fin_recurring_skips")
+}
+
+model FinTransaction {
+  id          String        @id
+  kind        String
+  amount      Int
+  accountId   String        @map("account_id")
+  toAccountId String?       @map("to_account_id")
+  toAmount    Int?          @map("to_amount")
+  categoryId  String?       @map("category_id")
+  date        String
+  concept     String
+  description String?
+  goalId      String?       @map("goal_id")
+  recurringId String?       @map("recurring_id")
+  reason      String?
+  createdAt   String        @map("created_at")
+  updatedAt   String        @map("updated_at")
+
+  account     FinAccount    @relation("TxAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  toAccount   FinAccount?   @relation("TxToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  category    FinCategory?  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  goal        FinGoal?      @relation(fields: [goalId], references: [id], onDelete: Restrict)
+  recurring   FinRecurring? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  tags        FinTransactionTag[]
+  allocations FinAllocation[]
+
+  @@index([accountId, date], map: "fin_tx_account_date")
+  @@index([date, kind], map: "fin_tx_date_kind")
+  @@index([categoryId, date], map: "fin_tx_category_date")
+  @@map("fin_transactions")
+}
+
+model FinTransactionTag {
+  transactionId String         @map("transaction_id")
+  tagId         String         @map("tag_id")
+  tagName       String         @map("tag_name")
+  transaction   FinTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@id([transactionId, tagId])
+  @@map("fin_transaction_tags")
+}
+
+model FinBudget {
+  id           String   @id
+  name         String
+  description  String?
+  kind         String
+  amount       Int
+  currency     String
+  period       String
+  startDate    String   @map("start_date")
+  endDate      String?  @map("end_date")
+  status       String
+  alertPercent Int      @default(80) @map("alert_percent")
+  createdAt    String   @map("created_at")
+  updatedAt    String   @map("updated_at")
+
+  categories   FinBudgetCategory[]
+  accounts     FinBudgetAccount[]
+
+  @@map("fin_budgets")
+}
+
+model FinBudgetCategory {
+  budgetId   String      @map("budget_id")
+  categoryId String      @map("category_id")
+  budget     FinBudget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category   FinCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([budgetId, categoryId])
+  @@map("fin_budget_categories")
+}
+
+model FinBudgetAccount {
+  budgetId  String     @map("budget_id")
+  accountId String     @map("account_id")
+  budget    FinBudget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account   FinAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@id([budgetId, accountId])
+  @@map("fin_budget_accounts")
+}
+
+// Etiquetas financieras (V2__finance_tags.sql). Dueño polimórfico
+// (presupuesto o meta): la integridad con el dueño la garantiza la aplicación.
+model FinTag {
+  id          String          @id
+  name        String
+  ownerType   String          @map("owner_type")
+  ownerId     String          @unique @map("owner_id")
+  color       String
+  createdAt   String          @map("created_at")
+  updatedAt   String          @map("updated_at")
+  allocations FinAllocation[]
+
+  @@map("fin_tags")
+}
+
+// Reparto de un movimiento entre finalidades. No altera saldos; la suma por
+// movimiento no supera su importe (trigger fin_alloc_cap en el SQL).
+model FinAllocation {
+  id            String         @id
+  transactionId String         @map("transaction_id")
+  tagId         String         @map("tag_id")
+  amount        Int
+  flow          String
+  transaction   FinTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tag           FinTag         @relation(fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@unique([transactionId, tagId, flow])
+  @@index([tagId], map: "fin_alloc_tag")
+  @@map("fin_allocations")
+}

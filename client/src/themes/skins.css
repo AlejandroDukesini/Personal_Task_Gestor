@@ -1,0 +1,230 @@
+/* ==========================================================================
+   THEME ENGINE — capa de "skins"
+   --------------------------------------------------------------------------
+   Cada skin es un conjunto completo de tokens aplicado con `html[data-skin]`.
+   Los componentes nunca conocen el skin: consumen tokens semánticos, así que
+   añadir un skin nuevo es añadir un bloque aquí y una entrada en
+   `store/theme.ts` — sin tocar un solo componente.
+
+   Ejes independientes:
+     - data-skin  -> lenguaje visual (default | brutalist | glass | terminal)
+     - .dark      -> modo claro/oscuro dentro de ese lenguaje
+
+   Especificidad: `[data-skin=x]` (0,1,0) gana a `:root` (0,0,1); la variante
+   oscura usa `.dark[data-skin=x]` (0,2,0) y gana a ambas. Este archivo se
+   importa DESPUÉS del bloque base de index.css, así que en empates de
+   especificidad con `.dark` manda el skin.
+   ========================================================================== */
+
+/* -------------------------------------------------------------- 1. DEFAULT */
+/* El skin base ya vive en :root/.dark de index.css. Aquí solo se declaran los
+   tokens estructurales que los skins alternativos van a sobrescribir. */
+
+:root {
+  /* Geometría */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-pill: 9999px;
+  --border-w: 1px;
+
+  /* Elevación */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 6px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 10px 40px -12px rgba(0, 0, 0, 0.35);
+
+  /* Tipografía. Se usa la pila mono del sistema: cero peticiones de red, lo que
+     mantiene intacto el presupuesto de rendimiento de la app. */
+  --font-ui: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-heading: var(--font-ui);
+  --tracking-heading: -0.01em;
+  --case-heading: none;
+  --weight-heading: 600;
+
+  /* Superficies: alpha + backdrop permiten que un skin sea translúcido sin
+     que los componentes cambien de marcado. */
+  --surface-alpha: 1;
+  --surface-backdrop: none;
+  --bg-image: none;
+
+  /* Interacción */
+  --ring: var(--primary);
+  --press-y: 0px; /* desplazamiento al pulsar (brutalismo) */
+  --hover-lift: 0px;
+  --transition: 150ms ease;
+}
+
+/* ------------------------------------------------- 2. BRUTALISMO / NEOBRUTAL */
+/* Bordes gruesos, esquinas rectas, sombra sólida desplazada y tipografía mono.
+   El "press" mueve el elemento sobre su sombra, como un botón físico. */
+
+[data-skin="brutalist"] {
+  --bg: 255 246 224;
+  --surface: 255 255 255;
+  --muted: 255 237 194;
+  --border: 17 17 17;
+  --text: 17 17 17;
+  --subtle: 80 74 62;
+  --primary: 255 78 0;
+  --primary-fg: 255 255 255;
+  --danger: 214 31 31;
+  --success: 0 148 68;
+  --warning: 214 138 0;
+  color-scheme: light;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 0px;
+  --border-w: 2px;
+
+  --shadow-1: 4px 4px 0 0 rgb(var(--border));
+  --shadow-2: 8px 8px 0 0 rgb(var(--border));
+
+  --font-ui: var(--font-mono);
+  --font-heading: var(--font-mono);
+  --tracking-heading: -0.02em;
+  --case-heading: uppercase;
+  --weight-heading: 800;
+
+  --ring: var(--text);
+  --press-y: 3px;
+  --transition: 80ms linear;
+}
+
+.dark[data-skin="brutalist"] {
+  --bg: 20 20 20;
+  --surface: 32 32 32;
+  --muted: 45 45 45;
+  --border: 245 245 245;
+  --text: 245 245 245;
+  --subtle: 175 175 175;
+  --primary: 255 122 51;
+  --primary-fg: 20 20 20;
+  --danger: 255 110 110;
+  --success: 74 222 128;
+  --warning: 250 204 21;
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------- 3. GLASSMORFISMO */
+/* Superficies translúcidas sobre un degradado de fondo. El desenfoque vive en
+   un único token, así que solo las superficies reales pagan el coste de
+   compositing (backdrop-filter es caro: no se aplica a todo el árbol). */
+
+[data-skin="glass"] {
+  --bg: 232 236 248;
+  --surface: 255 255 255;
+  --muted: 226 232 245;
+  --border: 255 255 255;
+  --text: 24 27 46;
+  --subtle: 88 95 124;
+  --primary: 99 91 255;
+  --primary-fg: 255 255 255;
+  --danger: 233 65 96;
+  --success: 12 168 122;
+  --warning: 219 141 8;
+  color-scheme: light;
+
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-pill: 9999px;
+  --border-w: 1px;
+
+  --shadow-1: 0 8px 32px -8px rgba(31, 38, 135, 0.24);
+  --shadow-2: 0 24px 64px -12px rgba(31, 38, 135, 0.42);
+
+  --surface-alpha: 0.55;
+  --surface-backdrop: blur(18px) saturate(180%);
+  --bg-image:
+    radial-gradient(at 12% 18%, rgba(99, 91, 255, 0.35) 0px, transparent 55%),
+    radial-gradient(at 85% 8%, rgba(236, 72, 153, 0.28) 0px, transparent 50%),
+    radial-gradient(at 72% 88%, rgba(14, 165, 233, 0.30) 0px, transparent 55%);
+
+  --hover-lift: 2px;
+  --transition: 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dark[data-skin="glass"] {
+  --bg: 10 12 26;
+  /* Superficie clara al 12%: es lo que produce el cristal sobre fondo oscuro.
+     El borde va aparte y apagado — a plena luminosidad marcaría cada tarjeta
+     con una línea brillante y rompería el efecto. */
+  --surface: 148 163 214;
+  --muted: 30 35 60;
+  --border: 82 92 133;
+  --text: 240 243 255;
+  --subtle: 168 176 205;
+  --primary: 145 138 255;
+  --primary-fg: 12 14 30;
+  --danger: 255 118 141;
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  color-scheme: dark;
+
+  --surface-alpha: 0.12;
+  --shadow-1: 0 8px 32px -8px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 24px 64px -12px rgba(0, 0, 0, 0.75);
+  --bg-image:
+    radial-gradient(at 12% 18%, rgba(99, 91, 255, 0.40) 0px, transparent 55%),
+    radial-gradient(at 85% 8%, rgba(217, 70, 239, 0.28) 0px, transparent 50%),
+    radial-gradient(at 72% 88%, rgba(6, 182, 212, 0.30) 0px, transparent 55%);
+}
+
+/* --------------------------------------------------- 4. TERMINAL / DEV DARK */
+/* Consola: mono en todo, fósforo verde y ámbar de aviso. Es un skin de una sola
+   cara — `store/theme.ts` lo marca como forceDark y fuerza la clase .dark. */
+
+[data-skin="terminal"],
+.dark[data-skin="terminal"] {
+  --bg: 8 12 10;
+  --surface: 13 19 16;
+  --muted: 21 30 25;
+  --border: 32 60 44;
+  --text: 208 240 218;
+  --subtle: 116 163 134;
+  --primary: 0 255 140;
+  --primary-fg: 5 12 8;
+  --danger: 255 92 92;
+  --success: 0 255 140;
+  --warning: 255 184 0;
+  color-scheme: dark;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-pill: 3px;
+  --border-w: 1px;
+
+  --shadow-1: 0 0 0 1px rgba(0, 255, 140, 0.06);
+  --shadow-2: 0 0 40px -8px rgba(0, 255, 140, 0.28);
+
+  --font-ui: var(--font-mono);
+  --font-heading: var(--font-mono);
+  --tracking-heading: 0.02em;
+  --case-heading: none;
+  --weight-heading: 600;
+
+  --ring: var(--primary);
+  --transition: 100ms linear;
+}
+
+/* Prompt `$` delante de los títulos de sección: detalle de consola que se
+   activa solo en este skin y no ensucia el marcado de los componentes. */
+[data-skin="terminal"] .gt-heading::before {
+  content: "$ ";
+  color: rgb(var(--primary));
+  opacity: 0.7;
+}
+
+/* ------------------------------------------------------------ ACCESIBILIDAD */
+/* Quien pide menos movimiento no recibe transiciones ni desplazamientos. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition: 0ms;
+    --press-y: 0px;
+    --hover-lift: 0px;
+  }
+}

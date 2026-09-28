@@ -14,7 +14,7 @@ const variants: Record<Variant, string> = {
   primary: "bg-primary text-primary-fg hover:opacity-90 active:opacity-100",
   secondary: "bg-muted text-text hover:bg-border",
   ghost: "hover:bg-muted text-text",
-  outline: "border border-border bg-transparent hover:bg-muted text-text",
+  outline: "border border-theme border-border bg-transparent hover:bg-muted text-text",
   danger: "bg-danger text-white hover:opacity-90",
 };
 
@@ -31,8 +31,8 @@ export const Button = forwardRef<HTMLButtonElement, Props>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        // `gt-control` aporta radio, sombra y el "press" físico del skin.
+        "gt-control inline-flex items-center justify-center gap-2 font-medium",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         variants[variant],
         sizes[size],

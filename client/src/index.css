@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tokens de color del skin base. Los tokens estructurales (radios, sombras,
+   tipografía, desenfoque) viven en `themes/skins.css`, que se importa después
+   de este archivo desde main.tsx para que los skins puedan sobrescribirlos. */
+
 :root {
   --bg: 248 250 252;
   --surface: 255 255 255;
@@ -14,6 +18,10 @@
   --danger: 239 68 68;
   --success: 16 185 129;
   --warning: 245 158 11;
+  /* Series de gráficos (validadas para daltonismo, ver components/finance/charts.tsx). */
+  --chart-1: 42 120 214;
+  --chart-2: 235 104 52;
+  --chart-3: 27 175 122;
   color-scheme: light;
 }
 
@@ -29,6 +37,9 @@
   --danger: 248 113 113;
   --success: 52 211 153;
   --warning: 251 191 36;
+  --chart-1: 57 135 229;
+  --chart-2: 217 89 38;
+  --chart-3: 25 158 112;
   color-scheme: dark;
 }
 
@@ -41,17 +52,113 @@ html, body, #root {
 }
 
 body {
-  background: rgb(var(--bg));
+  background-color: rgb(var(--bg));
+  background-image: var(--bg-image, none);
+  background-attachment: fixed;
   color: rgb(var(--text));
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-ui, Inter, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgb(var(--border)); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--border)); border-radius: var(--radius-pill, 8px); }
 ::-webkit-scrollbar-thumb:hover { background: rgb(var(--subtle)); }
+
+/* ==========================================================================
+   CAPA SEMÁNTICA
+   --------------------------------------------------------------------------
+   Los componentes usan estas clases en lugar de `rounded-xl shadow-soft`, así
+   que un skin puede rediseñar toda la app cambiando tokens: geometría,
+   elevación y translucidez dejan de estar cableadas en el marcado.
+   ========================================================================== */
+
+@layer components {
+  /* Superficie base: tarjetas, paneles, popovers. */
+  .gt-surface {
+    background-color: rgb(var(--surface) / var(--surface-alpha, 1));
+    -webkit-backdrop-filter: var(--surface-backdrop, none);
+    backdrop-filter: var(--surface-backdrop, none);
+    border: var(--border-w, 1px) solid rgb(var(--border));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    transition: transform var(--transition), box-shadow var(--transition),
+      background-color var(--transition);
+  }
+
+  /* Superficie flotante (diálogos, paleta de comandos). */
+  .gt-surface-pop {
+    background-color: rgb(var(--surface) / max(var(--surface-alpha, 1), 0.85));
+    -webkit-backdrop-filter: var(--surface-backdrop, none);
+    backdrop-filter: var(--surface-backdrop, none);
+    border: var(--border-w, 1px) solid rgb(var(--border));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-2);
+  }
+
+  /* Reacciona al puntero: el glass levanta, el brutalismo no se mueve. */
+  .gt-interactive:hover {
+    transform: translateY(calc(-1 * var(--hover-lift, 0px)));
+  }
+
+  /* Geometría de control (botones). El color lo sigue poniendo Tailwind. */
+  .gt-control {
+    border-radius: var(--radius-md);
+    transition: transform var(--transition), background-color var(--transition),
+      box-shadow var(--transition), opacity var(--transition);
+  }
+  .gt-control:active:not(:disabled) {
+    transform: translate(var(--press-y, 0px), var(--press-y, 0px));
+  }
+
+  /* En brutalismo los botones llevan la misma sombra sólida que las tarjetas y
+     "aterrizan" al pulsarse. */
+  [data-skin="brutalist"] .gt-control {
+    border: var(--border-w) solid rgb(var(--border));
+    box-shadow: var(--shadow-1);
+  }
+  [data-skin="brutalist"] .gt-control:active:not(:disabled) {
+    box-shadow: none;
+  }
+
+  /* Campos de formulario. */
+  .gt-field {
+    background-color: rgb(var(--surface) / var(--surface-alpha, 1));
+    -webkit-backdrop-filter: var(--surface-backdrop, none);
+    backdrop-filter: var(--surface-backdrop, none);
+    border: var(--border-w, 1px) solid rgb(var(--border));
+    border-radius: var(--radius-md);
+  }
+  .gt-field:focus {
+    outline: none;
+    border-color: rgb(var(--ring));
+    box-shadow: 0 0 0 3px rgb(var(--ring) / 0.35);
+  }
+
+  /* Etiquetas / badges. */
+  .gt-pill {
+    border-radius: var(--radius-pill);
+  }
+
+  /* Titulares: el skin decide caja, peso e interletraje. */
+  .gt-heading {
+    font-family: var(--font-heading);
+    font-weight: var(--weight-heading);
+    letter-spacing: var(--tracking-heading);
+    text-transform: var(--case-heading);
+  }
+
+  .gt-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Anillo de foco coherente en toda la app (accesibilidad por teclado). */
+:where(a, button, [role="button"], input, select, textarea):focus-visible {
+  outline: 2px solid rgb(var(--ring));
+  outline-offset: 2px;
+}
 
 /* FullCalendar overrides */
 .fc {
@@ -59,18 +166,18 @@ body {
   --fc-page-bg-color: transparent;
   --fc-neutral-bg-color: rgb(var(--muted));
   --fc-list-event-hover-bg-color: rgb(var(--muted));
-  --fc-today-bg-color: rgba(99,102,241,.07);
+  --fc-today-bg-color: rgb(var(--primary) / 0.08);
   font-family: inherit;
   color: rgb(var(--text));
 }
 .fc .fc-toolbar-title { font-size: 1.1rem; font-weight: 600; }
 .fc .fc-button {
   background: rgb(var(--surface));
-  border: 1px solid rgb(var(--border));
+  border: var(--border-w, 1px) solid rgb(var(--border));
   color: rgb(var(--text));
   text-transform: capitalize;
   box-shadow: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 6px 10px;
   font-weight: 500;
 }
@@ -85,5 +192,71 @@ body {
   border: none !important;
   padding: 2px 4px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* ==========================================================================
+   iPhone / pantallas táctiles
+   ========================================================================== */
+
+/* Zonas seguras laterales (iPhone en horizontal: la cámara queda a un lado).
+   El relleno efectivo es el mayor entre la zona segura y el propio del
+   elemento, declarado en --gt-pad-x (no con px-*, que esta regla pisaría). */
+.gt-safe-x {
+  padding-left: max(env(safe-area-inset-left), var(--gt-pad-x, 0px));
+  padding-right: max(env(safe-area-inset-right), var(--gt-pad-x, 0px));
+}
+
+html {
+  /* Sin el destello gris al tocar y sin que iOS agrande el texto al girar. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  /* El rebote al tirar hacia abajo movía las barras fijas en la PWA. */
+  overscroll-behavior-y: none;
+}
+
+@media (pointer: coarse) {
+  /* Safari hace zoom al enfocar campos con letra < 16 px: se evita. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select {
+    min-height: 44px;
+  }
+  /* Objetivos táctiles de al menos 44×44 pt (guía de Apple). */
+  .gt-control {
+    min-height: 44px;
+  }
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+}
+
+/* En la PWA instalada no tiene sentido seleccionar la interfaz como texto. */
+@media (display-mode: standalone) {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  input,
+  textarea,
+  [contenteditable],
+  .gt-selectable,
+  p,
+  li,
+  td,
+  dd {
+    -webkit-user-select: text;
+    user-select: text;
+  }
 }

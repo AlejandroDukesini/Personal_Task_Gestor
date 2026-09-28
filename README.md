@@ -46,9 +46,17 @@ El sistema se compone de varios módulos integrados que interactúan de forma fl
     *   **Lista Tradicional**: Organizada por prioridad y estado.
     *   **Tablero Kanban**: Permite arrastrar y soltar (*drag and drop*) para cambiar de estado rápidamente.
     *   **Calendario**: Integración visual de tareas con fechas límite.
+    *   **Historial**: completadas agrupadas por día, marcando si se cerraron a tiempo.
+    *   **Vistas rápidas** (Hoy, Próximas, Vencidas, Sin fecha), filtros por estado/etiqueta y ordenación.
+    *   **Tareas recurrentes** (diaria, laborables, semanal, mensual, anual): al completarla se crea la siguiente con id determinista (sin duplicados entre dispositivos).
+    *   **Recordatorios relativos** al vencimiento (a la hora, 10 min, 1 h, 1 día…) que se recalculan al mover la fecha.
+    *   **Vínculo con objetivos**: una tarea puede contribuir a un objetivo cuyo progreso se calcula desde las tareas completadas.
 *   🔁 **Seguimiento de Hábitos**: Configuración de hábitos con frecuencia diaria o personalizada (ej. Lunes, Miércoles y Viernes). Incluye registro diario de progreso y cálculo automático de rachas (*streaks*).
 *   📅 **Calendario Unificado**: Calendario interactivo (mes, semana, día y agenda) potenciado por *FullCalendar* que unifica eventos creados manualmente y tareas con fecha límite.
-*   🎯 **Objetivos y Metas**: Creación de metas temporales (diarias, semanales, mensuales o anuales) con valor objetivo y actual para calcular el progreso porcentual.
+*   🎯 **Objetivos y Metas**: Creación de metas temporales (diarias, semanales, mensuales o anuales). El progreso puede ser manual, **calculado desde tareas vinculadas** o **desde una meta de ahorro** de Finanzas (se calcula al leer; nunca se copia).
+*   💰 **Finanzas**: gestión financiera personal completa (ver [sección Finanzas](#-módulo-de-finanzas)).
+*   📱 **App para iPhone (PWA)**: instalable desde Safari, a pantalla completa con zonas seguras, barra de pestañas inferior, formularios como hojas, sin zoom al escribir y **funcionamiento completo sin conexión**.
+*   🔄 **Sincronización manual iPhone ↔ PC**, solo cuando tú la inicias: por Wi‑Fi (cifrada de extremo a extremo) o con **archivos cifrados**. Motor a tres bandas con revisión de conflictos (los financieros siempre los decides tú). Ver [`sync/README.md`](sync/README.md).
 *   📈 **Módulo de Estadísticas**: Gráficos analíticos dinámicos basados en *Recharts* que muestran la distribución de tareas por prioridad, hábitos completados a lo largo del tiempo e índices de productividad general.
 *   🗂️ **Categorías y Etiquetas**: Sistema jerárquico de carpetas con colores e iconos personalizables para clasificar todas tus actividades (ej. "Trabajo", "Personal", "Salud"). Además de etiquetas globales para organización cruzada.
 *   ⚙️ **Configuración y Apariencia**: Personalización completa que incluye:
@@ -272,6 +280,72 @@ Sigue estos pasos para arrancar el entorno de desarrollo local:
 
 ---
 
+## 💰 Módulo de Finanzas
+
+Sección **Finanzas** (`/finanzas`) con pestañas: Resumen, Movimientos, Cuentas, Presupuestos, Ahorro, Recurrentes, Análisis y Datos. Filtro temporal por día, semana, mes, trimestre, año o rango libre, con navegación anterior/siguiente.
+
+| Funcionalidad | Detalle |
+| :--- | :--- |
+| **Cuentas** | Efectivo, banco, ahorro, tarjeta de crédito, billetera digital, inversión y personalizada. Moneda, saldo inicial, color, icono, archivado. Solo se borran si no tienen historial (si no, se archivan). Ajuste de saldo por conciliación con motivo. |
+| **Movimientos** | Ingreso, gasto, **transferencia** (no cuenta como ingreso ni gasto; admite monedas distintas indicando lo recibido) y **corrección** (con signo y motivo obligatorio). Búsqueda, filtros, ordenación, edición, borrado y exportación CSV. |
+| **Categorías y etiquetas** | 16 categorías iniciales (alimentación, vivienda, transporte, salud, educación, suscripciones, salario…). Las etiquetas se comparten con Tareas. |
+| **Presupuestos** | De gasto (por categorías/cuentas) o de ahorro (aportaciones reales a cuentas). Periodos semanal/mensual/trimestral/anual/personalizado, alerta configurable, proyección al cierre y consulta de periodos anteriores. |
+| **Metas de ahorro** | Aportaciones y retiradas como transferencias reales (sin doble conteo), ritmo medio, aportación mensual necesaria y fecha estimada. Pausar, completar, archivar. |
+| **Recurrentes** | Salario, arriendo, facturas, suscripciones. Calendario de próximos movimientos y obligaciones. **Lo previsto nunca se marca solo como pagado**: se registra el importe/fecha reales con un clic (idempotente). |
+| **Análisis** | Ingresos vs gastos, evolución del saldo y del ahorro, gastos/ingresos por categoría, comparación con el periodo anterior, flujo entre cuentas, cumplimiento de presupuestos y metas. Cada gráfico tiene vista de tabla y permite ver los movimientos que lo componen. Recomendaciones con su **base declarada**; si no hay historial suficiente, lo dice. Simulador de recortes y calculadora de ahorro necesario. |
+| **Datos** | Exportación JSON (reimportable), CSV y **SQL** (SQLite). Importación JSON/CSV con vista previa, validación completa, detección de duplicados y aplicación atómica. El SQL no se importa: ejecutar scripts ajenos sería ejecutar código arbitrario. |
+
+### Etiquetas financieras y finalidades
+
+Cada presupuesto y meta de ahorro tiene una **etiqueta obligatoria** (`#Ordenador`, `#ViajeJapon`, `#Alimentacion`), generada del nombre o personalizada. Pestaña **Finalidades**: destino de los ingresos del periodo (incluido lo **sin asignar**) y, por etiqueta, ingresos y gastos vinculados, asignado, utilizado, pendiente, % de cumplimiento, historial y evolución.
+
+| Concepto | Responde a | Ejemplo |
+| :--- | :--- | :--- |
+| **Categoría** | ¿en qué se gastó / de dónde vino? | Compras |
+| **Etiqueta financiera** | ¿para qué finalidad? | #Ordenador |
+| **Cuenta** | ¿dónde está el dinero? | Banco |
+
+*   **Asignación opcional y explícita**: un movimiento se puede repartir entre varias finalidades (salario de 2.000 → 500 a #Ordenador, 300 a #ViajeJapon, 200 a #Emergencias, 1.000 sin asignar). Nada se etiqueta solo por categoría, importe o cuenta.
+*   **Sin duplicar dinero**: repartir no mueve saldo; la suma de las asignaciones nunca supera el importe (validado en formulario, API, importación, sincronización y con un trigger SQL).
+*   **Sentido**: `asignar` (dinero destinado) o `usar` (gastado con cargo a la finalidad). Metas: ahorrado = asignado − usado. Presupuestos de gasto: **solo** los gastos vinculados a su etiqueta (más sus criterios opcionales de categoría/cuenta). Presupuestos de ahorro: solo lo asignado explícitamente.
+*   **Sin ambigüedad**: la etiqueta es 1:1 con su dueño y los movimientos la referencian por id (`tag-<dueño>`); dos finalidades activas no pueden compartir nombre.
+*   **Historial protegido**: renombrar no altera nada; no se borra un presupuesto/meta con movimientos vinculados (se archiva y conserva su etiqueta); lo archivado no admite asignaciones nuevas.
+*   **Sincronización**: las asignaciones viajan dentro del movimiento (resolución atómica: una fusión nunca produce un reparto que supere el importe); si un dispositivo borra una finalidad mientras otro le asigna dinero, se restaura. Los movimientos antiguos con meta (`goalId`) se leen como asignaciones sin reescribirse.
+*   **Recurrentes**: plantilla de reparto que se aplica al registrar cada ocurrencia (ids deterministas, nunca asigna más de lo cobrado).
+*   **Importación/exportación**: JSON incluye etiquetas; CSV con columna `finalidades` (`#Ordenador=500|#ViajeJapon=300`); SQL con la migración `V2__finance_tags`.
+
+**Decisiones de integridad**
+
+*   Importes en **céntimos enteros** (`lib/money.ts`): sin errores de coma flotante.
+*   Los **saldos se derivan** de saldo inicial + movimientos; nunca se guardan. Editar o borrar un movimiento sincronizado no deja saldos desajustados, y dos dispositivos con los mismos movimientos tienen el mismo saldo.
+*   Todas las escrituras pasan por `mutate`, que trabaja sobre una copia: si una validación falla a mitad, no se escribe nada.
+*   Crear con un id ya existente es **idempotente** (doble clic, reintentos).
+
+**Migraciones**
+
+*   Base local versionada (`localDb.MIGRATIONS`, versión actual 4: crea de forma determinista la etiqueta de cada presupuesto y meta existentes). Antes de migrar se guarda una copia íntegra del JSON previo (`gestion-tareas:db:backup-v<N>`).
+*   SQL versionado para el servidor: `server/prisma/migrations/finance/V1__finance.sql` (tablas `fin_*`, CHECKs de signo, claves foráneas e índices) y `V2__finance_tags.sql` (`fin_tags`, `fin_allocations` y trigger de tope), generado desde `client/src/services/finance/sql.ts` con `npm run sql:gen`. Un test comprueba que el fichero y el código coinciden y ejecuta esquema + volcado en SQLite real. Los modelos Prisma equivalentes están en `schema.prisma`. Para aplicar las restricciones CHECK en una base del servidor: `sqlite3 server/prisma/dev.db < server/prisma/migrations/finance/V1__finance.sql`.
+
+---
+
+## 📱 iPhone, almacenamiento y actualizaciones
+
+*   **Datos locales en IndexedDB** (antes localStorage, limitado a ~5 MB): la primera apertura migra los datos existentes y deja la copia antigua intacta. Se solicita almacenamiento persistente.
+*   **Puntos de restauración automáticos** antes de migrar, sincronizar o restaurar; **copias de seguridad cifradas** exportables e importables (Sincronización → Copias de seguridad).
+*   **Actualizaciones**: el Service Worker precarga todos los ficheros (offline completo). Una versión nueva no se activa sola: la app muestra «Hay una versión nueva» y al aceptar guarda los datos pendientes y recarga. Actualizar el código no toca los datos; si su formato cambia, se migran con copia previa.
+*   **PC**: `npm run pc` compila y sirve la app en `http://localhost:4181` con sus propios datos. Instrucciones completas de instalación, emparejamiento y sincronización en [`sync/README.md`](sync/README.md).
+
+---
+
+## 🧪 Pruebas
+
+```bash
+npm test                 # cliente (vitest) + relé de sincronización (node:test)
+npm run test -w client   # 124 pruebas: dinero, finanzas, etiquetas, import/export, SQL, sincronización manual (incl. extremo a extremo por red), IndexedDB, cifrado, tareas, migraciones
+```
+
+---
+
 ## ⌨️ Scripts Disponibles
 
 Todos estos comandos se pueden ejecutar directamente desde la **raíz del proyecto**:
@@ -283,6 +357,9 @@ Todos estos comandos se pueden ejecutar directamente desde la **raíz del proyec
 | `npm run start` | Arranca el backend compilado en producción (`server/dist/index.js`). |
 | `npm run db:studio` | Abre **Prisma Studio** en el navegador (`localhost:5555`), una interfaz visual interactiva para ver y editar tu base de datos SQLite. |
 | `npm run db:seed` | Vuelve a correr el script de semillas en la base de datos local para crear registros de prueba. |
+| `npm test` | Ejecuta las pruebas del cliente y del relé de sincronización. |
+| `npm run sync` | Arranca el relé de sincronización PC ↔ móvil por la red local (https). |
+| `npm run sql:gen` | Regenera las migraciones SQL versionadas de finanzas. |
 | `npm run db:reset` | **Cuidado**: Elimina todos los datos de la base de datos local SQLite, recrea la base de datos y ejecuta el script de semillas. |
 
 ---

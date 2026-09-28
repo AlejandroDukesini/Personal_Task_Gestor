@@ -11,6 +11,10 @@ const es: Dict = {
   "nav.categories": "Categorías",
   "nav.tags": "Etiquetas",
   "nav.goals": "Objetivos",
+  "nav.finance": "Finanzas",
+  "nav.sync": "Sincronización",
+  "nav.more": "Más",
+  "nav.home": "Inicio",
   "nav.stats": "Estadísticas",
   "nav.settings": "Configuración",
   "nav.localData": "datos locales",
@@ -39,6 +43,13 @@ const es: Dict = {
   "dash.goalsProgress": "Progreso de objetivos",
   "dash.seeAllM": "Ver todos",
   "dash.noGoals": "Sin objetivos definidos",
+  "dash.finance": "Finanzas del mes",
+  "dash.balance": "Saldo total",
+  "dash.income": "Ingresos",
+  "dash.expense": "Gastos",
+  "dash.upcomingPayments": "Próximos pagos",
+  "dash.overdueTasks": "Tareas vencidas",
+  "dash.noFinance": "Crea una cuenta para ver aquí tu situación financiera.",
 
   // Configuración
   "settings.title": "Configuración",
@@ -96,6 +107,49 @@ const es: Dict = {
   "toast.imported": "Importado correctamente",
   "toast.pinGenerated": "PIN generado: {pin} — guárdalo",
   "common.save": "Guardar",
+
+  // Motor de temas
+  "settings.skin": "Estilo visual",
+  "settings.skinHelp": "Cambia por completo el lenguaje visual de la app.",
+  "settings.forcedDark": "Este estilo solo existe en versión oscura.",
+  "settings.useSkinAccent": "Color del tema",
+  "settings.useSkinAccentHelp": "Usar el acento propio del estilo visual elegido",
+  "settings.paletteHint": "Pulsa Ctrl+K para cambiar de tema desde la paleta de comandos.",
+
+  // Paleta de comandos
+  "palette.open": "Abrir la paleta de comandos",
+  "palette.placeholder": "Buscar o ejecutar…",
+
+  // Notificaciones
+  "notif.title": "Notificaciones",
+  "notif.help":
+    "Avisos del sistema para tus recordatorios y tu rutina diaria de hábitos. Requiere https o localhost.",
+  "notif.enable": "Activar notificaciones",
+  "notif.enabled": "Notificaciones activadas",
+  "notif.disable": "Desactivar",
+  "notif.active": "Activadas en este dispositivo.",
+  "notif.denied": "El navegador denegó el permiso",
+  "notif.blocked": "Están bloqueadas para este sitio: cámbialo en los ajustes del navegador.",
+  "notif.unsupported": "Este navegador no ofrece la Notification API en el contexto actual.",
+  "notif.test": "Probar",
+  "notif.testTitle": "Todo listo",
+  "notif.testBody": "Así se verán tus avisos.",
+  "notif.habitTime": "Aviso de rutina de hábitos",
+  "notif.habitTimeHelp": "Recuerda los hábitos que quedan sin marcar. Vacío = desactivado.",
+  "notif.digestTime": "Resumen diario de tareas",
+  "notif.digestTimeHelp": "Cuántas tareas siguen abiertas. Vacío = desactivado.",
+
+  // Sincronización
+  "sync.title": "Sincronización y copias de seguridad",
+
+  // PWA
+  "pwa.title": "Instalar como aplicación",
+  "pwa.help": "Instálala para abrirla como una app nativa, con su icono y sin barra del navegador.",
+  "pwa.install": "Instalar",
+  "pwa.installed": "Ya se está ejecutando como aplicación instalada.",
+  "pwa.unavailable": "El navegador no ofrece la instalación ahora mismo",
+  "pwa.manual":
+    "Si el botón está desactivado, usa el menú del navegador: «Instalar aplicación» o «Añadir a pantalla de inicio».",
 };
 
 const en: Dict = {
@@ -106,6 +160,10 @@ const en: Dict = {
   "nav.categories": "Categories",
   "nav.tags": "Tags",
   "nav.goals": "Goals",
+  "nav.finance": "Finance",
+  "nav.sync": "Sync",
+  "nav.more": "More",
+  "nav.home": "Home",
   "nav.stats": "Statistics",
   "nav.settings": "Settings",
   "nav.localData": "local data",
@@ -132,6 +190,13 @@ const en: Dict = {
   "dash.goalsProgress": "Goals progress",
   "dash.seeAllM": "See all",
   "dash.noGoals": "No goals defined",
+  "dash.finance": "This month's finances",
+  "dash.balance": "Total balance",
+  "dash.income": "Income",
+  "dash.expense": "Expenses",
+  "dash.upcomingPayments": "Upcoming payments",
+  "dash.overdueTasks": "Overdue tasks",
+  "dash.noFinance": "Create an account to see your finances here.",
 
   "settings.title": "Settings",
   "settings.subtitle": "Customize the app and manage your data.",
@@ -185,6 +250,44 @@ const en: Dict = {
   "toast.imported": "Imported successfully",
   "toast.pinGenerated": "Generated PIN: {pin} — save it",
   "common.save": "Save",
+
+  "settings.skin": "Visual style",
+  "settings.skinHelp": "Changes the whole visual language of the app.",
+  "settings.forcedDark": "This style only comes in a dark version.",
+  "settings.useSkinAccent": "Theme colour",
+  "settings.useSkinAccentHelp": "Use the accent that belongs to the chosen visual style",
+  "settings.paletteHint": "Press Ctrl+K to switch themes from the command palette.",
+
+  "palette.open": "Open the command palette",
+  "palette.placeholder": "Search or run…",
+
+  "notif.title": "Notifications",
+  "notif.help":
+    "System alerts for your reminders and your daily habit routine. Requires https or localhost.",
+  "notif.enable": "Enable notifications",
+  "notif.enabled": "Notifications enabled",
+  "notif.disable": "Disable",
+  "notif.active": "Enabled on this device.",
+  "notif.denied": "The browser denied permission",
+  "notif.blocked": "They are blocked for this site: change it in your browser settings.",
+  "notif.unsupported": "This browser does not expose the Notification API in the current context.",
+  "notif.test": "Test",
+  "notif.testTitle": "All set",
+  "notif.testBody": "This is how your alerts will look.",
+  "notif.habitTime": "Habit routine reminder",
+  "notif.habitTimeHelp": "Reminds you of habits still unchecked. Empty = off.",
+  "notif.digestTime": "Daily task summary",
+  "notif.digestTimeHelp": "How many tasks are still open. Empty = off.",
+
+  "sync.title": "Sync and backups",
+
+  "pwa.title": "Install as an app",
+  "pwa.help": "Install it to open it like a native app, with its own icon and no browser bar.",
+  "pwa.install": "Install",
+  "pwa.installed": "Already running as an installed app.",
+  "pwa.unavailable": "The browser is not offering installation right now",
+  "pwa.manual":
+    "If the button is disabled, use the browser menu: “Install app” or “Add to Home Screen”.",
 };
 
 const dicts: Record<string, Dict> = { es, en };

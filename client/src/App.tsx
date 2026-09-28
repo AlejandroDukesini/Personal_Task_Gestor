@@ -2,8 +2,10 @@ import { lazy, Suspense, useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
 import { AppLayout } from "./layouts/AppLayout";
 import { Notifier } from "./components/Notifier";
+import { CommandPalette } from "./components/CommandPalette";
 import { useTheme } from "./store/theme";
 import { useConfig } from "./store/config";
+import { startSyncCenter } from "./store/syncCenter";
 import { PinGate } from "./components/PinGate";
 
 // Code splitting por ruta: cada vista se carga bajo demanda (dynamic import).
@@ -15,8 +17,10 @@ const Habits = lazy(() => import("./pages/Habits").then((m) => ({ default: m.Hab
 const CalendarPage = lazy(() => import("./pages/Calendar").then((m) => ({ default: m.CalendarPage })));
 const Categories = lazy(() => import("./pages/Categories").then((m) => ({ default: m.Categories })));
 const Tags = lazy(() => import("./pages/Tags").then((m) => ({ default: m.Tags })));
+const Finance = lazy(() => import("./pages/Finance").then((m) => ({ default: m.Finance })));
 const Goals = lazy(() => import("./pages/Goals").then((m) => ({ default: m.Goals })));
 const Stats = lazy(() => import("./pages/Stats").then((m) => ({ default: m.Stats })));
+const SyncCenter = lazy(() => import("./pages/SyncCenter").then((m) => ({ default: m.SyncCenter })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 
 function RouteFallback() {
@@ -30,14 +34,19 @@ function RouteFallback() {
 export default function App() {
   const applyDom = useTheme((s) => s.applyDom);
   const loadConfig = useConfig((s) => s.load);
+
   useEffect(() => {
     applyDom();
     loadConfig().catch(() => {});
+    // Solo observa (cambios pendientes) y, en el PC, escucha si el usuario lo
+    // activó. Nunca sincroniza por su cuenta.
+    startSyncCenter();
   }, [applyDom, loadConfig]);
 
   return (
     <PinGate>
       <Notifier />
+      <CommandPalette />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route element={<AppLayout />}>
@@ -48,7 +57,9 @@ export default function App() {
             <Route path="/categorias" element={<Categories />} />
             <Route path="/etiquetas" element={<Tags />} />
             <Route path="/objetivos" element={<Goals />} />
+            <Route path="/finanzas" element={<Finance />} />
             <Route path="/estadisticas" element={<Stats />} />
+            <Route path="/sincronizacion" element={<SyncCenter />} />
             <Route path="/configuracion" element={<SettingsPage />} />
           </Route>
         </Routes>

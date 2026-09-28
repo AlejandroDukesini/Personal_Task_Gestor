@@ -1,24 +1,19 @@
 import { type HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
+// La geometría (radio, grosor de borde, sombra, translucidez) la aporta
+// `.gt-surface` a partir de los tokens del skin activo, no clases fijas.
+
 export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border border-border bg-surface shadow-soft",
-        className
-      )}
-      {...rest}
-    />
-  );
+  return <div className={cn("gt-surface", className)} {...rest} />;
 }
 
 export function CardHeader({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-4 border-b border-border", className)} {...rest} />;
+  return <div className={cn("p-4 border-b border-b-theme border-border", className)} {...rest} />;
 }
 
 export function CardTitle({ className, ...rest }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("font-semibold text-base", className)} {...rest} />;
+  return <h2 className={cn("gt-heading text-base", className)} {...rest} />;
 }
 
 export function CardDescription({ className, ...rest }: HTMLAttributes<HTMLParagraphElement>) {
@@ -30,5 +25,10 @@ export function CardContent({ className, ...rest }: HTMLAttributes<HTMLDivElemen
 }
 
 export function CardFooter({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-4 border-t border-border flex items-center gap-2", className)} {...rest} />;
+  return (
+    <div
+      className={cn("p-4 border-t border-t-theme border-border flex items-center gap-2", className)}
+      {...rest}
+    />
+  );
 }

@@ -38,7 +38,8 @@ export function CalendarPage() {
       .map((t) => ({
         id: `t:${t.id}`,
         title: `📋 ${t.title}`,
-        start: t.dueDate!,
+        // Día local de vencimiento (+ hora si la tiene), no la medianoche UTC.
+        start: t.dueTime ? `${t.dueDate!.slice(0, 10)}T${t.dueTime}` : t.dueDate!.slice(0, 10),
         allDay: !t.dueTime,
         backgroundColor: t.category?.color ?? "#94a3b8",
         extendedProps: { kind: "task", ref: t },

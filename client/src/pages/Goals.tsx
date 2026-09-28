@@ -1,6 +1,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, Target, Trash2, Edit3 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Plus, Target, Trash2, Edit3, CheckSquare, PiggyBank } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +25,7 @@ const TYPE_LABEL: Record<GoalType, string> = {
 export function Goals() {
   const goals = useResource(() => api.get<Goal[]>("/goals"));
   const categories = useResource(() => api.get<Category[]>("/categories"));
+  const finGoals = useResource(() => api.get<{ goals: { id: string; name: string; status: string }[] }>("/finance/state"));
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Goal> | null>(null);
 
@@ -42,7 +44,13 @@ export function Goals() {
         endDate: editing.endDate,
         categoryId: editing.categoryId || null,
         completed: editing.completed ?? false,
+        source: editing.source ?? "manual",
+        finGoalId: editing.source === "finance" ? editing.finGoalId || null : null,
       };
+      if (payload.source === "finance" && !payload.finGoalId) {
+        toast.error("Elige la meta de ahorro a seguir");
+        return;
+      }
       if (editing.id) {
         await api.put(`/goals/${editing.id}`, payload);
         toast.success("Objetivo actualizado");
@@ -112,7 +120,24 @@ export function Goals() {
                         <Target size={16} className="text-primary" />
                         <h3 className="font-semibold truncate">{g.title}</h3>
                       </div>
-                      <Badge>{TYPE_LABEL[g.type]}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge>{TYPE_LABEL[g.type]}</Badge>
+                        {g.source === "tasks" && (
+                          <Link to="/tareas">
+                            <Badge>
+                              <CheckSquare size={11} /> {g.linkedTasks ?? 0} tarea(s) vinculada(s)
+                            </Badge>
+                          </Link>
+                        )}
+                        {g.source === "finance" && (
+                          <Link to="/finanzas?tab=goals">
+                            <Badge>
+                              <PiggyBank size={11} /> Meta de ahorro
+                            </Badge>
+                          </Link>
+                        )}
+                        {g.completed && <Badge color="#16a34a">Cumplido</Badge>}
+                      </div>
                       {g.description && (
                         <p className="text-sm text-subtle mt-2 line-clamp-2">{g.description}</p>
                       )}
@@ -144,7 +169,8 @@ export function Goals() {
                     <div className="flex items-center justify-between text-sm mb-1.5">
                       <span className="text-subtle">Progreso</span>
                       <span className="font-medium">
-                        {g.currentValue}/{g.targetValue} {g.unit ?? ""}
+                        {g.currentValue.toLocaleString("es-CO", { maximumFractionDigits: 2 })}/
+                        {g.targetValue.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {g.unit ?? ""}
                       </span>
                     </div>
                     <Progress value={pct} />
@@ -181,6 +207,31 @@ export function Goals() {
               onChange={(e) => setEditing({ ...editing, description: e.target.value })}
             />
           </Field>
+          <Field label="Cómo se mide el progreso">
+            <Select
+              value={editing?.source ?? "manual"}
+              onChange={(e) => setEditing({ ...editing, source: e.target.value as Goal["source"] })}
+            >
+              <option value="manual">Manualmente (yo actualizo el valor)</option>
+              <option value="tasks">Tareas completadas vinculadas a este objetivo</option>
+              <option value="finance">Lo ahorrado en una meta de Finanzas</option>
+            </Select>
+          </Field>
+          {editing?.source === "finance" && (
+            <Field label="Meta de ahorro">
+              <Select value={editing?.finGoalId ?? ""} onChange={(e) => setEditing({ ...editing, finGoalId: e.target.value })}>
+                <option value="">Elige una meta</option>
+                {(finGoals.data?.goals ?? []).map((fg) => (
+                  <option key={fg.id} value={fg.id}>
+                    {fg.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {editing?.source === "tasks" && (
+            <p className="text-xs text-subtle">Vincula tareas desde su formulario («Contribuye al objetivo»). Cada tarea completada suma 1.</p>
+          )}
           <div className="grid grid-cols-3 gap-3">
             <Field label="Tipo">
               <Select
@@ -198,6 +249,7 @@ export function Goals() {
             <Field label="Meta">
               <Input
                 type="number"
+                disabled={editing?.source === "finance"}
                 value={editing?.targetValue ?? 100}
                 onChange={(e) =>
                   setEditing({ ...editing, targetValue: Number(e.target.value) })
@@ -207,6 +259,8 @@ export function Goals() {
             <Field label="Actual">
               <Input
                 type="number"
+                disabled={(editing?.source ?? "manual") !== "manual"}
+                title={(editing?.source ?? "manual") !== "manual" ? "Se calcula automáticamente" : undefined}
                 value={editing?.currentValue ?? 0}
                 onChange={(e) =>
                   setEditing({ ...editing, currentValue: Number(e.target.value) })

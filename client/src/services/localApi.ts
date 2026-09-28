@@ -5,74 +5,40 @@
 import { z } from "zod";
 import {
   ApiError,
+  FINANCE_COLLECTIONS,
+  ensureOwnerTags,
   loadDb,
   mutate,
   newId,
   nowIso,
   startOfDay,
+  tombstone,
   type CategoryRow,
   type Db,
   type EventRow,
   type GoalRow,
   type HabitRow,
   type ReminderRow,
+  type SubtaskRow,
   type TagRow,
+  type TaskRecurrence,
   type TaskRow,
 } from "./localDb";
-
-interface Ctx {
-  params: Record<string, string>;
-  query: URLSearchParams;
-  body: any;
-}
-
-type Result = { status: number; body?: unknown };
-type Handler = (ctx: Ctx) => Result | Promise<Result>;
-
-const ok = (body: unknown): Result => ({ status: 200, body });
-const created = (body: unknown): Result => ({ status: 201, body });
-const noContent = (): Result => ({ status: 204 });
-
-function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
-  const r = schema.safeParse(data);
-  if (!r.success) throw new ApiError(400, "ValidationError");
-  return r.data;
-}
-
-function find<T extends { id: string }>(rows: T[], id: string): T {
-  const row = rows.find((r) => r.id === id);
-  if (!row) throw new ApiError(404, "No encontrado");
-  return row;
-}
-
-/**
- * Claves que nunca deben escribirse por asignación dinámica: `__proto__`
- * dispara el setter del prototipo y contaminaría Object.prototype.
- */
-const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
-
-/** Descarta recursivamente claves peligrosas de un objeto de datos externo. */
-function stripDangerousKeys<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(stripDangerousKeys) as unknown as T;
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (!FORBIDDEN_KEYS.has(k)) out[k] = stripDangerousKeys(v);
-    }
-    return out as T;
-  }
-  return value;
-}
-
-/** Aplica solo las claves definidas, como hace Prisma con `data`. */
-function assign<T extends object>(row: T, data: Partial<T>): T {
-  for (const [k, v] of Object.entries(data)) {
-    // Los esquemas zod ya descartan claves desconocidas; el filtro es una
-    // segunda barrera por si alguna ruta futura pasa datos sin validar.
-    if (v !== undefined && !FORBIDDEN_KEYS.has(k)) (row as any)[k] = v;
-  }
-  return row;
-}
+import {
+  assign,
+  created,
+  find,
+  noContent,
+  ok,
+  parse,
+  stripDangerousKeys,
+  type Result,
+  type Route,
+} from "./routeKit";
+import { financeRoutes } from "./finance/routes";
+import { goalProgress } from "./finance/calc";
+import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
+import { todayKey } from "./finance/dates";
 
 const dateOrNull = z
   .union([z.string(), z.null()])
@@ -117,15 +83,189 @@ const taskSchema = z.object({
   position: z.number().optional(),
   categoryId: z.string().nullable().optional(),
   tagIds: z.array(z.string()).optional(),
+  recurrence: z.enum(["daily", "weekdays", "weekly", "monthly", "yearly"]).nullable().optional(),
+  recurrenceInterval: z.number().int().min(1).max(365).optional(),
+  goalId: z.string().nullable().optional(),
+  /**
+   * Recordatorio relativo al vencimiento, en minutos antes (0 = a la hora).
+   * null lo elimina; ausente no lo toca. Se traduce a una fila de `reminders`.
+   */
+  reminderMinutes: z.number().int().min(0).max(60 * 24 * 30).nullable().optional(),
 });
+
+/** Instante del vencimiento: fecha + hora (o 09:00 si la tarea no tiene hora). */
+function dueInstant(t: Pick<TaskRow, "dueDate" | "dueTime">): Date | null {
+  if (!t.dueDate) return null;
+  const d = new Date(t.dueDate);
+  const [h, m] = (t.dueTime || "09:00").split(":").map(Number);
+  // La fecha se guarda como medianoche UTC del día elegido: se toma ese día en local.
+  const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h || 0, m || 0);
+  return Number.isNaN(local.getTime()) ? null : local;
+}
+
+/** Sustituye el recordatorio relativo de una tarea (uno por tarea). */
+function setTaskReminder(db: Db, task: TaskRow, minutes: number | null | undefined): void {
+  if (minutes === undefined) return;
+  for (const r of db.reminders.filter((r) => r.taskId === task.id && r.minutesBefore !== null)) {
+    tombstone(db, "reminders", r.id);
+  }
+  db.reminders = db.reminders.filter((r) => !(r.taskId === task.id && r.minutesBefore !== null));
+  const due = dueInstant(task);
+  if (minutes === null || !due) return;
+  const trigger = new Date(due.getTime() - minutes * 60000);
+  const ts = nowIso();
+  db.reminders.push({
+    id: newId(),
+    triggerAt: trigger.toISOString(),
+    minutesBefore: minutes,
+    type: "in_app",
+    // Un aviso que ya pasó no se dispara al guardar: sería ruido.
+    delivered: trigger.getTime() <= Date.now(),
+    taskId: task.id,
+    habitId: null,
+    eventId: null,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+}
+
+/** Siguiente vencimiento de una serie a partir de `from`. */
+export function nextDueDate(from: Date, recurrence: TaskRecurrence, interval: number): Date {
+  const d = new Date(from);
+  const n = Math.max(1, interval);
+  switch (recurrence) {
+    case "daily":
+      d.setUTCDate(d.getUTCDate() + n);
+      break;
+    case "weekdays": {
+      // Salta fines de semana: viernes -> lunes.
+      let left = n;
+      while (left > 0) {
+        d.setUTCDate(d.getUTCDate() + 1);
+        const dow = d.getUTCDay();
+        if (dow !== 0 && dow !== 6) left--;
+      }
+      break;
+    }
+    case "weekly":
+      d.setUTCDate(d.getUTCDate() + 7 * n);
+      break;
+    case "monthly": {
+      const day = d.getUTCDate();
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() + n);
+      const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+      d.setUTCDate(Math.min(day, last));
+      break;
+    }
+    case "yearly":
+      d.setUTCFullYear(d.getUTCFullYear() + n);
+      break;
+  }
+  return d;
+}
+
+/**
+ * Al completar una tarea recurrente se crea la siguiente ocurrencia. Su id es
+ * determinista (serie + fecha): si la misma tarea se completa en el PC y en el
+ * móvil sin conexión, ambos generan la MISMA siguiente tarea y la
+ * sincronización no la duplica.
+ */
+function spawnNextOccurrence(db: Db, task: TaskRow): TaskRow | null {
+  if (!task.recurrence) return null;
+  const base = task.dueDate ? new Date(task.dueDate) : new Date(new Date().toISOString().slice(0, 10));
+  const next = nextDueDate(base, task.recurrence, task.recurrenceInterval);
+  const seriesId = task.seriesId ?? task.id;
+  const id = `${seriesId}~${next.toISOString().slice(0, 10)}`;
+  if (db.tasks.some((t) => t.id === id) || db.tombstones.some((t) => t.collection === "tasks" && t.id === id)) {
+    return null;
+  }
+  const ts = nowIso();
+  const row: TaskRow = {
+    ...task,
+    id,
+    status: "pending",
+    progress: 0,
+    completedAt: null,
+    startDate: null,
+    dueDate: next.toISOString(),
+    seriesId,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  db.tasks.push(row);
+  for (const tt of db.taskTags.filter((x) => x.taskId === task.id)) db.taskTags.push({ taskId: id, tagId: tt.tagId });
+  // El checklist se copia desmarcado: es una plantilla de la serie.
+  for (const s of db.subtasks.filter((s) => s.taskId === task.id)) {
+    db.subtasks.push({ ...s, id: `${id}:${s.id}`.slice(0, 128), taskId: id, done: false, createdAt: ts, updatedAt: ts });
+  }
+  const rel = db.reminders.find((r) => r.taskId === task.id && r.minutesBefore !== null);
+  if (rel) setTaskReminder(db, row, rel.minutesBefore);
+  return row;
+}
+
+/** Cambia el estado de una tarea manteniendo `completedAt` y las series. */
+function applyStatus(db: Db, row: TaskRow, status: string): void {
+  if (status === row.status) return; // re-guardar no reescribe la fecha de cierre
+  const wasCompleted = row.status === "completed";
+  row.status = status;
+  if (status === "completed") {
+    row.completedAt = nowIso();
+    if (!wasCompleted) spawnNextOccurrence(db, row);
+  } else {
+    row.completedAt = null;
+  }
+}
+
+const subtaskSchema = z.object({
+  title: z.string().min(1).max(200),
+  done: z.boolean().optional(),
+  position: z.number().int().optional(),
+});
+
+function subtasksOf(db: Db, taskId: string): SubtaskRow[] {
+  return db.subtasks
+    .filter((s) => s.taskId === taskId)
+    .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * Con sub-pasos, el progreso deja de ser un número que el usuario arrastra y
+ * pasa a derivarse del checklist: una sola fuente de verdad evita que la barra
+ * diga 20% mientras 4 de 5 pasos están marcados.
+ */
+function derivedProgress(steps: SubtaskRow[], fallback: number): number {
+  if (steps.length === 0) return fallback;
+  return Math.round((steps.filter((s) => s.done).length / steps.length) * 100);
+}
+
+/** Recalcula y persiste el progreso de la tarea a partir de sus sub-pasos. */
+function syncTaskProgress(db: Db, taskId: string): void {
+  const task = db.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  const steps = subtasksOf(db, taskId);
+  if (steps.length === 0) return;
+  task.progress = derivedProgress(steps, task.progress);
+  // Completar el último paso cierra la tarea; desmarcar uno la reabre.
+  if (task.progress === 100 && task.status !== "completed" && task.status !== "cancelled") {
+    applyStatus(db, task, "completed");
+  } else if (task.progress < 100 && task.status === "completed") {
+    applyStatus(db, task, "in_progress");
+  }
+  task.updatedAt = nowIso();
+}
 
 function serializeTask(db: Db, t: TaskRow) {
   const tagIds = db.taskTags.filter((tt) => tt.taskId === t.id).map((tt) => tt.tagId);
+  const subtasks = subtasksOf(db, t.id);
   return {
     ...t,
+    progress: derivedProgress(subtasks, t.progress),
+    subtasks,
     category: db.categories.find((c) => c.id === t.categoryId) ?? null,
     tags: db.tags.filter((tag) => tagIds.includes(tag.id)),
     reminders: db.reminders.filter((r) => r.taskId === t.id),
+    goal: t.goalId ? (db.goals.find((g) => g.id === t.goalId) ?? null) : null,
   };
 }
 
@@ -243,7 +383,39 @@ const goalSchema = z.object({
   endDate: z.string().transform(toIso),
   categoryId: z.string().nullable().optional(),
   completed: z.boolean().optional(),
+  source: z.enum(["manual", "tasks", "finance"]).optional(),
+  finGoalId: z.string().nullable().optional(),
 });
+
+/**
+ * Objetivo con su valor actual resuelto. Con fuente `tasks` o `finance` el
+ * valor se CALCULA a partir del otro módulo en cada lectura; no se copia, así
+ * que nunca se desincroniza ni modifica datos del módulo de origen.
+ */
+function withGoalValue(db: Db, g: GoalRow) {
+  let currentValue = g.currentValue;
+  let targetValue = g.targetValue;
+  let linkedTasks = 0;
+  if (g.source === "tasks") {
+    const linked = db.tasks.filter((t) => t.goalId === g.id);
+    linkedTasks = linked.length;
+    currentValue = linked.filter((t) => t.status === "completed").length;
+  } else if (g.source === "finance" && g.finGoalId) {
+    const fg = db.finGoals.find((x) => x.id === g.finGoalId);
+    if (fg) {
+      // En unidades de moneda (no céntimos) para que la barra sea comparable.
+      currentValue = goalProgress(db, fg, todayKey()).saved / 100;
+      targetValue = fg.targetAmount / 100;
+    }
+  }
+  return {
+    ...withCategory(db, g),
+    currentValue,
+    targetValue,
+    linkedTasks,
+    completed: g.completed || (g.source !== "manual" && targetValue > 0 && currentValue >= targetValue),
+  };
+}
 
 // ------------------------------------------------------------------ ajustes
 
@@ -262,8 +434,19 @@ const appLogoSchema = z
     message: "Formato de logo no permitido",
   });
 
+/** "HH:mm" en formato 24 h. */
+const timeOfDay = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora inválida (HH:mm)")
+  .nullable()
+  .optional();
+
 const settingsSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
+  skin: z.enum(["default", "brutalist", "glass", "terminal"]).optional(),
+  notificationsEnabled: z.boolean().optional(),
+  habitReminderTime: timeOfDay,
+  dailyDigestTime: timeOfDay,
   language: z.string().max(16).optional(),
   dateFormat: z.string().max(32).optional(),
   primaryColor: z
@@ -275,6 +458,7 @@ const settingsSchema = z.object({
   appLogo: appLogoSchema.nullable().optional(),
   userName: z.string().max(40).nullable().optional(),
   timezone: z.string().max(64).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
 });
 
 // ------------------------------------------------------------------- PIN
@@ -359,8 +543,9 @@ function safeSettings(db: Db) {
 
 // -------------------------------------------------------------------- rutas
 
-const routes: [string, string, Handler][] = [
-  ["GET", "/health", () => ok({ ok: true, version: "1.0.0" })],
+const routes: Route[] = [
+  ["GET", "/health", () => ok({ ok: true, version: "1.1.0" })],
+  ...financeRoutes,
 
   // Categorías
   ["GET", "/categories", () => {
@@ -412,6 +597,7 @@ const routes: [string, string, Handler][] = [
       for (const h of db.habits) if (h.categoryId === params.id) h.categoryId = null;
       for (const e of db.events) if (e.categoryId === params.id) e.categoryId = null;
       for (const g of db.goals) if (g.categoryId === params.id) g.categoryId = null;
+      tombstone(db, "categories", params.id);
     });
     return noContent();
   }],
@@ -453,6 +639,7 @@ const routes: [string, string, Handler][] = [
       find(db.tags, params.id);
       db.tags = db.tags.filter((t) => t.id !== params.id);
       db.taskTags = db.taskTags.filter((tt) => tt.tagId !== params.id); // onDelete: Cascade
+      tombstone(db, "tags", params.id);
     });
     return noContent();
   }],
@@ -462,13 +649,17 @@ const routes: [string, string, Handler][] = [
     const db = loadDb();
     const status = query.get("status");
     const categoryId = query.get("categoryId");
+    const goalId = query.get("goalId");
     const search = query.get("search")?.toLowerCase();
     const rows = db.tasks
       .filter((t) => (status ? t.status === status : true))
       .filter((t) => (categoryId ? t.categoryId === categoryId : true))
+      .filter((t) => (goalId ? t.goalId === goalId : true))
       .filter((t) =>
         search
-          ? t.title.toLowerCase().includes(search) || (t.description ?? "").toLowerCase().includes(search)
+          ? t.title.toLowerCase().includes(search) ||
+            (t.description ?? "").toLowerCase().includes(search) ||
+            (t.notes ?? "").toLowerCase().includes(search)
           : true
       )
       .sort((a, b) => a.position - b.position || b.createdAt.localeCompare(a.createdAt));
@@ -476,14 +667,22 @@ const routes: [string, string, Handler][] = [
   }],
   ["PATCH", "/tasks/reorder", ({ body }) => {
     const items = parse(
-      z.array(z.object({ id: z.string(), position: z.number(), status: z.string().optional() })),
+      z
+        .array(
+          z.object({
+            id: z.string(),
+            position: z.number(),
+            status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
+          })
+        )
+        .max(2000),
       body
     );
     mutate((db) => {
       for (const it of items) {
-        const row = find(db.tasks, it.id);
+        const row = find(db.tasks, it.id, "Tarea");
         row.position = it.position;
-        if (it.status) row.status = it.status;
+        if (it.status) applyStatus(db, row, it.status);
         row.updatedAt = nowIso();
       }
     });
@@ -491,19 +690,20 @@ const routes: [string, string, Handler][] = [
   }],
   ["GET", "/tasks/:id", ({ params }) => {
     const db = loadDb();
-    return ok(serializeTask(db, find(db.tasks, params.id)));
+    return ok(serializeTask(db, find(db.tasks, params.id, "Tarea")));
   }],
   ["POST", "/tasks", ({ body }) => {
-    const { tagIds, ...data } = parse(taskSchema, body);
+    const { tagIds, reminderMinutes, ...data } = parse(taskSchema, body);
     return created(
       mutate((db) => {
+        if (data.goalId) find(db.goals, data.goalId, "Objetivo");
         const ts = nowIso();
         const row: TaskRow = {
           id: newId(),
           title: data.title,
           description: data.description ?? null,
           priority: data.priority ?? "medium",
-          status: data.status ?? "pending",
+          status: "pending",
           progress: data.progress ?? 0,
           startDate: data.startDate ?? null,
           dueDate: data.dueDate ?? null,
@@ -512,27 +712,41 @@ const routes: [string, string, Handler][] = [
           position: data.position ?? 0,
           categoryId: data.categoryId ?? null,
           completedAt: null,
+          recurrence: data.recurrence ?? null,
+          recurrenceInterval: data.recurrenceInterval ?? 1,
+          seriesId: null,
+          goalId: data.goalId ?? null,
           createdAt: ts,
           updatedAt: ts,
         };
         db.tasks.push(row);
-        for (const tagId of tagIds ?? []) db.taskTags.push({ taskId: row.id, tagId });
+        for (const tagId of new Set(tagIds ?? [])) db.taskTags.push({ taskId: row.id, tagId });
+        setTaskReminder(db, row, reminderMinutes);
+        if (data.status) applyStatus(db, row, data.status);
         return serializeTask(db, row);
       })
     );
   }],
   ["PUT", "/tasks/:id", ({ params, body }) => {
-    const { tagIds, ...data } = parse(taskSchema.partial(), body);
+    const { tagIds, reminderMinutes, status, ...data } = parse(taskSchema.partial(), body);
     return ok(
       mutate((db) => {
-        const row = find(db.tasks, params.id);
+        const row = find(db.tasks, params.id, "Tarea");
+        if (data.goalId) find(db.goals, data.goalId, "Objetivo");
+        const dueChanged = data.dueDate !== undefined || data.dueTime !== undefined;
         assign(row, data as Partial<TaskRow>);
-        if (data.status) row.completedAt = data.status === "completed" ? nowIso() : null;
+        // Solo un CAMBIO de estado toca `completedAt`: antes, volver a guardar
+        // una tarea completada reescribía su fecha de cierre y falseaba el historial.
+        if (status) applyStatus(db, row, status);
         row.updatedAt = nowIso();
         if (tagIds) {
           db.taskTags = db.taskTags.filter((tt) => tt.taskId !== params.id);
-          for (const tagId of tagIds) db.taskTags.push({ taskId: params.id, tagId });
+          for (const tagId of new Set(tagIds)) db.taskTags.push({ taskId: params.id, tagId });
         }
+        // Si cambia el vencimiento, el recordatorio relativo se recalcula.
+        const rel = db.reminders.find((r) => r.taskId === row.id && r.minutesBefore !== null);
+        if (reminderMinutes !== undefined) setTaskReminder(db, row, reminderMinutes);
+        else if (dueChanged && rel) setTaskReminder(db, row, rel.minutesBefore);
         return serializeTask(db, row);
       })
     );
@@ -542,7 +756,83 @@ const routes: [string, string, Handler][] = [
       find(db.tasks, params.id);
       db.tasks = db.tasks.filter((t) => t.id !== params.id);
       db.taskTags = db.taskTags.filter((tt) => tt.taskId !== params.id); // onDelete: Cascade
+      // Los sub-pasos y recordatorios caen con la tarea; cada uno deja lápida
+      // para que la sincronización no los reviva desde otro dispositivo.
+      for (const s of db.subtasks.filter((s) => s.taskId === params.id)) {
+        tombstone(db, "subtasks", s.id);
+      }
+      db.subtasks = db.subtasks.filter((s) => s.taskId !== params.id);
+      for (const r of db.reminders.filter((r) => r.taskId === params.id)) {
+        tombstone(db, "reminders", r.id);
+      }
       db.reminders = db.reminders.filter((r) => r.taskId !== params.id);
+      tombstone(db, "tasks", params.id);
+    });
+    return noContent();
+  }],
+
+  // Sub-pasos (checklist)
+  ["GET", "/tasks/:id/subtasks", ({ params }) => {
+    const db = loadDb();
+    find(db.tasks, params.id);
+    return ok(subtasksOf(db, params.id));
+  }],
+  ["POST", "/tasks/:id/subtasks", ({ params, body }) => {
+    const data = parse(subtaskSchema, body);
+    return created(
+      mutate((db) => {
+        find(db.tasks, params.id);
+        const siblings = subtasksOf(db, params.id);
+        const ts = nowIso();
+        const row: SubtaskRow = {
+          id: newId(),
+          taskId: params.id,
+          title: data.title,
+          done: data.done ?? false,
+          position: data.position ?? siblings.length,
+          createdAt: ts,
+          updatedAt: ts,
+        };
+        db.subtasks.push(row);
+        syncTaskProgress(db, params.id);
+        return row;
+      })
+    );
+  }],
+  ["PATCH", "/tasks/:taskId/subtasks/reorder", ({ params, body }) => {
+    const items = parse(
+      z.array(z.object({ id: z.string(), position: z.number().int() })).max(500),
+      body
+    );
+    mutate((db) => {
+      for (const it of items) {
+        const row = db.subtasks.find((s) => s.id === it.id && s.taskId === params.taskId);
+        if (!row) continue;
+        row.position = it.position;
+        row.updatedAt = nowIso();
+      }
+    });
+    return ok({ ok: true });
+  }],
+  ["PATCH", "/subtasks/:id", ({ params, body }) => {
+    const data = parse(subtaskSchema.partial(), body);
+    return ok(
+      mutate((db) => {
+        const row = find(db.subtasks, params.id);
+        assign(row, data as Partial<SubtaskRow>);
+        row.updatedAt = nowIso();
+        syncTaskProgress(db, row.taskId);
+        return row;
+      })
+    );
+  }],
+  ["DELETE", "/subtasks/:id", ({ params }) => {
+    mutate((db) => {
+      const row = find(db.subtasks, params.id);
+      const taskId = row.taskId;
+      db.subtasks = db.subtasks.filter((s) => s.id !== params.id);
+      tombstone(db, "subtasks", params.id);
+      syncTaskProgress(db, taskId);
     });
     return noContent();
   }],
@@ -597,10 +887,63 @@ const routes: [string, string, Handler][] = [
     mutate((db) => {
       find(db.habits, params.id);
       db.habits = db.habits.filter((h) => h.id !== params.id);
+      for (const l of db.habitLogs.filter((l) => l.habitId === params.id)) {
+        tombstone(db, "habitLogs", l.id);
+      }
       db.habitLogs = db.habitLogs.filter((l) => l.habitId !== params.id); // onDelete: Cascade
+      for (const r of db.reminders.filter((r) => r.habitId === params.id)) {
+        tombstone(db, "reminders", r.id);
+      }
       db.reminders = db.reminders.filter((r) => r.habitId !== params.id);
+      tombstone(db, "habits", params.id);
     });
     return noContent();
+  }],
+  /**
+   * Mapa de contribuciones estilo GitHub. Devuelve una rejilla continua de días
+   * (incluidos los vacíos) alineada a domingo, para que el componente solo
+   * tenga que pintar celdas en columnas de 7.
+   */
+  ["GET", "/habits/:id/heatmap", ({ params, query }) => {
+    const db = loadDb();
+    const habit = find(db.habits, params.id);
+    const days = Math.min(Math.max(Number(query.get("days") ?? 364), 28), 730);
+
+    const today = startOfDay(new Date());
+    const start = new Date(today);
+    start.setDate(start.getDate() - (days - 1));
+    // Se retrocede al domingo anterior y se avanza hasta el sábado de esta
+    // semana: así la rejilla es un rectángulo exacto de columnas de 7 y la
+    // última no queda coja. Los días aún por venir se marcan como futuros.
+    start.setDate(start.getDate() - start.getDay());
+    const end = new Date(today);
+    end.setDate(end.getDate() + (6 - end.getDay()));
+
+    const counts = new Map<number, number>();
+    for (const log of db.habitLogs) {
+      if (log.habitId !== habit.id) continue;
+      const key = startOfDay(new Date(log.date)).getTime();
+      if (key < start.getTime() || key > end.getTime()) continue;
+      counts.set(key, (counts.get(key) ?? 0) + Math.max(1, log.count));
+    }
+
+    const target = Math.max(1, habit.dailyTarget);
+    const cells: { date: string; count: number; level: number }[] = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const count = counts.get(d.getTime()) ?? 0;
+      // 4 tramos sobre el objetivo diario: 0, <50%, <100%, =100%, >100%.
+      const ratio = count / target;
+      const level = count === 0 ? 0 : ratio < 0.5 ? 1 : ratio < 1 ? 2 : ratio === 1 ? 3 : 4;
+      cells.push({ date: new Date(d).toISOString(), count, level });
+    }
+
+    return ok({
+      habitId: habit.id,
+      color: habit.color,
+      dailyTarget: target,
+      total: [...counts.values()].reduce((a, b) => a + b, 0),
+      cells,
+    });
   }],
   ["POST", "/habits/:id/logs", ({ params, body }) => {
     const { date, count, note } = parse(
@@ -614,16 +957,23 @@ const routes: [string, string, Handler][] = [
       if (existing) {
         existing.count = count ?? existing.count + 1;
         existing.note = note ?? existing.note;
+        existing.updatedAt = nowIso();
         return ok(existing);
       }
+      const ts = nowIso();
       const row = {
-        id: newId(),
+        // Id determinista por (hábito, día): marcar el mismo día en el PC y en
+        // el móvil sin conexión produce la misma fila, no dos.
+        id: `hl-${params.id}-${dayStart.slice(0, 10)}`.slice(0, 128),
         habitId: params.id,
         date: dayStart,
         count: count ?? 1,
         note: note ?? null,
-        createdAt: nowIso(),
+        createdAt: ts,
+        updatedAt: ts,
       };
+      // Si el id quedó con lápida (se desmarcó antes), la nueva marca la supera.
+      db.habitLogs = db.habitLogs.filter((l) => l.id !== row.id);
       db.habitLogs.push(row);
       return created(row);
     });
@@ -631,6 +981,9 @@ const routes: [string, string, Handler][] = [
   ["DELETE", "/habits/:id/logs", ({ params, query }) => {
     const dayStart = startOfDay(new Date(String(query.get("date")))).toISOString();
     mutate((db) => {
+      for (const l of db.habitLogs.filter((l) => l.habitId === params.id && l.date === dayStart)) {
+        tombstone(db, "habitLogs", l.id);
+      }
       db.habitLogs = db.habitLogs.filter((l) => !(l.habitId === params.id && l.date === dayStart));
     });
     return noContent();
@@ -685,7 +1038,11 @@ const routes: [string, string, Handler][] = [
     mutate((db) => {
       find(db.events, params.id);
       db.events = db.events.filter((e) => e.id !== params.id);
+      for (const r of db.reminders.filter((r) => r.eventId === params.id)) {
+        tombstone(db, "reminders", r.id);
+      }
       db.reminders = db.reminders.filter((r) => r.eventId !== params.id); // onDelete: Cascade
+      tombstone(db, "events", params.id);
     });
     return noContent();
   }],
@@ -722,6 +1079,7 @@ const routes: [string, string, Handler][] = [
           habitId: data.habitId ?? null,
           eventId: data.eventId ?? null,
           createdAt: nowIso(),
+          updatedAt: nowIso(),
         };
         db.reminders.push(row);
         return row;
@@ -733,6 +1091,9 @@ const routes: [string, string, Handler][] = [
       mutate((db) => {
         const row = find(db.reminders, params.id);
         row.delivered = true;
+        // Con marca nueva, el resto de dispositivos sabe que ya se avisó y no
+        // repite la notificación.
+        row.updatedAt = nowIso();
         return row;
       })
     )],
@@ -740,6 +1101,7 @@ const routes: [string, string, Handler][] = [
     mutate((db) => {
       find(db.reminders, params.id);
       db.reminders = db.reminders.filter((r) => r.id !== params.id);
+      tombstone(db, "reminders", params.id);
     });
     return noContent();
   }],
@@ -748,7 +1110,7 @@ const routes: [string, string, Handler][] = [
   ["GET", "/goals", () => {
     const db = loadDb();
     return ok(
-      [...db.goals].sort((a, b) => a.endDate.localeCompare(b.endDate)).map((g) => withCategory(db, g))
+      [...db.goals].sort((a, b) => a.endDate.localeCompare(b.endDate)).map((g) => withGoalValue(db, g))
     );
   }],
   ["POST", "/goals", ({ body }) => {
@@ -768,11 +1130,14 @@ const routes: [string, string, Handler][] = [
           endDate: data.endDate,
           categoryId: data.categoryId ?? null,
           completed: data.completed ?? false,
+          source: data.source ?? "manual",
+          finGoalId: data.source === "finance" ? data.finGoalId ?? null : null,
           createdAt: ts,
           updatedAt: ts,
         };
+        if (row.finGoalId) find(db.finGoals, row.finGoalId, "Meta de ahorro");
         db.goals.push(row);
-        return withCategory(db, row);
+        return withGoalValue(db, row);
       })
     );
   }],
@@ -782,8 +1147,10 @@ const routes: [string, string, Handler][] = [
       mutate((db) => {
         const row = find(db.goals, params.id);
         assign(row, data as Partial<GoalRow>);
+        if (row.source !== "finance") row.finGoalId = null;
+        if (row.finGoalId) find(db.finGoals, row.finGoalId, "Meta de ahorro");
         row.updatedAt = nowIso();
-        return withCategory(db, row);
+        return withGoalValue(db, row);
       })
     );
   }],
@@ -791,6 +1158,14 @@ const routes: [string, string, Handler][] = [
     mutate((db) => {
       find(db.goals, params.id);
       db.goals = db.goals.filter((g) => g.id !== params.id);
+      tombstone(db, "goals", params.id);
+      // Las tareas vinculadas siguen existiendo; solo pierden el vínculo.
+      for (const t of db.tasks) {
+        if (t.goalId === params.id) {
+          t.goalId = null;
+          t.updatedAt = nowIso();
+        }
+      }
     });
     return noContent();
   }],
@@ -896,19 +1271,28 @@ const routes: [string, string, Handler][] = [
   ["GET", "/backup/export", () => {
     const db = loadDb();
     return ok({
-      version: 1,
+      version: 2,
       exportedAt: nowIso(),
       data: {
         categories: db.categories,
         tags: db.tags,
         tasks: db.tasks,
         taskTags: db.taskTags,
+        subtasks: db.subtasks,
         habits: db.habits,
         habitLogs: db.habitLogs,
         events: db.events,
         reminders: db.reminders,
         goals: db.goals,
-        settings: db.settings,
+        finAccounts: db.finAccounts,
+        finCategories: db.finCategories,
+        finTransactions: db.finTransactions,
+        finBudgets: db.finBudgets,
+        finGoals: db.finGoals,
+        finRecurring: db.finRecurring,
+        finTags: db.finTags,
+        // Sin el hash del PIN: una copia no debe servir para atacarlo offline.
+        settings: { ...db.settings, pinHash: null },
       },
     });
   }],
@@ -931,11 +1315,19 @@ const routes: [string, string, Handler][] = [
             .array(z.object({ taskId: z.string().min(1).max(128), tagId: z.string().min(1).max(128) }))
             .max(MAX_ROWS)
             .optional(),
+          subtasks: rows,
           habits: rows,
           habitLogs: rows,
           events: rows,
           reminders: rows,
           goals: rows,
+          finAccounts: rows,
+          finCategories: rows,
+          finTransactions: rows,
+          finBudgets: rows,
+          finGoals: rows,
+          finRecurring: rows,
+          finTags: rows,
           // `settings` viaja en el fichero por compatibilidad, pero nunca se
           // aplica: importar ajustes ajenos permitiría, por ejemplo, sustituir
           // el hash del PIN por uno conocido por el atacante.
@@ -946,17 +1338,30 @@ const routes: [string, string, Handler][] = [
       body
     );
 
+    // Las filas financieras pasan por los esquemas estrictos (importes enteros,
+    // fechas válidas, enums): un saldo corrupto es peor que un rechazo.
+    for (const c of FINANCE_COLLECTIONS) {
+      (data[c] ?? []).forEach((r, i) => {
+        const res = FINANCE_ROW_SCHEMAS[c].safeParse(stripDangerousKeys(r));
+        if (!res.success) {
+          throw new ApiError(400, `Copia no válida: ${c}[${i}] ${res.error.issues[0]?.path.join(".")}: ${res.error.issues[0]?.message}`);
+        }
+      });
+    }
+
     mutate((db) => {
       if (replace) {
         db.categories = [];
         db.tags = [];
         db.tasks = [];
         db.taskTags = [];
+        db.subtasks = [];
         db.habits = [];
         db.habitLogs = [];
         db.events = [];
         db.reminders = [];
         db.goals = [];
+        for (const c of FINANCE_COLLECTIONS) (db as any)[c] = [];
       }
       const upsert = <T extends { id: string }>(rows: T[], incoming: any[]) => {
         for (const item of incoming) {
@@ -974,11 +1379,26 @@ const routes: [string, string, Handler][] = [
           db.taskTags.push({ taskId: tt.taskId, tagId: tt.tagId });
         }
       }
+      upsert(db.subtasks, data.subtasks ?? []);
       upsert(db.habits, data.habits ?? []);
       upsert(db.habitLogs, data.habitLogs ?? []);
       upsert(db.events, data.events ?? []);
       upsert(db.reminders, data.reminders ?? []);
       upsert(db.goals, data.goals ?? []);
+      for (const c of FINANCE_COLLECTIONS) upsert(db[c] as { id: string }[], data[c] ?? []);
+      // Filas de versiones anteriores: rellena los campos nuevos.
+      for (const t of db.tasks) {
+        t.recurrence ??= null;
+        t.recurrenceInterval ??= 1;
+        t.seriesId ??= null;
+        t.goalId ??= null;
+      }
+      for (const g of db.goals) {
+        g.source ??= "manual";
+        g.finGoalId ??= null;
+      }
+      // Copias anteriores a las etiquetas financieras.
+      ensureOwnerTags(db);
     });
 
     return ok({ ok: true });

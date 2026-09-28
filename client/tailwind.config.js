@@ -16,12 +16,32 @@ export default {
         danger: "rgb(var(--danger) / <alpha-value>)",
         success: "rgb(var(--success) / <alpha-value>)",
         warning: "rgb(var(--warning) / <alpha-value>)",
+        ring: "rgb(var(--ring) / <alpha-value>)",
       },
-      fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+      // Radios y sombras tematizables: `rounded-lg`/`shadow-soft` dejan de ser
+      // valores fijos y pasan a resolverse por el skin activo.
+      borderRadius: {
+        sm: "var(--radius-sm)",
+        DEFAULT: "var(--radius-md)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-lg)",
+        pill: "var(--radius-pill)",
+      },
+      borderWidth: {
+        theme: "var(--border-w)",
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(0,0,0,.04), 0 1px 6px rgba(0,0,0,.06)",
+        soft: "var(--shadow-1)",
+        pop: "var(--shadow-2)",
+      },
+      fontFamily: {
+        sans: "var(--font-ui)",
+        mono: "var(--font-mono)",
+        heading: "var(--font-heading)",
+      },
+      transitionTimingFunction: {
+        theme: "cubic-bezier(0.2, 0.8, 0.2, 1)",
       },
       keyframes: {
         "fade-in": { "0%": { opacity: 0 }, "100%": { opacity: 1 } },

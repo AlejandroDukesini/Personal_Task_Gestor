@@ -12,10 +12,18 @@ server/prisma/dev.db
 server/prisma/dev.db-journal
 server/prisma/*.db
 server/prisma/*.db-journal
-server/prisma/migrations/
+# Migraciones de prisma migrate (no se usan: el esquema base va por db push)…
+server/prisma/migrations/*
+# …salvo las migraciones SQL versionadas de finanzas, que SÍ se versionan.
+!server/prisma/migrations/finance/
 client/dist/
 .vscode/
 .idea/
+
+# Sincronización local: la clave privada del certificado autofirmado y la
+# última instantánea de datos NUNCA deben subirse al repositorio.
+sync/.cert/
+sync/.state/
 
 # Informe de auditoría de seguridad (uso interno)
 cibersegurity.txt

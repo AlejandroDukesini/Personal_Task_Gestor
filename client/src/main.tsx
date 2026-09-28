@@ -1,24 +1,81 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import App from "./App";
+import { registerServiceWorker } from "./lib/pwa";
+import { bootDb } from "./services/localDb";
+import { requestPersistence } from "./services/storage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
+// Se importa después de index.css a propósito: en empates de especificidad
+// (p. ej. `.dark` vs `[data-skin=x]`) debe ganar el skin.
+import "./themes/skins.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          style: {
-            background: "rgb(var(--surface))",
-            color: "rgb(var(--text))",
-            border: "1px solid rgb(var(--border))",
-          },
-        }}
-      />
-    </BrowserRouter>
-  </React.StrictMode>
-);
+const root = ReactDOM.createRoot(document.getElementById("root")!);
+
+/**
+ * Antes de pintar nada se abre el almacenamiento local (IndexedDB) y se
+ * migran los datos si hace falta. Así ninguna pantalla puede leer o escribir
+ * sobre una base a medio cargar.
+ */
+async function start() {
+  try {
+    await bootDb();
+  } catch (e) {
+    root.render(<BootError message={e instanceof Error ? e.message : String(e)} />);
+    return;
+  }
+  // Que el sistema no borre los datos por falta de espacio (sin bloquear el arranque).
+  void requestPersistence();
+
+  // Una escritura que falla no puede pasar desapercibida: el usuario perdería
+  // cambios al cerrar la app sin saberlo.
+  window.addEventListener("gt:storage-error", (e) => {
+    toast.error(`No se pudieron guardar los últimos cambios: ${(e as CustomEvent).detail}. Exporta una copia de seguridad.`, {
+      id: "storage-error",
+      duration: 10000,
+    });
+  });
+
+  root.render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <App />
+          <Toaster
+            position="top-center"
+            // Por encima de la barra de estado del iPhone (zona segura).
+            containerStyle={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+            toastOptions={{
+              style: {
+                background: "rgb(var(--surface))",
+                color: "rgb(var(--text))",
+                border: "var(--border-w) solid rgb(var(--border))",
+                borderRadius: "var(--radius-md)",
+                fontFamily: "var(--font-ui)",
+                maxWidth: "min(92vw, 420px)",
+              },
+            }}
+          />
+        </BrowserRouter>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+}
+
+function BootError({ message }: { message: string }) {
+  return (
+    <div style={{ padding: "calc(env(safe-area-inset-top) + 24px) 24px 24px", fontFamily: "system-ui", color: "#e2e8f0", background: "#0f172a", minHeight: "100dvh" }}>
+      <h1 style={{ fontSize: 20 }}>No se pudo abrir el almacenamiento local</h1>
+      <p>{message}</p>
+      <p>Cierra otras pestañas de la app y vuelve a intentarlo. Tus datos no se han modificado.</p>
+      <button onClick={() => location.reload()} style={{ padding: "12px 20px", borderRadius: 10, border: 0, background: "#6366f1", color: "#fff", fontSize: 16 }}>
+        Reintentar
+      </button>
+    </div>
+  );
+}
+
+void start();
+registerServiceWorker();

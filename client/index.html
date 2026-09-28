@@ -2,7 +2,9 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: la app ocupa toda la pantalla del iPhone (incluida la
+         zona de la cámara) y el CSS respeta las zonas seguras con env(). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- ================= SEO PRIMARIO ================= -->
     <title>Sistema de Productividad Personal | Tareas, Hábitos y Calendario Local-First</title>
@@ -16,13 +18,25 @@
     />
     <meta name="author" content="Alejandro Dukesini" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
-    <meta name="theme-color" content="#6366f1" />
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
     <link rel="canonical" href="https://task-gestor.netlify.app/" />
 
     <!-- ================= ICONOS / PWA ================= -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- ================= iOS (Safari / PWA instalada) ================= -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Texto claro sobre la barra superior de la app (que se extiende bajo la barra de estado). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Productividad" />
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    <!-- Pantalla de inicio del iPhone XS / X / 11 Pro (1125×2436 y horizontal). -->
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash-2436x1125.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" />
 
     <!-- ================= OPEN GRAPH (Facebook / LinkedIn / WhatsApp) ================= -->
     <meta property="og:type" content="website" />

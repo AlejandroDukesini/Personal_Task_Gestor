@@ -1,23 +1,28 @@
 {
   "name": "gestion-tareas",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sistema de Productividad Personal Local-First (Tareas, Hábitos, Calendario, Objetivos)",
   "workspaces": [
     "server",
-    "client"
+    "client",
+    "sync"
   ],
   "scripts": {
     "dev": "npm run dev -w client",
     "build": "npm run build -w client",
     "preview": "npm run preview -w client",
+    "sync": "npm run start -w gestion-tareas-sync",
     "dev:server": "npm run dev -w server",
     "build:server": "npm run build -w server",
     "start:server": "npm run start -w server",
     "db:setup": "npm run db:setup -w server",
     "db:studio": "npm run db:studio -w server",
     "db:reset": "npm run db:reset -w server",
-    "db:seed": "npm run db:seed -w server"
+    "db:seed": "npm run db:seed -w server",
+    "test": "npm run test -w client && npm run test -w gestion-tareas-sync",
+    "sql:gen": "npm run sql:gen -w client",
+    "pc": "npm run build && npm run start -w gestion-tareas-sync"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

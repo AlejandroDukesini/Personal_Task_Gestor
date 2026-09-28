@@ -44,9 +44,20 @@ export function statusLabel(s: string) {
   }[s] ?? s;
 }
 
+/**
+ * Las fechas "de día" (vencimientos, inicio) se guardan como medianoche UTC
+ * del día elegido (`2026-09-27T00:00:00.000Z`). Leídas con `new Date()` en
+ * una zona con desfase negativo (Bogotá, UTC-5) caían en el día ANTERIOR: se
+ * mostraba "26 sept" para una tarea del 27. Aquí se reconstruye el día local.
+ */
+export function asLocalDay(d: string): Date {
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
+}
+
 export function formatDate(d?: string | null) {
   if (!d) return "";
-  return new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+  return asLocalDay(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function formatDateTime(d?: string | null) {
@@ -59,14 +70,22 @@ export function formatDateTime(d?: string | null) {
   });
 }
 
-export function isOverdue(dueDate?: string | null, status?: string) {
+/** Vencida cuando ha pasado la hora límite, o el día completo si no tiene hora. */
+export function isOverdue(dueDate?: string | null, status?: string, dueTime?: string | null) {
   if (!dueDate || status === "completed" || status === "cancelled") return false;
-  return new Date(dueDate).getTime() < Date.now();
+  const due = asLocalDay(dueDate);
+  if (dueTime && /^\d{2}:\d{2}$/.test(dueTime)) {
+    const [h, m] = dueTime.split(":").map(Number);
+    due.setHours(h, m, 0, 0);
+  } else {
+    due.setHours(23, 59, 59, 999);
+  }
+  return due.getTime() < Date.now();
 }
 
 export function relativeDay(d?: string | null) {
   if (!d) return "";
-  const date = new Date(d);
+  const date = asLocalDay(d);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   date.setHours(0, 0, 0, 0);

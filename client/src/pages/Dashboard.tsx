@@ -31,6 +31,8 @@ import type { Habit, Stats, Task, Event, Goal } from "@/types";
 import { priorityColor, priorityLabel, relativeDay } from "@/lib/utils";
 import { useConfig, hourInTimezone } from "@/store/config";
 import { useT, localeFor } from "@/lib/i18n";
+import { FinanceWidget } from "@/components/finance/FinanceWidget";
+import { isOverdue } from "@/lib/utils";
 
 export function Dashboard() {
   const stats = useResource(() => api.get<Stats>("/stats/summary"));
@@ -173,6 +175,11 @@ export function Dashboard() {
             </Link>
           </CardHeader>
           <CardContent className="space-y-2 max-h-96 overflow-y-auto">
+            {(tasks.data ?? []).some((x) => isOverdue(x.dueDate, x.status, x.dueTime)) && (
+              <Link to="/tareas?quick=overdue" className="block text-xs text-danger mb-1">
+                {t("dash.overdueTasks")}: {(tasks.data ?? []).filter((x) => isOverdue(x.dueDate, x.status, x.dueTime)).length} →
+              </Link>
+            )}
             {(tasks.data ?? []).slice(0, 8).map((t, idx) => (
               <motion.div
                 key={t.id}
@@ -262,6 +269,8 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
+        <FinanceWidget />
+
         {/* Objetivos */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
@@ -272,7 +281,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             {(goals.data ?? []).slice(0, 4).map((g) => {
-              const pct = Math.min(100, (g.currentValue / g.targetValue) * 100);
+              const pct = g.targetValue > 0 ? Math.min(100, (g.currentValue / g.targetValue) * 100) : 0;
               return (
                 <div key={g.id}>
                   <div className="flex items-center justify-between text-sm mb-1.5">
@@ -281,7 +290,8 @@ export function Dashboard() {
                       <span className="font-medium">{g.title}</span>
                     </div>
                     <span className="text-xs text-subtle">
-                      {g.currentValue}/{g.targetValue} {g.unit ?? ""}
+                      {g.currentValue.toLocaleString(localeFor(language), { maximumFractionDigits: 2 })}/
+                      {g.targetValue.toLocaleString(localeFor(language), { maximumFractionDigits: 2 })} {g.unit ?? ""}
                     </span>
                   </div>
                   <Progress value={pct} />

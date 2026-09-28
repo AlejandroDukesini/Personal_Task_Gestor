@@ -20,6 +20,10 @@ interface ConfigState {
   dateFormat: string;
   pinEnabled: boolean;
   pinSet: boolean;
+  notificationsEnabled: boolean;
+  habitReminderTime: string | null;
+  dailyDigestTime: string | null;
+  currency: string;
   load: () => Promise<void>;
   update: (patch: Partial<Settings>) => Promise<Settings>;
 }
@@ -34,6 +38,10 @@ function fromSettings(s: Settings) {
     dateFormat: s.dateFormat || "dd/MM/yyyy",
     pinEnabled: s.pinEnabled,
     pinSet: s.pinSet,
+    notificationsEnabled: s.notificationsEnabled ?? false,
+    habitReminderTime: s.habitReminderTime ?? null,
+    dailyDigestTime: s.dailyDigestTime ?? null,
+    currency: s.currency ?? "COP",
   };
 }
 
@@ -43,6 +51,10 @@ export const useConfig = create<ConfigState>((set, get) => ({
   dateFormat: "dd/MM/yyyy",
   pinEnabled: false,
   pinSet: false,
+  notificationsEnabled: false,
+  habitReminderTime: null,
+  dailyDigestTime: null,
+  currency: "COP",
   load: async () => {
     try {
       const s = await api.get<Settings>("/settings");

@@ -1,29 +1,33 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import {
+  Bell,
   Download,
   ImageUp,
   Lock,
-  Monitor,
-  Moon,
   Palette,
   Shuffle,
-  Sun,
-  Type,
+  Smartphone,
   Upload,
   UserCircle2,
+  Wifi,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
-import { useTheme } from "@/store/theme";
+import { ThemePicker } from "@/components/ThemePicker";
+import { Link } from "react-router-dom";
 import { useConfig } from "@/store/config";
 import { useT } from "@/lib/i18n";
 import { api } from "@/services/api";
-import { cn } from "@/lib/utils";
-
-const COLORS = ["#6366f1", "#10b981", "#0ea5e9", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+import { CURRENCIES } from "@/lib/money";
+import {
+  notificationPermission,
+  notify,
+  requestNotificationPermission,
+} from "@/lib/notifications";
+import { isIos, isStandalone, onInstallAvailability, promptInstall } from "@/lib/pwa";
 
 const TIMEZONES = [
   "America/Bogota",
@@ -39,9 +43,30 @@ const TIMEZONES = [
 
 export function SettingsPage() {
   const t = useT();
-  const { theme, setTheme, primaryColor, setPrimaryColor, fontScale, setFontScale } = useTheme();
   const cfg = useConfig();
   const [pin, setPin] = useState("");
+  const [installAvailable, setInstallAvailable] = useState(false);
+  const [permission, setPermission] = useState(notificationPermission());
+
+  useEffect(() => onInstallAvailability(setInstallAvailable), []);
+
+  // La paleta de comandos enlaza a /configuracion#sync: se desplaza al panel.
+  useEffect(() => {
+    if (window.location.hash !== "#sync") return;
+    document.getElementById("sync")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  async function enableNotifications() {
+    const granted = await requestNotificationPermission();
+    setPermission(notificationPermission());
+    if (!granted) {
+      toast.error(t("notif.denied"));
+      return;
+    }
+    await cfg.update({ notificationsEnabled: true });
+    await notify(t("notif.testTitle"), { body: t("notif.testBody") });
+    toast.success(t("notif.enabled"));
+  }
 
   // Formulario de marca (nombre app, logo texto, nombre usuario).
   const isImageLogo = !!cfg.appLogo && cfg.appLogo.startsWith("data:");
@@ -243,70 +268,134 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Tema */}
+        {/* Apariencia: selector de skin, modo, acento y escala tipográfica. */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Palette size={16} /> {t("settings.appearance")}
             </CardTitle>
           </CardHeader>
+          <CardContent>
+            <ThemePicker />
+          </CardContent>
+        </Card>
+
+        {/* Notificaciones */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell size={16} /> {t("notif.title")}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
-            <Field label={t("settings.theme")}>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "light", label: t("settings.themeLight"), Icon: Sun },
-                  { id: "dark", label: t("settings.themeDark"), Icon: Moon },
-                  { id: "system", label: t("settings.themeSystem"), Icon: Monitor },
-                ].map(({ id, label, Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => setTheme(id as any)}
-                    className={cn(
-                      "flex flex-col items-center gap-1 p-3 rounded-lg border text-sm",
-                      theme === id
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:bg-muted"
-                    )}
-                  >
-                    <Icon size={18} />
-                    {label}
-                  </button>
-                ))}
+            {permission === "unsupported" ? (
+              <p className="text-sm text-subtle">{t("notif.unsupported")}</p>
+            ) : permission === "granted" && cfg.notificationsEnabled ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-success">{t("notif.active")}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => notify(t("notif.testTitle"), { body: t("notif.testBody") })}
+                >
+                  {t("notif.test")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => cfg.update({ notificationsEnabled: false })}
+                >
+                  {t("notif.disable")}
+                </Button>
               </div>
-            </Field>
+            ) : (
+              <>
+                <p className="text-sm text-subtle">{t("notif.help")}</p>
+                <Button onClick={enableNotifications} disabled={permission === "denied"}>
+                  <Bell size={14} /> {t("notif.enable")}
+                </Button>
+                {permission === "denied" && (
+                  <p className="text-xs text-warning">{t("notif.blocked")}</p>
+                )}
+              </>
+            )}
 
-            <Field label={t("settings.primaryColor")}>
-              <div className="flex gap-2 flex-wrap">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setPrimaryColor(c)}
-                    className="h-9 w-9 rounded-full border-2 transition-transform"
-                    style={{
-                      background: c,
-                      borderColor: primaryColor === c ? "rgb(var(--text))" : "transparent",
-                      transform: primaryColor === c ? "scale(1.1)" : "scale(1)",
-                    }}
-                  />
-                ))}
-              </div>
-            </Field>
-
-            <Field label={t("settings.fontSize", { value: Math.round(fontScale * 100) })}>
-              <div className="flex items-center gap-3">
-                <Type size={14} className="text-subtle" />
-                <input
-                  type="range"
-                  min={0.85}
-                  max={1.3}
-                  step={0.05}
-                  value={fontScale}
-                  onChange={(e) => setFontScale(Number(e.target.value))}
-                  className="flex-1 accent-primary"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label={t("notif.habitTime")} hint={t("notif.habitTimeHelp")}>
+                <Input
+                  type="time"
+                  value={cfg.habitReminderTime ?? ""}
+                  onChange={(e) =>
+                    cfg.update({ habitReminderTime: e.target.value || null })
+                  }
                 />
-                <Type size={18} className="text-subtle" />
+              </Field>
+              <Field label={t("notif.digestTime")} hint={t("notif.digestTimeHelp")}>
+                <Input
+                  type="time"
+                  value={cfg.dailyDigestTime ?? ""}
+                  onChange={(e) => cfg.update({ dailyDigestTime: e.target.value || null })}
+                />
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sincronización local + instalación */}
+        <Card className="lg:col-span-2" id="sync">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wifi size={16} /> {t("sync.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <p className="text-sm text-subtle">
+              Tus datos se guardan en este dispositivo. La sincronización con tu otro dispositivo (Wi‑Fi o archivo cifrado), las
+              copias de seguridad y los dispositivos autorizados están en su propia sección.
+            </p>
+            <Link to="/sincronizacion" className="gt-control inline-flex items-center gap-2 h-11 px-4 bg-primary text-primary-fg font-medium">
+              <Wifi size={15} /> Abrir Sincronización
+            </Link>
+
+            <div className="pt-4 border-t border-t-theme border-border space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Smartphone size={15} /> {t("pwa.title")}
               </div>
-            </Field>
+              {isStandalone() ? (
+                <p className="text-sm text-success">{t("pwa.installed")}</p>
+              ) : isIos() ? (
+                // iOS no ofrece instalación automática: solo desde Safari, a mano.
+                <ol className="text-sm list-decimal pl-5 space-y-1.5">
+                  <li>Abre esta página en <strong>Safari</strong> (no en otro navegador).</li>
+                  <li>
+                    Pulsa <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba).
+                  </li>
+                  <li>
+                    Elige <strong>«Añadir a pantalla de inicio»</strong> y confirma.
+                  </li>
+                  <li className="text-subtle">
+                    Abre la app desde su icono: funciona sin conexión y sus datos quedan protegidos. Importante: la app instalada y
+                    Safari guardan datos por separado.
+                  </li>
+                </ol>
+              ) : (
+                <>
+                  <p className="text-sm text-subtle">{t("pwa.help")}</p>
+                  <Button
+                    variant="outline"
+                    disabled={!installAvailable}
+                    onClick={async () => {
+                      if (!(await promptInstall())) toast(t("pwa.unavailable"));
+                    }}
+                  >
+                    <Smartphone size={14} /> {t("pwa.install")}
+                  </Button>
+                  {!installAvailable && (
+                    <p className="text-xs text-subtle">{t("pwa.manual")}</p>
+                  )}
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -333,6 +422,15 @@ export function SettingsPage() {
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Moneda por defecto (finanzas)" hint="Se propone al crear cuentas, presupuestos y metas.">
+              <Select value={cfg.currency} onChange={(e) => cfg.update({ currency: e.target.value })}>
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
                   </option>
                 ))}
               </Select>

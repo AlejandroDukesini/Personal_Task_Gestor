@@ -52,6 +52,10 @@ import {
 import { accountBalances, allocationsOf, goalProgress, occurrencesBetween, recurringTxId } from "./calc";
 import { todayKey } from "./dates";
 import { applyFinanceImport, applyCsvImport, exportFinance, planCsvImport, planFinanceImport } from "./io";
+import { applySmartImport, MAX_IMPORT_ROWS, planSmartImport } from "./import/engine";
+import { IMPORT_FIELDS } from "./import/columns";
+import { EDITABLE_FIELDS } from "./import/types";
+import type { Cell } from "./import/normalize";
 
 const ACCOUNT_COLORS: Record<string, string> = {
   cash: "#16a34a",
@@ -969,7 +973,67 @@ export const financeRoutes: Route[] = [
     const input = parse(csvBody, body);
     return ok(mutate((db) => applyCsvImport(db, input.text, input.options)));
   }],
+  // Importación inteligente (CSV, Excel, JSON, SQLite, Cashew): fila a fila.
+  ["POST", "/finance/import/smart/preview", ({ body }) => {
+    const input = parse(smartBody, body);
+    return ok(planSmartImport(loadDb(), input).preview);
+  }],
+  ["POST", "/finance/import/smart", ({ body }) => {
+    const input = parse(smartBody, body);
+    return ok(mutate((db) => applySmartImport(db, input)));
+  }],
 ];
+
+/** Celdas primitivas y acotadas. Bucle simple: con 50.000 filas zod celda a celda es lento. */
+const isCell = (v: unknown): v is Cell => v === null || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 10_000);
+const cellRows = z.custom<Cell[][]>(
+  (rows) => Array.isArray(rows) && rows.length <= MAX_IMPORT_ROWS + 1000 && rows.every((r) => Array.isArray(r) && r.length <= 300 && r.every(isCell)),
+  "Filas con formato no válido"
+);
+const cellRecords = (max: number) =>
+  z.custom<Record<string, Cell>[]>(
+    (rows) => Array.isArray(rows) && rows.length <= max && rows.every((r) => !!r && typeof r === "object" && !Array.isArray(r) && Object.values(r).every(isCell)),
+    "Registros con formato no válido"
+  );
+const notes = z.array(z.string().max(500)).max(20).optional();
+
+const smartBody = z.object({
+  source: z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("table"),
+      format: z.enum(["csv", "xlsx", "json", "sqlite"]),
+      name: z.string().max(200).optional(),
+      headers: z.array(z.string().max(500)).max(300),
+      rows: cellRows,
+      firstRow: z.number().int().min(1).max(10_000_000),
+      notes,
+    }),
+    z.object({
+      type: z.literal("cashew"),
+      wallets: cellRecords(2000),
+      categories: cellRecords(5000),
+      transactions: cellRecords(MAX_IMPORT_ROWS),
+      objectives: cellRecords(2000).optional().transform((v) => v ?? []),
+      notes,
+    }),
+  ]),
+  mapping: z.array(z.enum(IMPORT_FIELDS).nullable()).max(300).optional(),
+  options: z
+    .object({
+      dateOrder: z.enum(["auto", "dmy", "mdy", "ymd"]),
+      decimal: z.enum(["auto", ",", "."]),
+      defaultAccountId: idSchema.nullable(),
+      createAccounts: z.boolean(),
+      createCategories: z.boolean(),
+    })
+    .partial()
+    .optional(),
+  edits: z
+    .record(z.object(Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, z.string().max(2000).optional()]))))
+    .refine((e) => Object.keys(e).length <= MAX_IMPORT_ROWS, "Demasiadas correcciones")
+    .optional(),
+  decisions: z.record(z.enum(["include", "exclude"])).optional(),
+});
 
 const importBody = z.object({
   data: z.unknown(),

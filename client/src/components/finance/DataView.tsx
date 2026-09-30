@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { Archive, ArchiveRestore, Database, Download, FileJson, FileSpreadsheet, Plus, Trash2, Upload } from "lucide-react";
+import { Archive, ArchiveRestore, Database, Download, FileJson, FileSpreadsheet, FileUp, Plus, Trash2, Upload } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
@@ -8,12 +8,11 @@ import { Badge } from "@/components/ui/Badge";
 import { api } from "@/services/api";
 import { loadDb, type FinCategoryKind } from "@/services/localDb";
 import type { FinanceData } from "@/hooks/useFinance";
-import { transactionsToCsv, type CsvSummary, type ImportSummary } from "@/services/finance/io";
+import { transactionsToCsv, type ImportSummary } from "@/services/finance/io";
+import { MAX_IMPORT_BYTES, readImportFile, type DetectedFile } from "@/services/finance/import/sources";
 import { financeSqlDump } from "@/services/finance/sql";
-import { formatMoney } from "@/lib/money";
-import { DynIcon, KIND_LABEL, errorMessage } from "./shared";
-
-const MAX_FILE = 10 * 1024 * 1024;
+import { DynIcon, errorMessage } from "./shared";
+import { SmartImport } from "./SmartImport";
 
 function download(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -34,10 +33,10 @@ const COLLECTION_LABEL: Record<string, string> = {
 };
 
 export function DataView({ data, reload }: { data: FinanceData; reload: () => void }) {
-  const jsonRef = useRef<HTMLInputElement>(null);
-  const csvRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [jsonImport, setJsonImport] = useState<{ payload: unknown; mode: "newer" | "merge"; summary: ImportSummary } | null>(null);
-  const [csvImport, setCsvImport] = useState<{ text: string; summary: CsvSummary; defaultAccountId: string; createCategories: boolean } | null>(null);
+  const [smart, setSmart] = useState<Exclude<DetectedFile, { kind: "native" }> | null>(null);
+  const [reading, setReading] = useState(false);
   const [busy, setBusy] = useState(false);
   const stamp = new Date().toISOString().slice(0, 10);
 
@@ -55,26 +54,30 @@ export function DataView({ data, reload }: { data: FinanceData; reload: () => vo
     download(`finanzas-${stamp}${includeSchema ? "-completo" : "-datos"}.sql`, financeSqlDump(loadDb(), { includeSchema }), "application/sql");
   }
 
-  async function readFile(file: File): Promise<string | null> {
-    if (file.size > MAX_FILE) {
-      toast.error("El archivo supera 10 MB");
-      return null;
-    }
-    return file.text();
-  }
-
-  async function pickJson(file: File) {
-    const text = await readFile(file);
-    if (text === null) return;
-    let payload: unknown;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      toast.error("El archivo no es un JSON válido");
+  /**
+   * Cualquier archivo: el formato se detecta por el contenido. Una copia JSON
+   * de esta app va por la importación completa (todo o nada); el resto, por
+   * la importación inteligente fila a fila.
+   */
+  async function pickFile(file: File) {
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast.error("El archivo supera 25 MB");
       return;
     }
-    const summary = await api.post<ImportSummary>("/finance/import/preview", { data: payload, mode: "newer" });
-    setJsonImport({ payload, mode: "newer", summary });
+    setReading(true);
+    try {
+      const detected = await readImportFile(file.name, new Uint8Array(await file.arrayBuffer()));
+      if (detected.kind === "native") {
+        setSmart(null);
+        const summary = await api.post<ImportSummary>("/finance/import/preview", { data: detected.payload, mode: "newer" });
+        setJsonImport({ payload: detected.payload, mode: "newer", summary });
+      } else {
+        setJsonImport(null);
+        setSmart(detected);
+      }
+    } finally {
+      setReading(false);
+    }
   }
 
   async function changeMode(mode: "newer" | "merge") {
@@ -90,32 +93,6 @@ export function DataView({ data, reload }: { data: FinanceData; reload: () => vo
       await api.post("/finance/import", { data: jsonImport.payload, mode: jsonImport.mode });
       toast.success("Importación aplicada");
       setJsonImport(null);
-      reload();
-    } catch (e) {
-      toast.error(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function previewCsv(text: string, defaultAccountId: string, createCategories: boolean) {
-    const summary = await api.post<CsvSummary>("/finance/import/csv/preview", {
-      text,
-      options: { defaultAccountId: defaultAccountId || null, createCategories },
-    });
-    setCsvImport({ text, summary, defaultAccountId, createCategories });
-  }
-
-  async function applyCsv() {
-    if (!csvImport) return;
-    setBusy(true);
-    try {
-      const res = await api.post<CsvSummary>("/finance/import/csv", {
-        text: csvImport.text,
-        options: { defaultAccountId: csvImport.defaultAccountId || null, createCategories: csvImport.createCategories },
-      });
-      toast.success(`${res.toImport} movimiento(s) importados`);
-      setCsvImport(null);
       reload();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -158,46 +135,28 @@ export function DataView({ data, reload }: { data: FinanceData; reload: () => vo
             <Upload size={16} aria-hidden /> Importar
           </CardTitle>
           <CardDescription>
-            Se valida todo antes de aplicar (formato, importes, fechas, referencias y duplicados). Si hay un solo error no se cambia nada. Por seguridad no se ejecuta SQL importado.
+            CSV, Excel (.xlsx), JSON o base de datos SQLite (incluidas las copias de Cashew). Cada fila se valida por separado y ves una vista previa antes de aplicar nada. Por seguridad nunca se ejecuta SQL importado.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => jsonRef.current?.click()}>
-              <FileJson size={14} /> JSON de finanzas
-            </Button>
-            <Button variant="outline" onClick={() => csvRef.current?.click()}>
-              <FileSpreadsheet size={14} /> CSV de movimientos
-            </Button>
-          </div>
+          <Button variant="outline" onClick={() => fileRef.current?.click()} loading={reading}>
+            <FileUp size={14} /> Elegir archivo
+          </Button>
           <input
-            ref={jsonRef}
+            ref={fileRef}
             type="file"
-            accept="application/json,.json"
+            accept=".csv,.tsv,.txt,.xlsx,.json,.sql,.sqlite,.db,.sqlite3,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
-              if (f) pickJson(f).catch((err) => toast.error(errorMessage(err)));
-            }}
-          />
-          <input
-            ref={csvRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (!f) return;
-              const text = await readFile(f);
-              if (text !== null) previewCsv(text, "", false).catch((err) => toast.error(errorMessage(err)));
+              if (f) pickFile(f).catch((err) => toast.error(errorMessage(err)));
             }}
           />
           <p className="text-xs text-subtle">
-            CSV: columnas <span className="gt-mono">fecha, importe, concepto</span> obligatorias; opcionales{" "}
-            <span className="gt-mono">tipo, cuenta, cuenta_destino, categoria, descripcion, etiquetas (a|b), motivo, id</span>. Separador «,» o «;».
-            Fechas AAAA-MM-DD o DD/MM/AAAA. Sin columna tipo, el signo del importe decide ingreso/gasto.
+            Las columnas se reconocen solas (fecha, importe, tipo, cuenta, categoría, concepto…) y puedes reasignarlas. Se aceptan fechas AAAA-MM-DD, DD/MM/AAAA, con hora o
+            timestamps; importes con coma o punto decimal y símbolo de moneda. Los duplicados se detectan y reimportar el mismo archivo no duplica nada. La copia JSON de esta app
+            restaura todo de una vez.
           </p>
 
           {jsonImport && (
@@ -238,70 +197,10 @@ export function DataView({ data, reload }: { data: FinanceData; reload: () => vo
             </div>
           )}
 
-          {csvImport && (
-            <div className="gt-surface p-3 space-y-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <strong>Vista previa (CSV)</strong>
-                <Badge color={csvImport.summary.valid ? "#16a34a" : "#dc2626"}>{csvImport.summary.valid ? "Válido" : "Con errores"}</Badge>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Field label="Cuenta si falta la columna">
-                  <Select value={csvImport.defaultAccountId} onChange={(e) => previewCsv(csvImport.text, e.target.value, csvImport.createCategories)}>
-                    <option value="">—</option>
-                    {data.accounts.filter((a) => !a.archived).map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <label className="flex items-center gap-2 text-xs self-end pb-2">
-                  <input
-                    type="checkbox"
-                    className="accent-primary"
-                    checked={csvImport.createCategories}
-                    onChange={(e) => previewCsv(csvImport.text, csvImport.defaultAccountId, e.target.checked)}
-                  />
-                  Crear categorías que no existan
-                </label>
-              </div>
-              <p className="text-xs">
-                {csvImport.summary.total} filas · <strong>{csvImport.summary.toImport}</strong> a importar · {csvImport.summary.duplicates} duplicadas (se omiten)
-                {csvImport.summary.newCategories.length ? ` · categorías nuevas: ${csvImport.summary.newCategories.join(", ")}` : ""}
-              </p>
-              {csvImport.summary.errors.slice(0, 10).map((er) => (
-                <p key={er.line} className="text-xs text-danger">
-                  Línea {er.line}: {er.message}
-                </p>
-              ))}
-              {csvImport.summary.warnings.slice(0, 5).map((w) => (
-                <p key={w} className="text-xs text-warning">{w}</p>
-              ))}
-              {csvImport.summary.preview.length > 0 && (
-                <ul className="text-xs divide-y divide-border max-h-48 overflow-y-auto">
-                  {csvImport.summary.preview.map((p) => (
-                    <li key={p.line} className={p.duplicate ? "py-1 flex gap-2 text-subtle line-through" : "py-1 flex gap-2"}>
-                      <span className="w-20 shrink-0">{p.date}</span>
-                      <span className="flex-1 truncate">
-                        {KIND_LABEL[p.kind as keyof typeof KIND_LABEL]} · {p.concept} · {p.account}
-                      </span>
-                      <span className="tabular-nums">{formatMoney(p.amount, data.accounts.find((a) => a.name === p.account)?.currency ?? data.defaultCurrency)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setCsvImport(null)}>
-                  Cancelar
-                </Button>
-                <Button size="sm" onClick={applyCsv} disabled={!csvImport.summary.valid || csvImport.summary.toImport === 0} loading={busy}>
-                  Importar {csvImport.summary.toImport}
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {smart && <SmartImport key={smart.label} detected={smart} data={data} reload={reload} onClose={() => setSmart(null)} />}
 
       <CategoriesManager data={data} reload={reload} />
     </div>

@@ -334,11 +334,14 @@ const HEADER_ALIASES: Record<string, string> = {
   purposes: "purposes",
 };
 
-/** Parser CSV RFC 4180 (comillas, saltos de línea dentro de campo). Detecta `,` o `;`. */
-export function parseCsv(text: string): string[][] {
+/**
+ * Parser CSV RFC 4180 (comillas, saltos de línea dentro de campo). Sin
+ * `delimiter`, elige `,` o `;` según la primera línea.
+ */
+export function parseCsv(text: string, delimiter?: string): string[][] {
   const clean = text.replace(/^﻿/, "");
   const firstLine = clean.split(/\r?\n/, 1)[0] ?? "";
-  const delim = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const delim = delimiter ?? ((firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ";" : ",");
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -634,7 +637,7 @@ export function applyCsvImport(db: Db, text: string, options: CsvOptions = {}): 
 }
 
 /** Evita la inyección de fórmulas al abrir el CSV en Excel/Sheets. */
-function csvCell(v: string): string {
+export function csvCell(v: string): string {
   const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
   return /[",;\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }

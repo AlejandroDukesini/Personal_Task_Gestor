@@ -287,10 +287,14 @@ export async function buildBackup(): Promise<BackupFile> {
   return { format: BACKUP_FORMAT, v: 1, exportedAt: new Date().toISOString(), device: await getSelf(), db };
 }
 
-export async function sealBackup(password: string | null): Promise<unknown> {
-  const backup = await buildBackup();
-  if (!password) return backup;
-  return { envelope: await seal(backup, password, "backup"), meta: { from: backup.device.deviceId, fromName: backup.device.name, to: null, createdAt: backup.exportedAt, content: "backup" } };
+/**
+ * Texto de una copia completa, en el MISMO formato que Ajustes › Copias de
+ * seguridad (v2 con indicador de cifrado explícito). Antes esta pantalla
+ * generaba un formato propio.
+ */
+export async function sealBackup(password: string | null, includeFiles = true): Promise<string> {
+  const { buildBackupFile, serializeBackup } = await import("@/services/backup/backup");
+  return serializeBackup(await buildBackupFile({ includeFiles, device: await getSelf() }), password);
 }
 
 export function describeBackup(b: BackupFile) {

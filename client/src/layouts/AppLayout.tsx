@@ -29,6 +29,7 @@ import { useSyncCenter } from "@/store/syncCenter";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { SaveIndicator } from "@/components/backup/SaveIndicator";
 import { StorageAlerts } from "@/components/backup/StorageAlerts";
+import { RestoreWizard } from "@/components/backup/RestoreWizard";
 import { loadPrefs, onPrefsChange } from "@/services/gcal/prefs";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -98,6 +99,7 @@ export function AppLayout() {
         <main className="gt-safe-x [--gt-pad-x:1rem] sm:[--gt-pad-x:1.5rem] lg:[--gt-pad-x:2rem] flex-1 py-5 sm:py-6 pb-[calc(env(safe-area-inset-bottom)+84px)] md:pb-6">
           <StorageAlerts />
           <Outlet />
+          <RestoreWizard />
         </main>
       </div>
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { ArchiveRestore, CheckCircle2, DatabaseBackup, Download, HardDrive, History, Lock, ShieldCheck, Trash2, Upload, XCircle } from "lucide-react";
+import { ArchiveRestore, CheckCircle2, DatabaseBackup, Download, HardDrive, History, Info, Lock, ShieldCheck, Smartphone, Trash2, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -9,7 +9,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { useSaveStatus } from "./SaveIndicator";
 import { downloadBackup, downloadText } from "./download";
 import {
-  BackupError,
+  SUPPORTED_FORMATS_HELP,
   attachmentsInUse,
   backupFileName,
   createLocalBackup,
@@ -18,17 +18,15 @@ import {
   localBackupAsFile,
   markDownloaded,
   onBackupChange,
-  parseBackupText,
   restoreLocalBackup,
-  restoreParsed,
   saveBackupPrefs,
   serializeBackup,
   type BackupPrefs,
-  type ParsedBackup,
 } from "@/services/backup/backup";
 import { deleteRestorePoint, listRestorePoints, requestPersistence, storageEstimate, storageKind, type RestorePoint } from "@/services/storage";
 import { cleanupOrphanFiles } from "@/services/notes/files";
 import { cn } from "@/lib/utils";
+import { useRestoreWizard } from "@/store/restoreWizard";
 
 const fmtBytes = (n: number | null | undefined) => {
   if (n == null) return "—";
@@ -48,7 +46,8 @@ export function BackupCard() {
   const [est, setEst] = useState<{ persisted: boolean | null; usage: number | null; quota: number | null }>({ persisted: null, usage: null, quota: null });
   const [busy, setBusy] = useState<string | null>(null);
   const [dl, setDl] = useState({ open: false, includeFiles: true, encrypt: false, password: "", confirm: "" });
-  const [restore, setRestore] = useState<{ text: string; name: string; needsPassword: boolean; password: string; parsed: ParsedBackup | null; error: string | null; mode: "replace" | "merge"; ack: boolean } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const openWizard = useRestoreWizard((st) => st.openWizard);
 
   const refresh = useCallback(async () => {
     setStatus(loadBackupStatus());
@@ -81,29 +80,13 @@ export function BackupCard() {
     setPrefs(saveBackupPrefs(patch));
   }
 
-  async function openRestoreFile(file: File | undefined) {
-    if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      toast.error("El archivo es demasiado grande para ser una copia de esta app.");
-      return;
-    }
-    const text = await file.text();
-    const base = { text, name: file.name, needsPassword: false, password: "", parsed: null, error: null, mode: "replace" as const, ack: false };
-    try {
-      setRestore({ ...base, parsed: await parseBackupText(text) });
-    } catch (e) {
-      if (e instanceof BackupError && e.code === "password") setRestore({ ...base, needsPassword: true });
-      else setRestore({ ...base, error: e instanceof Error ? e.message : String(e) });
-    }
-  }
-
   const kind = storageKind();
 
   return (
     <Card className="lg:col-span-2" id="copias">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <DatabaseBackup size={16} /> Copias de seguridad y recuperación
+          <DatabaseBackup size={16} /> Copias de seguridad y restauración
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -189,22 +172,30 @@ export function BackupCard() {
           <Button variant="outline" onClick={() => setDl({ ...dl, open: true, password: "", confirm: "" })}>
             <Download size={15} /> Descargar copia de seguridad
           </Button>
-          <label className="gt-control inline-flex items-center justify-center gap-2 font-medium h-9 px-4 text-sm border border-theme border-border bg-transparent hover:bg-muted cursor-pointer">
-            <Upload size={15} /> Restaurar copia de seguridad
-            <input
-              type="file"
-              accept="application/json,.json"
-              className="sr-only"
-              onChange={(e) => {
-                void openRestoreFile(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-          </label>
+          <Button variant="outline" onClick={() => openWizard({ origin: "settings" })}>
+            <ArchiveRestore size={15} /> Restaurar copia de seguridad
+          </Button>
+          <Button variant="outline" onClick={() => openWizard({ origin: "other-device" })}>
+            <Smartphone size={15} /> Importar copia desde otro dispositivo
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setHistoryOpen(true);
+              setTimeout(() => document.getElementById("historial-copias")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+            }}
+          >
+            <History size={15} /> Ver historial de copias
+          </Button>
         </div>
 
         {/* Historial */}
-        <details className="rounded-lg border border-border" open={points.length > 0 && points.length <= 3}>
+        <details
+          id="historial-copias"
+          className="rounded-lg border border-border"
+          open={historyOpen}
+          onToggle={(e) => setHistoryOpen((e.target as HTMLDetailsElement).open)}
+        >
           <summary className="cursor-pointer p-3 text-sm font-medium flex items-center gap-2">
             <History size={15} /> Copias guardadas en este navegador ({points.length})
           </summary>
@@ -269,6 +260,28 @@ export function BackupCard() {
                 </div>
               </div>
             ))}
+          </div>
+        </details>
+
+        {/* Información */}
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer p-3 text-sm font-medium flex items-center gap-2">
+            <Info size={15} /> Información sobre las copias
+          </summary>
+          <div className="px-3 pb-3 text-sm space-y-2">
+            <p>
+              <strong>Sin cifrar</strong> (opción por defecto): el archivo se restaura en cualquier dispositivo <strong>sin contraseña</strong>. Cualquiera que lo tenga
+              puede leer tus datos, así que guárdalo en un lugar seguro.
+            </p>
+            <p>
+              <strong>Cifrada</strong>: al descargarla marcas «Cifrar con contraseña». El archivo indica que está cifrado (AES-256-GCM) y al restaurarlo se pide esa
+              contraseña. La contraseña no se guarda en ningún sitio: si la olvidas, la copia no se puede abrir.
+            </p>
+            <p>
+              <strong>Cómo restaurar</strong>: pulsa «Restaurar copia de seguridad» (o «Importar copia desde otro dispositivo») y elige el archivo. La app detecta sola
+              si está cifrada, te muestra qué contiene y, antes de cambiar nada, guarda una copia de tus datos actuales.
+            </p>
+            <p className="text-subtle">{SUPPORTED_FORMATS_HELP}</p>
           </div>
         </details>
 
@@ -352,6 +365,11 @@ export function BackupCard() {
             <input type="checkbox" checked={dl.encrypt} onChange={(e) => setDl({ ...dl, encrypt: e.target.checked })} />
             Cifrar con contraseña (AES-256)
           </label>
+          {!dl.encrypt && (
+            <p className="text-xs text-subtle">
+              Sin cifrar: se restaura en cualquier dispositivo <strong>sin contraseña</strong>, pero cualquiera con el archivo puede leer tus datos. Guárdalo en un lugar seguro.
+            </p>
+          )}
           {dl.encrypt && (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Contraseña">
@@ -371,115 +389,6 @@ export function BackupCard() {
         </form>
       </Dialog>
 
-      {/* Diálogo de restauración */}
-      <Dialog open={!!restore} onClose={() => setRestore(null)} title="Restaurar copia de seguridad" size="md">
-        {restore && (
-          <div className="space-y-4">
-            <p className="text-sm text-subtle break-all">Archivo: {restore.name}</p>
-            {restore.error && (
-              <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm">
-                {restore.error}
-              </div>
-            )}
-            {restore.needsPassword && !restore.parsed && (
-              <form
-                className="flex gap-2 items-end"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  try {
-                    setRestore({ ...restore, parsed: await parseBackupText(restore.text, restore.password), error: null });
-                  } catch (err) {
-                    setRestore({ ...restore, error: err instanceof Error ? err.message : String(err) });
-                  }
-                }}
-              >
-                <Field label="Contraseña de la copia">
-                  <Input type="password" autoFocus value={restore.password} onChange={(e) => setRestore({ ...restore, password: e.target.value })} />
-                </Field>
-                <Button type="submit">Abrir</Button>
-              </form>
-            )}
-            {restore.parsed && (
-              <>
-                <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
-                  <p>
-                    <strong>Fecha de la copia:</strong> {fmtDate(restore.parsed.preview.exportedAt)}
-                  </p>
-                  <p>
-                    <strong>Esquema:</strong> v{restore.parsed.preview.schemaVersion}
-                    {restore.parsed.preview.device && ` · ${restore.parsed.preview.device}`}{" "}
-                    {restore.parsed.preview.checksumVerified && <Badge color="#16a34a">Integridad verificada</Badge>}
-                  </p>
-                  <ul className="grid grid-cols-2 gap-x-4 text-xs pt-1">
-                    {Object.entries(restore.parsed.preview.counts).map(([k, v]) => (
-                      <li key={k}>
-                        {k}: <strong>{v}</strong>
-                      </li>
-                    ))}
-                    <li>
-                      Adjuntos: <strong>{restore.parsed.preview.files}</strong>
-                    </li>
-                  </ul>
-                  {restore.parsed.preview.newerSchema && <p className="text-warning text-xs">La copia es de una versión más nueva de la app: se conservarán sus campos, pero actualiza la app si ves algo raro.</p>}
-                  {restore.parsed.preview.missingFiles > 0 && <p className="text-warning text-xs">Faltaban {restore.parsed.preview.missingFiles} adjuntos al crear la copia.</p>}
-                </div>
-                <div className="grid gap-2" role="radiogroup" aria-label="Modo de restauración">
-                  {(
-                    [
-                      ["replace", "Reemplazar todos los datos", "Los datos actuales se sustituyen por los de la copia."],
-                      ["merge", "Combinar sin borrar nada", "Se añade lo que falta; si un registro está en ambos, se conserva la versión más reciente."],
-                    ] as const
-                  ).map(([k, t, d]) => (
-                    <button
-                      key={k}
-                      type="button"
-                      role="radio"
-                      aria-checked={restore.mode === k}
-                      onClick={() => setRestore({ ...restore, mode: k, ack: false })}
-                      className={cn("text-left rounded-lg border p-3", restore.mode === k ? "border-primary ring-1 ring-primary" : "border-border hover:bg-muted")}
-                    >
-                      <span className="text-sm font-medium block">{t}</span>
-                      <span className="text-xs text-subtle">{d}</span>
-                    </button>
-                  ))}
-                </div>
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-1" checked={restore.ack} onChange={(e) => setRestore({ ...restore, ack: e.target.checked })} />
-                  <span>
-                    {restore.mode === "replace"
-                      ? "Entiendo que mis datos actuales se reemplazarán. Antes se guardará automáticamente una copia verificada de ellos."
-                      : "Entiendo que se añadirán y actualizarán registros. Antes se guardará automáticamente una copia verificada de mis datos."}
-                  </span>
-                </label>
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => setRestore(null)}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    variant={restore.mode === "replace" ? "danger" : "primary"}
-                    disabled={!restore.ack}
-                    loading={busy === "restore"}
-                    onClick={() =>
-                      run("restore", async () => {
-                        const r = await restoreParsed(restore.parsed!, restore.mode);
-                        toast.success(
-                          r.mode === "replace"
-                            ? `Datos restaurados${r.filesRestored ? ` (${r.filesRestored} adjuntos)` : ""}`
-                            : `Copia combinada: ${r.added} añadidos, ${r.updated} actualizados`
-                        );
-                        if (r.filesFailed) toast.error(`${r.filesFailed} adjuntos no se pudieron recuperar`);
-                        setRestore(null);
-                      })
-                    }
-                  >
-                    <ArchiveRestore size={15} /> Restaurar
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </Dialog>
     </Card>
   );
 }

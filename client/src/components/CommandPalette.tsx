@@ -11,6 +11,7 @@ import {
   CheckSquare,
   CornerDownLeft,
   Download,
+  Upload,
   Folder,
   LayoutDashboard,
   Moon,
@@ -36,6 +37,8 @@ import { api } from "@/services/api";
 import { requestNotificationPermission, notify } from "@/lib/notifications";
 import { promptInstall } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
+import { downloadBackup } from "@/components/backup/download";
+import { useRestoreWizard } from "@/store/restoreWizard";
 
 interface Command {
   id: string;
@@ -178,21 +181,30 @@ export function CommandPalette() {
       {
         id: "backup",
         group: "Acciones",
-        label: "Exportar copia de seguridad (JSON)",
+        label: "Descargar copia de seguridad (sin cifrar)",
         icon: Download,
-        keywords: "backup guardar datos exportar",
+        keywords: "backup guardar datos exportar copia",
         run: async () => {
-          const blob = await api.get<unknown>("/backup/export");
-          const url = URL.createObjectURL(
-            new Blob([JSON.stringify(blob, null, 2)], { type: "application/json" })
-          );
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `backup-${Date.now()}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-          toast.success("Copia exportada");
+          // Mismo formato que Configuración: se restaura sin contraseña en cualquier dispositivo.
+          const size = await downloadBackup({ includeFiles: true });
+          toast.success(`Copia descargada (${Math.round(size / 1024)} KB). Guárdala en un lugar seguro.`);
         },
+      },
+      {
+        id: "restore",
+        group: "Acciones",
+        label: "Restaurar copia de seguridad",
+        icon: Upload,
+        keywords: "backup recuperar importar otro dispositivo restaurar",
+        run: () => useRestoreWizard.getState().openWizard({ origin: "settings" }),
+      },
+      {
+        id: "nav-backups",
+        group: "Ir a",
+        label: "Copias de seguridad y restauración",
+        icon: SettingsIcon,
+        keywords: "backup recuperar restaurar copia",
+        run: go("/configuracion#copias"),
       },
       {
         id: "notif",

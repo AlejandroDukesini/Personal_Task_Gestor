@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   ArchiveRestore,
@@ -28,24 +29,23 @@ import { Badge } from "@/components/ui/Badge";
 import { PlanReview } from "@/components/syncui/PlanReview";
 import { useSyncCenter } from "@/store/syncCenter";
 import { readPickedFile, saveFile, stampForFile } from "@/lib/share";
+import { inspectBackupText, markDownloaded } from "@/services/backup/backup";
+import { useRestoreWizard } from "@/store/restoreWizard";
 import { storageEstimate, storageKind, listRestorePoints, type RestorePoint } from "@/services/storage";
 import {
   commitPlan,
   createOffer,
-  describeBackup,
   getSelf,
   openFile,
   pendingFor,
   planIncoming,
   receiveAnswer,
   removeDevice,
-  restoreBackup,
   rollbackTo,
   sealBackup,
   sealFile,
   setDeviceName,
   syncLog,
-  type BackupFile,
   type PairedDevice,
   type SyncLogEntry,
 } from "@/services/manualsync/session";
@@ -348,6 +348,8 @@ function FileSync({
   const [password2, setPassword2] = useState("");
   const [importPw, setImportPw] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingPkg, setPendingPkg] = useState<{ file: File; text: string } | null>(null);
+  const openWizard = useRestoreWizard((st) => st.openWizard);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function exportPackage() {
@@ -368,25 +370,48 @@ function FileSync({
     }
   }
 
+  /**
+   * Primero se DETECTA qué es el archivo (sin contraseña). Una copia de
+   * seguridad abre directamente el asistente de restauración; un paquete de
+   * sincronización cifrado pide su contraseña y conserva el archivo elegido.
+   * Antes el botón exigía contraseña siempre y, si era una copia, solo decía
+   * «restáurala» sin llevar a ningún sitio.
+   */
   async function importPicked(file: File) {
     setBusy(true);
     try {
       const text = await readPickedFile(file);
-      const { kind, payload } = await openFile(text, importPw);
-      if (kind === "offer") {
-        const plan = await planIncoming(payload);
-        onPlan(plan, importPw);
-      } else if (kind === "answer") {
-        const summary = await receiveAnswer(payload, "archivo");
-        onResult({ summary, warnings: [], peer: (payload as { from: DeviceRef }).from.name });
-        onDone();
-      } else {
-        toast("Es una copia de seguridad: restáurala en «Copias de seguridad».");
+      const kind = inspectBackupText(text);
+      if (kind.status === "backup") {
+        openWizard({ file, origin: "detected" });
+        return;
       }
+      if (kind.status !== "sync-package") {
+        toast.error(kind.reason, { duration: 8000 });
+        return;
+      }
+      if (kind.encrypted && !importPw) {
+        setPendingPkg({ file, text });
+        return;
+      }
+      await applyPackage(text, importPw);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e), { duration: 8000 });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function applyPackage(text: string, pw: string) {
+    const { kind, payload } = await openFile(text, pw);
+    setPendingPkg(null);
+    if (kind === "offer") {
+      const plan = await planIncoming(payload);
+      onPlan(plan, pw);
+    } else if (kind === "answer") {
+      const summary = await receiveAnswer(payload, "archivo");
+      onResult({ summary, warnings: [], peer: (payload as { from: DeviceRef }).from.name });
+      onDone();
     }
   }
 
@@ -427,16 +452,44 @@ function FileSync({
         </div>
         <div className="space-y-2 pt-4 border-t border-border">
           <p className="text-sm font-medium">2. Importar un paquete o una respuesta</p>
-          <Field label="Contraseña del archivo">
+          <Field label="Contraseña del paquete" hint="La que se usó al exportarlo. Si eliges una copia de seguridad, se abrirá su propio asistente.">
             <Input type="password" autoComplete="current-password" value={importPw} onChange={(e) => setImportPw(e.target.value)} />
           </Field>
-          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={!importPw || busy} className="w-full sm:w-auto h-11">
+          {pendingPkg && (
+            <div role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm space-y-2">
+              <p>
+                <strong>Paquete cifrado detectado</strong> («{pendingPkg.file.name}»). Escribe arriba su contraseña y pulsa «Abrir paquete».
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={!importPw || busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await applyPackage(pendingPkg.text, importPw);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : String(e), { duration: 8000 });
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Abrir paquete
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setPendingPkg(null)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={busy} className="w-full sm:w-auto h-11">
             <Download size={15} /> Elegir archivo…
           </Button>
           <input
             ref={fileRef}
             type="file"
-            accept=".gtsync,.json,application/json"
+            accept=".gtsync,.gtbackup,.json,application/json"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -665,71 +718,51 @@ function Pending({ devices }: { devices: PairedDevice[] }) {
 
 function Backups({ points, onChanged }: { points: RestorePoint[]; onChanged: () => void }) {
   const [pw, setPw] = useState("");
-  const [plain, setPlain] = useState(false);
-  const [restorePw, setRestorePw] = useState("");
-  const [pendingRestore, setPendingRestore] = useState<BackupFile | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [plain, setPlain] = useState(true);
+  const openWizard = useRestoreWizard((st) => st.openWizard);
 
   async function exportNow() {
-    if (!plain && pw.length < 8) return toast.error("Contraseña de al menos 8 caracteres, o marca «sin cifrar»");
-    const data = await sealBackup(plain ? null : pw);
-    await saveFile(`copia-productividad-${stampForFile()}.${plain ? "json" : "gtbackup"}`, JSON.stringify(data));
-    toast.success("Copia exportada");
+    if (!plain && pw.length < 8) return toast.error("Contraseña de al menos 8 caracteres, o deja marcada «sin cifrar»");
+    const text = await sealBackup(plain ? null : pw);
+    await saveFile(`copia-productividad-${stampForFile()}${plain ? "" : ".cifrada"}.json`, text);
+    markDownloaded(text.length);
+    toast.success(plain ? "Copia exportada sin cifrar: se restaura sin contraseña" : "Copia cifrada exportada: necesitarás la contraseña para restaurarla");
   }
-
-  async function pick(file: File) {
-    try {
-      const { kind, payload } = await openFile(await readPickedFile(file), restorePw);
-      if (kind !== "backup") return toast.error("Ese archivo es de sincronización, no una copia de seguridad.");
-      setPendingRestore(payload as BackupFile);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  const info = pendingRestore ? describeBackup(pendingRestore) : null;
 
   return (
-    <Card className="lg:col-span-2">
+    <Card className="lg:col-span-2" id="copias-sync">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ArchiveRestore size={16} /> Copias de seguridad
         </CardTitle>
-        <CardDescription>El navegador podría borrar datos en casos extremos: guarda una copia fuera del dispositivo de vez en cuando.</CardDescription>
+        <CardDescription>
+          También en <Link to="/configuracion#copias" className="underline">Configuración › Copias de seguridad y restauración</Link>, con el historial y más opciones.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-2">
           <p className="text-sm font-medium">Exportar copia completa</p>
-          <Field label="Contraseña" hint="Contiene tus datos financieros: se recomienda cifrarla.">
-            <Input type="password" autoComplete="new-password" value={pw} disabled={plain} onChange={(e) => setPw(e.target.value)} />
-          </Field>
           <label className="flex items-center gap-2 text-xs text-subtle min-h-[36px]">
             <input type="checkbox" className="accent-primary h-4 w-4" checked={plain} onChange={(e) => setPlain(e.target.checked)} />
-            Exportar sin cifrar (cualquiera con el archivo podrá leerlo)
+            Sin cifrar (se restaura sin contraseña; cualquiera con el archivo podrá leerlo)
           </label>
+          {!plain && (
+            <Field label="Contraseña" hint="Mínimo 8 caracteres. Sin ella no se podrá restaurar.">
+              <Input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+            </Field>
+          )}
           <Button onClick={exportNow} className="w-full h-11">
             <Download size={15} /> Exportar copia
           </Button>
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">Restaurar una copia</p>
-          <Field label="Contraseña de la copia">
-            <Input type="password" autoComplete="current-password" value={restorePw} onChange={(e) => setRestorePw(e.target.value)} />
-          </Field>
-          <Button variant="outline" className="w-full h-11" onClick={() => fileRef.current?.click()}>
-            <Upload size={15} /> Elegir copia…
+          <p className="text-xs text-subtle">
+            Elige el archivo y la app detecta sola si está cifrado: solo entonces te pedirá la contraseña. Verás qué contiene antes de restaurar.
+          </p>
+          <Button variant="outline" className="w-full h-11" onClick={() => openWizard({ origin: "settings" })}>
+            <Upload size={15} /> Restaurar copia de seguridad…
           </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".gtbackup,.json,application/json"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void pick(f);
-            }}
-          />
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">Puntos de restauración automáticos</p>
@@ -763,40 +796,6 @@ function Backups({ points, onChanged }: { points: RestorePoint[]; onChanged: () 
         </div>
       </CardContent>
 
-      <Dialog open={!!pendingRestore} onClose={() => setPendingRestore(null)} title="¿Restaurar esta copia?" description="Reemplazará TODOS los datos actuales de este dispositivo.">
-        {info && (
-          <div className="space-y-3 text-sm">
-            <p>
-              Copia de <strong>{info.device}</strong> del {when(info.exportedAt)}.
-            </p>
-            <ul className="grid grid-cols-2 gap-1 text-xs">
-              {Object.entries(info.counts).map(([k, v]) => (
-                <li key={k}>
-                  {v} {k}
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-subtle">Antes se guarda un punto de restauración con los datos actuales, así que puedes deshacerlo. Tu PIN y tu tema se conservan.</p>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 h-11" onClick={() => setPendingRestore(null)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1 h-11"
-                onClick={async () => {
-                  await restoreBackup(pendingRestore!);
-                  setPendingRestore(null);
-                  toast.success("Copia restaurada");
-                  onChanged();
-                }}
-              >
-                Restaurar
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
     </Card>
   );
 }

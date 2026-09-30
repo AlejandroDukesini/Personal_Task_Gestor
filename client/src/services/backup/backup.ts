@@ -35,7 +35,7 @@ import {
 import { FINANCE_ROW_SCHEMAS } from "@/services/finance/schemas";
 import { NOTE_ROW_SCHEMAS } from "@/services/notes/schemas";
 import { stripDangerousKeys } from "@/services/routeKit";
-import { fromB64, isEnvelope, open, seal, toB64 } from "@/services/manualsync/crypto";
+import { ENVELOPE_FORMAT, fromB64, isEnvelope, open, seal, toB64 } from "@/services/manualsync/crypto";
 import { getFile, putFile, sha256Hex } from "@/services/notes/files";
 import { canonical, hashString } from "@/services/manualsync/keyspace";
 
@@ -234,6 +234,8 @@ export function __resetPreActionForTests(): void {
 export interface BackupFileV2 {
   format: typeof BACKUP_FORMAT;
   v: 2;
+  /** Indicador explícito: este archivo NO está cifrado (se lee sin contraseña). */
+  encrypted: false;
   schemaVersion: number;
   appVersion: string;
   exportedAt: string;
@@ -279,6 +281,7 @@ export async function buildBackupFile(opts: { includeFiles?: boolean; device?: {
   const file: BackupFileV2 = {
     format: BACKUP_FORMAT,
     v: 2,
+    encrypted: false,
     schemaVersion: db.version ?? DB_VERSION,
     appVersion: appVersion(),
     exportedAt: new Date().toISOString(),
@@ -300,14 +303,99 @@ export async function buildBackupFile(opts: { includeFiles?: boolean; device?: {
   return file;
 }
 
-/** Texto del archivo, cifrado con AES-256-GCM si se da contraseña. */
+export const SEALED_BACKUP_FORMAT = "gestion-tareas/backup-sealed";
+
+/**
+ * Texto del archivo. Sin contraseña: JSON legible con `encrypted: false`.
+ * Con contraseña: envoltorio con `encrypted: true` y los parámetros del
+ * cifrado (AES-256-GCM, PBKDF2-SHA256); el contenido va cifrado y la
+ * contraseña nunca se guarda.
+ */
 export async function serializeBackup(file: BackupFileV2, password?: string | null): Promise<string> {
   if (!password) return JSON.stringify(file);
   const envelope = await seal(file, password, "backup");
   return JSON.stringify({
+    format: SEALED_BACKUP_FORMAT,
+    v: 2,
+    encrypted: true,
+    cipher: { alg: "AES-256-GCM", kdf: "PBKDF2-SHA256", iterations: envelope.iterations },
+    createdAt: file.exportedAt,
     envelope,
+    // Compatibilidad con versiones anteriores de la app (Sincronización › Importar).
     meta: { from: file.device?.deviceId ?? "", fromName: file.device?.name ?? "", to: null, createdAt: file.exportedAt, content: "backup" },
   });
+}
+
+/* ------------------------------------------------------------- detección */
+
+export const SUPPORTED_FORMATS_HELP =
+  "Se admiten las copias de seguridad de esta app (.json o .gtbackup), cifradas o sin cifrar, incluidas las de versiones anteriores y la exportación JSON de Ajustes.";
+
+export type BackupInspection =
+  | { status: "backup"; encrypted: false; format: "v2" | "v1" | "export" | "raw"; formatLabel: string; createdAt: string | null; device: string | null }
+  | { status: "backup"; encrypted: true; format: "sealed"; formatLabel: string; createdAt: string | null; device: string | null; cipher: string }
+  | { status: "sync-package"; encrypted: boolean; content: "offer" | "answer" }
+  | { status: "invalid"; reason: string }
+  | { status: "uncertain"; reason: string };
+
+const LOOKS_CIPHERED = ["ciphertext", "iv", "salt", "nonce", "tag"];
+
+/**
+ * Detecta qué es un archivo SIN contraseña y sin aplicar nada. El cifrado se
+ * determina por la estructura (el envoltorio cifrado de la app), nunca porque
+ * algo no se pueda leer: un JSON roto es un archivo dañado, no uno cifrado.
+ */
+export function inspectBackupText(text: string): BackupInspection {
+  let x: any;
+  try {
+    x = JSON.parse(text);
+  } catch {
+    return { status: "invalid", reason: "El archivo no se puede leer: está incompleto o dañado, o no es una copia de esta app." };
+  }
+  if (!x || typeof x !== "object" || Array.isArray(x)) return { status: "invalid", reason: "El archivo no es una copia de seguridad de esta app." };
+
+  // Envoltorio cifrado: el nuevo (con indicador explícito) y el anterior ({ envelope, meta } o el envoltorio suelto).
+  const env = x.envelope ?? (x.format === ENVELOPE_FORMAT ? x : null);
+  if (env) {
+    if (!isEnvelope(env)) return { status: "invalid", reason: "La parte cifrada del archivo está dañada o incompleta." };
+    if (x.encrypted === false) return { status: "invalid", reason: "El archivo es contradictorio (dice no estar cifrado, pero lo está): podría estar manipulado." };
+    if (env.content === "offer" || env.content === "answer") return { status: "sync-package", encrypted: true, content: env.content };
+    if (env.content !== "backup") return { status: "invalid", reason: "El archivo cifrado no contiene una copia de seguridad." };
+    return {
+      status: "backup",
+      encrypted: true,
+      format: "sealed",
+      formatLabel: x.format === SEALED_BACKUP_FORMAT ? `Copia cifrada v${x.v ?? 2}` : "Copia cifrada (versión anterior de la app)",
+      createdAt: x.createdAt ?? x.meta?.createdAt ?? null,
+      device: x.meta?.fromName || null,
+      cipher: "AES-256-GCM",
+    };
+  }
+
+  if (x.encrypted === true) return { status: "invalid", reason: "El archivo dice estar cifrado pero no contiene datos cifrados válidos: podría estar dañado." };
+  if (x.format === BACKUP_FORMAT && x.v === 2) {
+    return { status: "backup", encrypted: false, format: "v2", formatLabel: "Copia v2 sin cifrar", createdAt: x.exportedAt ?? null, device: x.device?.name ?? null };
+  }
+  if (x.format === BACKUP_FORMAT && x.v === 1) {
+    return { status: "backup", encrypted: false, format: "v1", formatLabel: "Copia v1 sin cifrar (versión anterior de la app)", createdAt: x.exportedAt ?? null, device: x.device?.name ?? null };
+  }
+  if (x.format === BACKUP_FORMAT) return { status: "invalid", reason: `Es una copia de un formato más nuevo (v${x.v}) que esta versión no conoce: actualiza la app.` };
+  if (x.kind === "offer" || x.kind === "answer") return { status: "sync-package", encrypted: false, content: x.kind };
+  if (x.data && typeof x.data === "object" && "exportedAt" in x) {
+    return { status: "backup", encrypted: false, format: "export", formatLabel: "Exportación JSON de Ajustes (versión anterior)", createdAt: x.exportedAt ?? null, device: null };
+  }
+  if (Array.isArray(x.tasks) && x.settings && typeof x.settings === "object") {
+    return { status: "backup", encrypted: false, format: "raw", formatLabel: "Datos de la app sin envoltorio", createdAt: null, device: null };
+  }
+  // Algo con aspecto de cifrado que la app no reconoce: no se adivina ni se intenta descifrar.
+  if (LOOKS_CIPHERED.some((k) => k in x)) {
+    return {
+      status: "uncertain",
+      reason:
+        "Este archivo parece cifrado, pero no con el formato de esta app, así que no se puede abrir con seguridad. Si lo creaste con esta app, vuelve a descargar la copia en el dispositivo original.",
+    };
+  }
+  return { status: "invalid", reason: "El archivo no es una copia de seguridad de esta app." };
 }
 
 export function backupFileName(date = new Date(), encrypted = false): string {
@@ -380,19 +468,19 @@ function fromLegacyExport(x: any): Record<string, unknown> {
  * con la explicación; los datos actuales no se tocan.
  */
 export async function parseBackupText(text: string, password?: string | null): Promise<ParsedBackup> {
-  let parsed: any;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new BackupError("invalid", "El archivo no es una copia válida: no es JSON (¿está incompleto o dañado?).");
+  const kind = inspectBackupText(text);
+  if (kind.status === "invalid" || kind.status === "uncertain") throw new BackupError("invalid", `${kind.reason} ${SUPPORTED_FORMATS_HELP}`);
+  if (kind.status === "sync-package") {
+    throw new BackupError("invalid", "Es un paquete de sincronización, no una copia de seguridad: ábrelo en Sincronización › Sincronizar con archivo.");
   }
-  const env = parsed?.envelope ?? parsed;
-  if (isEnvelope(env)) {
-    if (!password) throw new BackupError("password", "Esta copia está cifrada: introduce su contraseña.");
+  let parsed: any = JSON.parse(text);
+  if (kind.encrypted) {
+    // Solo las copias cifradas usan contraseña; nunca se intenta descifrar otra cosa.
+    if (!password) throw new BackupError("password", "Copia cifrada detectada. Introduce la contraseña utilizada al crearla.");
     try {
-      parsed = await open(env, password);
+      parsed = await open(parsed.envelope ?? parsed, password);
     } catch {
-      throw new BackupError("password", "Contraseña incorrecta o archivo alterado.");
+      throw new BackupError("password", "La contraseña no es correcta (o el archivo se alteró). Vuelve a intentarlo: tus datos no se han modificado.");
     }
   }
   parsed = stripDangerousKeys(parsed);
@@ -528,15 +616,27 @@ export interface RestoreResult {
  * que se guarde y comprobarlo; (4) adjuntos. Si algo falla tras aplicar, se
  * vuelve al estado anterior.
  */
-export async function restoreParsed(backup: ParsedBackup, mode: "replace" | "merge"): Promise<RestoreResult> {
+export type RestoreStep = "safety" | "files" | "apply" | "verify" | "done";
+
+export async function restoreParsed(
+  backup: ParsedBackup,
+  mode: "replace" | "merge",
+  onStep?: (step: RestoreStep) => void
+): Promise<RestoreResult> {
   const current = loadDb();
   let safetyBackup: RestorePoint;
+  onStep?.("safety");
   try {
     safetyBackup = await createRestorePoint(current, "Antes de restaurar una copia de seguridad", "pre-action");
   } catch (e) {
     recordOp("Restaurar copia de seguridad", false, "Cancelada: no se pudo crear la copia previa");
     throw new BackupError("storage", `No se restauró nada: no se pudo guardar antes una copia del estado actual (${e instanceof Error ? e.message : e}).`);
   }
+
+  // Los adjuntos primero: se guardan por su huella (no pisan nada) y así la
+  // base restaurada nunca apunta a archivos que aún no existen.
+  onStep?.("files");
+  const files = await restoreFiles(backup.files);
 
   let next: Db;
   let stats: Pick<RestoreResult, "added" | "updated" | "kept"> = {};
@@ -557,8 +657,10 @@ export async function restoreParsed(backup: ParsedBackup, mode: "replace" | "mer
   }
 
   try {
+    onStep?.("apply");
     replaceDb(next, "local");
     await flushStorage();
+    onStep?.("verify");
     if (getSaveStatus().state === "error") throw new Error(getSaveStatus().error ?? "no se pudo guardar");
     // Comparación canónica (orden de claves indiferente) de lo aplicado.
     if (hashString(canonical(next)) !== hashString(canonical({ ...loadDb(), version: next.version }))) {
@@ -572,7 +674,7 @@ export async function restoreParsed(backup: ParsedBackup, mode: "replace" | "mer
     throw new BackupError("storage", `La restauración falló y se deshizo: ${e instanceof Error ? e.message : e}`);
   }
 
-  const files = await restoreFiles(backup.files);
+  onStep?.("done");
   recordOp(
     "Restaurar copia de seguridad",
     true,
@@ -598,7 +700,7 @@ export async function localBackupAsFile(id: number): Promise<BackupFileV2> {
   if (db.settings) db.settings = { ...db.settings, pinHash: null, pinEnabled: false };
   const points = await listRestorePoints();
   const at = points.find((p) => p.id === id)?.at ?? new Date().toISOString();
-  return { format: BACKUP_FORMAT, v: 2, schemaVersion: db.version ?? DB_VERSION, appVersion: appVersion(), exportedAt: at, device: null, counts: countsOf(db), checksum: checksumOf(db), db };
+  return { format: BACKUP_FORMAT, v: 2, encrypted: false, schemaVersion: db.version ?? DB_VERSION, appVersion: appVersion(), exportedAt: at, device: null, counts: countsOf(db), checksum: checksumOf(db), db };
 }
 
 /* ----------------------------------------------------------- recordatorio */

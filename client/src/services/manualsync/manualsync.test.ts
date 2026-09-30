@@ -405,7 +405,7 @@ describe("cifrado y copias", () => {
     const d = await new Device("iPhone").init();
     d.use();
     await makeAccount({ name: "Antes de la copia", initialBalance: 100 });
-    const sealed = JSON.stringify(await sealBackup("pw"));
+    const sealed = await sealBackup("pw");
     expect(sealed).not.toContain("Antes de la copia");
     await makeAccount({ name: "Después de la copia" });
     const { kind, payload } = await openFile(sealed, "pw");

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import {
   Bell,
+  DatabaseBackup,
   Download,
   ImageUp,
   Lock,
@@ -19,6 +20,8 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { ThemePicker } from "@/components/ThemePicker";
 import { GoogleCalendarCard } from "@/components/integrations/GoogleCalendarCard";
 import { BackupCard } from "@/components/backup/BackupCard";
+import { SUPPORTED_FORMATS_HELP, inspectBackupText } from "@/services/backup/backup";
+import { useRestoreWizard } from "@/store/restoreWizard";
 import { Link } from "react-router-dom";
 import { useConfig } from "@/store/config";
 import { useT } from "@/lib/i18n";
@@ -43,9 +46,17 @@ const TIMEZONES = [
   "UTC",
 ];
 
+/** Desplazamiento suave a una sección (y hash en la URL para poder enlazarla). */
+const jump = (id: string) => (e: React.MouseEvent) => {
+  e.preventDefault();
+  history.replaceState(null, "", `#${id}`);
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
 export function SettingsPage() {
   const t = useT();
   const cfg = useConfig();
+  const openWizard = useRestoreWizard((st) => st.openWizard);
   const [pin, setPin] = useState("");
   const [installAvailable, setInstallAvailable] = useState(false);
   const [permission, setPermission] = useState(notificationPermission());
@@ -162,34 +173,24 @@ export function SettingsPage() {
     toast.success(t("toast.exported"));
   }
 
+  /**
+   * Cualquier copia (nueva o antigua, cifrada o no) se restaura con el mismo
+   * asistente guiado: detecta el cifrado, valida, muestra una vista previa y
+   * guarda antes una copia de los datos actuales. Antes aquí solo se aceptaba
+   * la exportación antigua y el resto se rechazaba con un mensaje confuso.
+   */
   async function importFile(file: File) {
-    // Un backup puede venir de fuera: se valida tamaño y forma antes de tocar
-    // el almacenamiento, y se confirma con el usuario antes de leerlo entero.
-    const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
-    if (file.size > MAX_IMPORT_BYTES) {
-      toast.error("El archivo supera el límite de 10 MB.");
+    const kind = inspectBackupText(await file.text().catch(() => ""));
+    if (kind.status === "backup") {
+      openWizard({ file, origin: "detected" });
       return;
     }
-    if (!confirm("¿Importar este archivo? Los datos existentes con el mismo ID se reemplazarán.")) return;
-
-    let data: unknown;
-    try {
-      data = JSON.parse(await file.text());
-    } catch {
-      toast.error("El archivo no es un JSON válido.");
-      return;
-    }
-    if (!data || typeof data !== "object" || !("data" in data)) {
-      toast.error("El archivo no tiene el formato de una copia de seguridad.");
-      return;
-    }
-
-    try {
-      await api.post("/backup/import", { data: (data as any).data, replace: false });
-      toast.success(t("toast.imported"));
-    } catch {
-      toast.error("No se pudo importar: el contenido del archivo no es válido.");
-    }
+    toast.error(
+      kind.status === "sync-package"
+        ? "Es un paquete de sincronización: ábrelo en Sincronización › Sincronizar con archivo cifrado."
+        : `${kind.reason} ${SUPPORTED_FORMATS_HELP}`,
+      { duration: 8000 }
+    );
   }
 
   const previewIsImage = logoText.trim() === "" && isImageLogo;
@@ -197,6 +198,19 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
+
+      {/* Accesos directos a las secciones más buscadas. */}
+      <nav aria-label="Secciones de configuración" className="mb-4 flex flex-wrap gap-2">
+        <a href="#copias" onClick={jump("copias")} className="gt-pill inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-fg">
+          <DatabaseBackup size={14} /> Copias de seguridad y restauración
+        </a>
+        <a href="#integraciones" onClick={jump("integraciones")} className="gt-pill inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-muted">
+          Integraciones
+        </a>
+        <a href="#sync" onClick={jump("sync")} className="gt-pill inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-muted">
+          Sincronización
+        </a>
+      </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Perfil y marca */}
@@ -507,7 +521,7 @@ export function SettingsPage() {
                 <Upload size={14} /> {t("settings.importJson")}
                 <input
                   type="file"
-                  accept=".json"
+                  accept=".json,.gtbackup,application/json"
                   className="hidden"
                   onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])}
                 />

@@ -17,6 +17,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { ThemePicker } from "@/components/ThemePicker";
+import { GoogleCalendarCard } from "@/components/integrations/GoogleCalendarCard";
+import { BackupCard } from "@/components/backup/BackupCard";
 import { Link } from "react-router-dom";
 import { useConfig } from "@/store/config";
 import { useT } from "@/lib/i18n";
@@ -52,8 +54,9 @@ export function SettingsPage() {
 
   // La paleta de comandos enlaza a /configuracion#sync: se desplaza al panel.
   useEffect(() => {
-    if (window.location.hash !== "#sync") return;
-    document.getElementById("sync")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = window.location.hash.slice(1);
+    if (target !== "sync" && target !== "integraciones") return;
+    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   async function enableNotifications() {
@@ -398,6 +401,12 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Copias de seguridad y recuperación */}
+        <BackupCard />
+
+        {/* Integraciones */}
+        <GoogleCalendarCard />
 
         {/* Idioma y formato */}
         <Card>

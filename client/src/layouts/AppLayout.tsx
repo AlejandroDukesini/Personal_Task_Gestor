@@ -27,6 +27,9 @@ import { useConfig } from "@/store/config";
 import { usePalette } from "@/store/palette";
 import { useSyncCenter } from "@/store/syncCenter";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { SaveIndicator } from "@/components/backup/SaveIndicator";
+import { StorageAlerts } from "@/components/backup/StorageAlerts";
+import { loadPrefs, onPrefsChange } from "@/services/gcal/prefs";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +67,25 @@ export function AppLayout() {
   const [more, setMore] = useState(false);
   const loc = useLocation();
   useEffect(() => setMore(false), [loc.pathname]);
+  // Google Calendar: sincroniza tras cada cambio si el usuario lo conectó.
+  // El módulo se carga solo entonces (no pesa en el arranque de quien no lo usa).
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let disposed = false;
+    const ensure = (connected: boolean) => {
+      if (!connected || stop) return;
+      import("@/services/gcal/service").then((m) => {
+        if (!disposed && !stop) stop = m.startAutoSync();
+      });
+    };
+    ensure(loadPrefs().connected);
+    const off = onPrefsChange((p) => ensure(p.connected));
+    return () => {
+      disposed = true;
+      off();
+      stop?.();
+    };
+  }, []);
 
   return (
     <div className="min-h-[100dvh] flex bg-bg text-text">
@@ -74,6 +96,7 @@ export function AppLayout() {
         <UpdateBanner />
         {/* En móvil se reserva el alto de la barra de pestañas + el indicador de inicio. */}
         <main className="gt-safe-x [--gt-pad-x:1rem] sm:[--gt-pad-x:1.5rem] lg:[--gt-pad-x:2rem] flex-1 py-5 sm:py-6 pb-[calc(env(safe-area-inset-bottom)+84px)] md:pb-6">
+          <StorageAlerts />
           <Outlet />
         </main>
       </div>
@@ -181,6 +204,7 @@ function Topbar() {
         </button>
 
         <div className="flex-1 hidden md:block" />
+        <SaveIndicator />
         <Link
           to="/sincronizacion"
           className="relative h-11 w-11 flex items-center justify-center rounded-md text-subtle hover:bg-muted"

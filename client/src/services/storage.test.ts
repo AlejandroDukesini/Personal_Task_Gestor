@@ -66,10 +66,12 @@ describe("almacenamiento en IndexedDB", () => {
 
   it("los puntos de restauración se limitan y el almacén clave-valor persiste", async () => {
     await bootDb();
-    for (let i = 0; i < 12; i++) await createRestorePoint({ version: DB_VERSION, i }, `p${i}`);
+    for (let i = 0; i < 16; i++) await createRestorePoint({ version: DB_VERSION, i }, `p${i}`);
     const points = await listRestorePoints();
-    expect(points.length).toBeLessThanOrEqual(8);
-    expect(points[0].reason).toBe("p11");
+    // Retención por defecto: 12 copias automáticas/previas (configurable).
+    expect(points.length).toBe(12);
+    expect(points[0].reason).toBe("p15");
+    expect(points.every((p) => p.verified)).toBe(true);
     await kvSet("sync:test", { a: 1 });
     await restart();
     expect(await kvGet("sync:test", null)).toEqual({ a: 1 });

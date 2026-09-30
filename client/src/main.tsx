@@ -5,7 +5,8 @@ import toast, { Toaster } from "react-hot-toast";
 import App from "./App";
 import { registerServiceWorker } from "./lib/pwa";
 import { bootDb } from "./services/localDb";
-import { requestPersistence } from "./services/storage";
+import { checkForExternalChanges, persistNow, requestPersistence } from "./services/storage";
+import { startAutoBackup } from "./services/backup/backup";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 // Se importa después de index.css a propósito: en empates de especificidad
@@ -20,12 +21,28 @@ const root = ReactDOM.createRoot(document.getElementById("root")!);
  * sobre una base a medio cargar.
  */
 async function start() {
+  let info: Awaited<ReturnType<typeof bootDb>>;
   try {
-    await bootDb();
+    info = await bootDb();
   } catch (e) {
     root.render(<BootError message={e instanceof Error ? e.message : String(e)} />);
     return;
   }
+  (window as unknown as { __gtStorageInfo?: unknown }).__gtStorageInfo = info;
+
+  // Última oportunidad al salir o pasar a segundo plano (móvil): el espejo en
+  // localStorage se escribe al momento. No es lo único: cada cambio ya se
+  // guardó al hacerlo.
+  window.addEventListener("pagehide", persistNow);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") persistNow();
+    // Al volver, por si otra pestaña guardó algo mientras esta estaba oculta.
+    else void checkForExternalChanges();
+  });
+  window.addEventListener("focus", () => void checkForExternalChanges());
+
+  // Copias automáticas verificadas mientras la app está abierta.
+  startAutoBackup();
   // Que el sistema no borre los datos por falta de espacio (sin bloquear el arranque).
   void requestPersistence();
 

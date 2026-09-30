@@ -8,6 +8,7 @@ import {
   Clock,
   Flame,
   ListTodo,
+  Plus,
   Target,
   TrendingUp,
 } from "lucide-react";
@@ -28,7 +29,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services/api";
 import type { Habit, Stats, Task, Event, Goal } from "@/types";
-import { priorityColor, priorityLabel, relativeDay } from "@/lib/utils";
+import { cn, priorityColor, priorityLabel, relativeDay } from "@/lib/utils";
+import { startOfToday } from "@/components/habits/HabitCounter";
 import { useConfig, hourInTimezone } from "@/store/config";
 import { useT, localeFor } from "@/lib/i18n";
 import { FinanceWidget } from "@/components/finance/FinanceWidget";
@@ -236,9 +238,25 @@ export function Dashboard() {
                   />
                   <span className="text-sm font-medium truncate">{h.name}</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-subtle">
-                  <Flame size={12} className="text-orange-500" />
-                  {h.stats.streak}d
+                <div className="flex items-center gap-2 text-xs text-subtle shrink-0">
+                  <span className={cn("tabular-nums", h.stats.today.done && "text-success font-medium")}>
+                    {h.stats.today.count}/{h.stats.today.target}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Flame size={12} className="text-orange-500" />
+                    {h.stats.streak}d
+                  </span>
+                  <button
+                    className="h-7 w-7 rounded-md border border-border flex items-center justify-center hover:bg-muted"
+                    aria-label={`Registrar una realización de ${h.name}`}
+                    title="Registrar 1"
+                    onClick={async () => {
+                      await api.post(`/habits/${h.id}/logs`, { date: startOfToday(), source: "dashboard" });
+                      habits.reload();
+                    }}
+                  >
+                    <Plus size={13} />
+                  </button>
                 </div>
               </div>
             ))}

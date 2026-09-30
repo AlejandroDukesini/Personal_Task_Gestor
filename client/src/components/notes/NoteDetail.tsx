@@ -11,7 +11,6 @@ import { api } from "@/services/api";
 import { loadDb, type NoteAttachment, type NoteRow } from "@/services/localDb";
 import { docToHtml, docToMarkdown, docToText, withCalculatedResults, type DocNode } from "@/services/notes/content";
 import { clearDraft, draftIsNewer, readDraft, writeDraft, type NoteDraft } from "@/services/notes/drafts";
-import { releaseFiles } from "@/services/notes/files";
 import { flushStorage } from "@/services/storage";
 import { errorMessage } from "@/components/finance/shared";
 import { cn } from "@/lib/utils";
@@ -38,11 +37,14 @@ const metaOf = (n: NoteRow): Meta => ({
   mathDecimals: n.mathDecimals,
 });
 
-/** Archivos que ya no usa ninguna nota: se borran del almacén local. */
-async function release(keys: string[]) {
-  if (!keys.length) return;
-  const inUse = new Set(loadDb().notes.flatMap((n) => n.attachments.map((a) => a.fileKey)));
-  await releaseFiles(keys, inUse).catch(() => undefined);
+/**
+ * Los binarios de adjuntos que ya no usa ninguna nota NO se borran al momento:
+ * las copias de seguridad (incluida la previa a este borrado) aún pueden
+ * necesitarlos para restaurar la nota completa. Se liberan a petición en
+ * Ajustes › Copias de seguridad y recuperación.
+ */
+async function release(_keys: string[]) {
+  /* intencionadamente vacío */
 }
 
 function download(name: string, content: string, type: string) {

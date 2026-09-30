@@ -170,6 +170,10 @@ const REFS: Partial<Record<EntryCollection, Ref[]>> = {
   subtasks: [{ field: "taskId", target: "tasks" }],
   habits: [{ field: "categoryId", target: "categories" }],
   habitLogs: [{ field: "habitId", target: "habits" }],
+  // Los vínculos con Google y las importaciones NO declaran referencias: un
+  // vínculo pendiente de borrar en Google sobrevive a su programación, y
+  // declararla resucitaría la programación borrada.
+  habitSchedules: [{ field: "habitId", target: "habits" }],
   events: [{ field: "categoryId", target: "categories" }],
   reminders: [
     { field: "taskId", target: "tasks" },
@@ -230,6 +234,8 @@ export function labelOf(e: { collection: string; row: Record<string, unknown> | 
   const v = r.title ?? r.name ?? r.concept ?? (e.collection === "settings" ? "Ajustes compartidos" : undefined);
   if (v) return String(v).slice(0, 80);
   if (e.collection === "habitLogs") return `Registro del ${String(r.date ?? "").slice(0, 10)}`;
+  if (e.collection === "habitSchedules") return `Horario ${String(r.startTime ?? "")} desde ${String(r.startDate ?? "")}`;
+  if (e.collection === "gcalLinks") return "Vínculo con Google Calendar";
   if (e.collection === "taskTags") return "Etiquetas de una tarea";
   return e.id;
 }
@@ -241,6 +247,9 @@ export const COLLECTION_LABEL: Record<string, string> = {
   subtasks: "Sub-paso",
   habits: "Hábito",
   habitLogs: "Registro de hábito",
+  habitSchedules: "Horario de hábito",
+  gcalLinks: "Vínculo con Google Calendar",
+  habitImports: "Evento importado",
   events: "Evento",
   reminders: "Recordatorio",
   goals: "Objetivo",

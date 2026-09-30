@@ -41,6 +41,8 @@ import { NOTE_ROW_SCHEMAS } from "./notes/schemas";
 import { goalProgress } from "./finance/calc";
 import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
 import { todayKey } from "./finance/dates";
+import { applyLogChange, deleteSchedule, habitRoutes, logChangeSchema, serializeHabit } from "./habits/routes";
+import { logTarget, logsByDay } from "./habits/progress";
 
 const dateOrNull = z
   .union([z.string(), z.null()])
@@ -286,49 +288,13 @@ const habitSchema = z.object({
   endDate: dateOrNull,
   categoryId: z.string().nullable().optional(),
   archived: z.boolean().optional(),
+  unit: z.string().max(24).nullable().optional(),
+  showInCalendar: z.boolean().optional(),
+  gcalSync: z.boolean().optional(),
 });
 
-/** Racha actual, mejor racha y cumplimiento de los últimos 30 días. */
-function addStats(db: Db, habit: HabitRow) {
-  const logs = db.habitLogs
-    .filter((l) => l.habitId === habit.id)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 60);
-
-  const today = startOfDay(new Date());
-  const set = new Set(logs.map((l) => startOfDay(new Date(l.date)).getTime()));
-
-  let streak = 0;
-  for (let i = 0; ; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    if (set.has(d.getTime())) streak++;
-    else break;
-  }
-
-  let best = 0;
-  let cur = 0;
-  let prev: number | null = null;
-  for (const t of [...set].sort((a, b) => a - b)) {
-    if (prev === null || t - prev === 86400000) cur++;
-    else cur = 1;
-    best = Math.max(best, cur);
-    prev = t;
-  }
-
-  const last30 = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (29 - i));
-    return { date: d.toISOString(), done: set.has(d.getTime()) };
-  });
-
-  return {
-    ...habit,
-    category: db.categories.find((c) => c.id === habit.categoryId) ?? null,
-    logs,
-    stats: { streak, best, successRate: last30.filter((d) => d.done).length / 30, last30 },
-  };
-}
+/** Hábito con estadísticas (racha, mejor racha, 30 días, hoy) y programaciones. */
+const addStats = serializeHabit;
 
 // ------------------------------------------------------------------- eventos
 
@@ -549,6 +515,7 @@ const routes: Route[] = [
   ["GET", "/health", () => ok({ ok: true, version: "1.1.0" })],
   ...financeRoutes,
   ...notesRoutes,
+  ...habitRoutes,
 
   // Categorías
   ["GET", "/categories", () => {
@@ -867,6 +834,9 @@ const routes: Route[] = [
           endDate: data.endDate ?? null,
           categoryId: data.categoryId ?? null,
           archived: data.archived ?? false,
+          unit: data.unit?.trim() || null,
+          showInCalendar: data.showInCalendar ?? true,
+          gcalSync: data.gcalSync ?? false,
           createdAt: ts,
           updatedAt: ts,
         };
@@ -880,15 +850,33 @@ const routes: Route[] = [
     return ok(
       mutate((db) => {
         const row = find(db.habits, params.id);
+        // Cambiar la meta solo afecta a hoy y a los días futuros: cada registro
+        // pasado conserva la meta con la que se registró.
+        if (data.dailyTarget !== undefined && data.dailyTarget !== row.dailyTarget) {
+          const today = startOfDay(new Date()).toISOString();
+          for (const l of db.habitLogs) {
+            if (l.habitId !== row.id) continue;
+            if (l.date === today) l.target = data.dailyTarget;
+            else if (l.target === undefined) l.target = logTarget(l, row);
+            else continue;
+            l.updatedAt = nowIso();
+          }
+        }
+        if (data.unit !== undefined) data.unit = data.unit?.trim() || null;
         assign(row, data as Partial<HabitRow>);
         row.updatedAt = nowIso();
         return addStats(db, row);
       })
     );
   }],
-  ["DELETE", "/habits/:id", ({ params }) => {
+  ["DELETE", "/habits/:id", ({ params, query }) => {
     mutate((db) => {
       find(db.habits, params.id);
+      // Sus programaciones caen con él. Los eventos de Google Calendar solo se
+      // tocan si el usuario lo pidió (?remote=future).
+      for (const s of db.habitSchedules.filter((s) => s.habitId === params.id)) {
+        deleteSchedule(db, s.id, query.get("remote") === "future" ? "future" : "keep");
+      }
       db.habits = db.habits.filter((h) => h.id !== params.id);
       for (const l of db.habitLogs.filter((l) => l.habitId === params.id)) {
         tombstone(db, "habitLogs", l.id);
@@ -948,37 +936,21 @@ const routes: Route[] = [
       cells,
     });
   }],
+  /**
+   * Registra realizaciones. Sin `count` ni `delta` suma una (un clic = una
+   * vez); `delta: -1` corrige un clic de más; `count` fija el total del día.
+   * Llegar a 0 borra el registro del día (el resto del historial no se toca).
+   */
   ["POST", "/habits/:id/logs", ({ params, body }) => {
-    const { date, count, note } = parse(
-      z.object({ date: z.string(), count: z.number().optional(), note: z.string().optional() }),
-      body
-    );
+    const { date, count, delta, note, source } = parse(logChangeSchema, body);
+    if (Number.isNaN(new Date(date).getTime())) throw new ApiError(400, "Fecha no válida");
     const dayStart = startOfDay(new Date(date)).toISOString();
     return mutate((db) => {
-      find(db.habits, params.id);
-      const existing = db.habitLogs.find((l) => l.habitId === params.id && l.date === dayStart);
-      if (existing) {
-        existing.count = count ?? existing.count + 1;
-        existing.note = note ?? existing.note;
-        existing.updatedAt = nowIso();
-        return ok(existing);
-      }
-      const ts = nowIso();
-      const row = {
-        // Id determinista por (hábito, día): marcar el mismo día en el PC y en
-        // el móvil sin conexión produce la misma fila, no dos.
-        id: `hl-${params.id}-${dayStart.slice(0, 10)}`.slice(0, 128),
-        habitId: params.id,
-        date: dayStart,
-        count: count ?? 1,
-        note: note ?? null,
-        createdAt: ts,
-        updatedAt: ts,
-      };
-      // Si el id quedó con lápida (se desmarcó antes), la nueva marca la supera.
-      db.habitLogs = db.habitLogs.filter((l) => l.id !== row.id);
-      db.habitLogs.push(row);
-      return created(row);
+      const habit = find(db.habits, params.id, "Hábito");
+      const existed = db.habitLogs.some((l) => l.habitId === habit.id && l.date === dayStart);
+      const row = applyLogChange(db, habit, date, { count, delta, note }, source ?? "manual");
+      if (!row) return ok({ habitId: habit.id, date: dayStart, count: 0, target: habit.dailyTarget });
+      return existed ? ok(row) : created(row);
     });
   }],
   ["DELETE", "/habits/:id/logs", ({ params, query }) => {
@@ -1227,7 +1199,12 @@ const routes: Route[] = [
 
     const completedAt = (t: TaskRow) => (t.completedAt ? new Date(t.completedAt) : null);
     const habits = db.habits.filter((h) => !h.archived);
-    const habitLogsWeek = db.habitLogs.filter((l) => new Date(l.date) >= weekAgo);
+    // Un día cuenta como completado al alcanzar su meta, no con cualquier registro.
+    const habitLogsWeek = habits.flatMap((h) =>
+      [...logsByDay(db.habitLogs.filter((l) => l.habitId === h.id && new Date(l.date) >= weekAgo)).values()].filter(
+        (l) => l.count >= logTarget(l, h)
+      )
+    );
 
     const dailyCompletion = Array.from({ length: 30 }, (_, i) => {
       const d = new Date(today);
@@ -1284,6 +1261,9 @@ const routes: Route[] = [
         subtasks: db.subtasks,
         habits: db.habits,
         habitLogs: db.habitLogs,
+        habitSchedules: db.habitSchedules,
+        gcalLinks: db.gcalLinks,
+        habitImports: db.habitImports,
         events: db.events,
         reminders: db.reminders,
         goals: db.goals,
@@ -1324,6 +1304,9 @@ const routes: Route[] = [
           subtasks: rows,
           habits: rows,
           habitLogs: rows,
+          habitSchedules: rows,
+          gcalLinks: rows,
+          habitImports: rows,
           events: rows,
           reminders: rows,
           goals: rows,
@@ -1378,6 +1361,9 @@ const routes: Route[] = [
         db.subtasks = [];
         db.habits = [];
         db.habitLogs = [];
+        db.habitSchedules = [];
+        db.gcalLinks = [];
+        db.habitImports = [];
         db.events = [];
         db.reminders = [];
         db.goals = [];
@@ -1402,6 +1388,9 @@ const routes: Route[] = [
       upsert(db.subtasks, data.subtasks ?? []);
       upsert(db.habits, data.habits ?? []);
       upsert(db.habitLogs, data.habitLogs ?? []);
+      upsert(db.habitSchedules, data.habitSchedules ?? []);
+      upsert(db.gcalLinks, data.gcalLinks ?? []);
+      upsert(db.habitImports, data.habitImports ?? []);
       upsert(db.events, data.events ?? []);
       upsert(db.reminders, data.reminders ?? []);
       upsert(db.goals, data.goals ?? []);

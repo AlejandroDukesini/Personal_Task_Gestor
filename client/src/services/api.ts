@@ -3,12 +3,15 @@
 // cliente HTTP para que las páginas no cambien.
 
 import { handleRequest } from "./localApi";
+import { beforeDestructive } from "./backup/backup";
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   // Mismo viaje que hacía JSON.stringify por la red: normaliza fechas y descarta
   // valores no serializables antes de tocar el almacenamiento.
   const payload = body === undefined ? undefined : JSON.parse(JSON.stringify(body));
 
+  // Borrados en cascada, vaciados e importaciones: antes, copia verificada.
+  await beforeDestructive(method, path);
   const res = await handleRequest(method, path, payload);
   if (res.status === 204) return undefined as T;
   return res.body as T;

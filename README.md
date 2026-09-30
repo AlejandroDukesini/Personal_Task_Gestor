@@ -409,9 +409,52 @@ Al escribir `200+200=` aparece `400` justo después del `=`. Admite `+ - * /` (t
 
 ---
 
+## 🔁 Hábitos: metas, horarios, Google Calendar y capturas
+
+### Metas cuantificables
+*   Cada hábito distingue **meta diaria** (`dailyTarget`, con unidad opcional: «vasos», «min»…) y **veces realizadas** (`count` del registro del día). Meta 1: un clic lo completa (como siempre). Meta > 1: cada clic suma una; **−** corrige un clic de más y el lápiz fija la cantidad a mano. La barra se detiene en 100 % pero se guarda el total real.
+*   Cada registro diario guarda la **meta vigente ese día** (`target`): cambiar la meta no reescribe días pasados. Los registros de versiones anteriores (sin `target`) se siguen leyendo como cumplidos, igual que antes.
+*   Toda operación queda **trazada** en el registro (`trail`: inc/dec/set, origen manual/calendario/panel/importación).
+*   Un día cuenta para la racha y el % de éxito solo si alcanzó su meta. La racha no se rompe mientras el día de hoy siga abierto.
+
+### Programación (`habitSchedules`)
+*   Se guardan **reglas**, no eventos: horario único, recurrente (diario, semanal con días elegidos, mensual; «cada N»), con fecha de inicio/fin opcional y **zona horaria** (IANA, con cambios de horario de verano). Varias horas al día = varias reglas, editables por separado.
+*   Las ocurrencias se calculan al vuelo para el rango visible (`GET /habits/calendar`): sin duplicados ni eventos futuros acumulados.
+*   Cambiar la hora de una regla ya empezada la **parte en dos** (la antigua acaba ayer, la nueva empieza hoy): los días pasados siguen mostrando lo previsto entonces. Desactivar corta solo las ocurrencias futuras.
+
+### Calendario interno
+*   Los horarios aparecen solos en el calendario con color, símbolo, ↻ de recurrencia y estado: **programado, pendiente, en curso, completado, parcial, incumplido**. Con varias franjas al día, la meta se reparte (8 vasos en 8 horas: la franja k se completa al llegar a k+1).
+*   Pulsar un evento abre el registro rápido del día. **Aparecer en el calendario nunca cuenta como hecho.**
+
+### Google Calendar (opcional)
+*   OAuth 2.0 con Google Identity Services (modelo de token, sin servidor ni client secret). El token solo vive **en memoria** (~1 h) y se revoca al desconectar; nunca se guarda ni se registra.
+*   Permisos mínimos: modo recomendado `calendar.app.created` (la app crea y gestiona solo su calendario «Hábitos»); o `calendar.events.owned` + `calendar.calendarlist.readonly` para elegir uno de tus calendarios. Nunca correo ni contactos.
+*   Un evento por regla (los recurrentes con **una RRULE**). Ids de evento **deterministas** y vínculos (`gcalLinks`) sincronizados entre dispositivos: repetir la sincronización, reintentar tras un corte de red o sincronizar desde el PC y el móvil **no duplica** eventos. Solo se tocan eventos con la marca privada de la app.
+*   Detección a tres bandas: cambios solo locales se envían (con `If-Match`); cambios hechos en Google se **preguntan** o se aplican solos (según preferencia); si cambian ambos lados es un **conflicto** que decide el usuario. Eventos borrados en Google no se recrean solos. Al quitar un horario se puede retirar el evento futuro de Google conservando las ocurrencias pasadas.
+*   Reintentos con espera exponencial para red/429/5xx; errores de autorización, permisos y conflictos se muestran en Configuración › Integraciones sin perder datos locales.
+
+**Configuración necesaria (una vez):**
+1. En [Google Cloud Console](https://console.cloud.google.com/): crea un proyecto, habilita **Google Calendar API** y configura la pantalla de consentimiento OAuth (añade los scopes anteriores; en modo «prueba», añade tu cuenta como usuario de prueba).
+2. Crea un **ID de cliente OAuth → Aplicación web** con los **orígenes JavaScript autorizados** donde se sirve la app (p. ej. `https://task-gestor.netlify.app`, `http://localhost:5173`). No hace falta URI de redirección.
+3. Define `VITE_GOOGLE_CLIENT_ID` al compilar (`client/.env`, ver `client/.env.example`, o variable de entorno en Netlify), o pégalo en Configuración › Integraciones.
+
+### Importar desde una captura de calendario
+*   En Hábitos → «Importar desde captura»: elegir o arrastrar PNG/JPG (≤ 10 MB, tipo verificado por firma), recortar, confirmar la fecha y la vista, y analizar.
+*   OCR **local** con Tesseract.js (español + inglés): la imagen **no sale del dispositivo** ni se guarda (solo una huella SHA-256 para detectar reimportaciones). La primera vez se descarga el motor desde `cdn.jsdelivr.net`, con aviso y consentimiento previo.
+*   Además de leer la página completa, detecta los **bloques de color** de cada evento y los lee por separado (recuperando texto blanco sobre fondos oscuros). Entiende vistas de día, semana y agenda; horas en 12 h/24 h; fechas partidas o mal leídas se recuperan solo si el número de día visible lo confirma. Lo ilegible se deja vacío y se marca para confirmar: **no se inventan datos**.
+*   Cada evento se propone asociado a un hábito (sinónimos y tolerancia a errores de OCR; con varias coincidencias hay que elegir). Por defecto solo «estaba programado»: registrar una realización exige elegir «Lo realicé» y confirmar. Reimportar la misma captura no duplica nada.
+
+---
+
 ## 📱 iPhone, almacenamiento y actualizaciones
 
 *   **Datos locales en IndexedDB** (antes localStorage, limitado a ~5 MB): la primera apertura migra los datos existentes y deja la copia antigua intacta. Se solicita almacenamiento persistente.
+*   **Varias pestañas sin pérdida de datos**: cada escritura lleva una revisión; si otra pestaña guardó entre medias, se fusiona fila a fila (nunca se sobrescribe la base entera) y las demás pestañas recargan solas. *Causa del fallo corregido: cada pestaña guardaba su copia completa y una pestaña antigua —incluso sin tocarla, al avisar de un recordatorio— borraba lo guardado en otra.*
+*   **Copia espejo en localStorage** (si los datos caben, ~4 MB): se actualiza tras cada guardado y de forma síncrona al salir de la página; al arrancar se usa la copia más reciente y verificada (suma de comprobación). Si la base principal aparece vacía, se recupera del espejo o de la última copia verificada antes que empezar de cero.
+*   **Indicador de guardado** en la barra superior («Guardando…», «Guardado», «Error al guardar») con reintentos; si falla, aviso con **descarga de emergencia** desde la memoria.
+*   **Copias de seguridad y recuperación** (Configuración): copias verificadas automáticas (cada N minutos de uso, solo si hubo cambios, retención configurable) y **antes de acciones destructivas** (borrados en cascada, vaciar papelera, importaciones, restauraciones, migraciones); descarga en JSON (esquema, metadatos, suma de comprobación, adjuntos opcionales en base64, cifrado AES-256-GCM opcional); restauración con validación, vista previa, copia previa obligatoria y modo **reemplazar** o **combinar sin borrar**; recordatorio configurable para descargar una copia externa.
+*   Los adjuntos de notas ya **no se borran automáticamente**: solo con «Liberar espacio de adjuntos sin usar», que respeta las copias guardadas y los de menos de 7 días.
+*   *Límite honesto*: ningún navegador garantiza conservar sus datos (limpieza del sitio, modo incógnito, falta de espacio o, en Safari fuera de la app instalada, 7 días sin uso). La protección real es instalar la app y descargar copias con regularidad.
 *   **Puntos de restauración automáticos** antes de migrar, sincronizar o restaurar; **copias de seguridad cifradas** exportables e importables (Sincronización → Copias de seguridad).
 *   **Actualizaciones**: el Service Worker precarga todos los ficheros (offline completo). Una versión nueva no se activa sola: la app muestra «Hay una versión nueva» y al aceptar guarda los datos pendientes y recarga. Actualizar el código no toca los datos; si su formato cambia, se migran con copia previa.
 *   **PC**: `npm run pc` compila y sirve la app en `http://localhost:4181` con sus propios datos. Instrucciones completas de instalación, emparejamiento y sincronización en [`sync/README.md`](sync/README.md).
@@ -422,7 +465,7 @@ Al escribir `200+200=` aparece `400` justo después del `=`. Admite `+ - * /` (t
 
 ```bash
 npm test                 # cliente (vitest) + relé de sincronización (node:test)
-npm run test -w client   # 124 pruebas: dinero, finanzas, etiquetas, import/export, SQL, sincronización manual (incl. extremo a extremo por red), IndexedDB, cifrado, tareas, migraciones
+npm run test -w client   # 408 pruebas: persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, sincronización manual (incl. por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas
 ```
 
 ---

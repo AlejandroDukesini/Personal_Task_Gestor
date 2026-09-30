@@ -311,3 +311,12 @@ body {
 @media print {
   .note-calc-result { background: none; color: inherit; }
 }
+
+/* Hábitos programados en el calendario: el estado se ve por símbolo y estilo,
+   no solo por color. */
+.fc .gt-habit-scheduled { opacity: 0.8; }
+.fc .gt-habit-completed { opacity: 0.6; }
+.fc .gt-habit-completed .fc-event-title { text-decoration: line-through; }
+.fc .gt-habit-missed { opacity: 0.75; border-style: dashed !important; border-width: 2px !important; }
+.fc .gt-habit-in_progress { box-shadow: 0 0 0 2px rgb(var(--ring) / 0.6); }
+.fc .gt-habit { cursor: pointer; }

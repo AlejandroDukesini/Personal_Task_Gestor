@@ -11,7 +11,7 @@ import { Empty } from "@/components/ui/Empty";
 import { api } from "@/services/api";
 import { loadDb, newId, type NoteRow } from "@/services/localDb";
 import type { NoteSummary, NoteSort, NoteStatus } from "@/services/notes/query";
-import { collectGarbage, releaseFiles } from "@/services/notes/files";
+
 import { errorMessage } from "@/components/finance/shared";
 import { cn } from "@/lib/utils";
 import { CategoryManager, type NoteCategory } from "@/components/notes/CategoryManager";
@@ -45,11 +45,9 @@ export function Notes() {
   const [params] = useSearchParams();
   const { categories, reload } = useCategories();
 
-  // Limpieza de archivos huérfanos (p. ej. si una pestaña se cerró a mitad de adjuntar).
-  useEffect(() => {
-    const inUse = new Set(loadDb().notes.flatMap((n) => n.attachments.map((a) => a.fileKey)));
-    collectGarbage(inUse).catch(() => undefined);
-  }, []);
+  // Los adjuntos sin usar ya no se borran solos (una pestaña con datos
+  // desfasados borraba adjuntos recién añadidos en otra): se liberan a
+  // petición del usuario en Ajustes › Copias de seguridad y recuperación.
 
   if (id) return <NoteDetail key={id} id={id} categories={categories} startEditing={params.get("edit") === "1"} onChanged={reload} />;
   return <NotesList categories={categories} reloadCategories={reload} />;
@@ -165,10 +163,10 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
     }
   }
 
-  const release = async (keys: string[]) => {
-    const inUse = new Set(loadDb().notes.flatMap((n) => n.attachments.map((a) => a.fileKey)));
-    await releaseFiles(keys, inUse).catch(() => undefined);
-  };
+  // Los binarios de adjuntos sin usar NO se borran al momento: las copias de
+  // seguridad (incluida la previa a este borrado) aún pueden necesitarlos. Se
+  // liberan a petición en Ajustes › Copias de seguridad y recuperación.
+  const release = async (_keys: string[]) => undefined;
 
   const top = categories.filter((c) => !c.parentId);
   const subs = categories.filter((c) => c.parentId && c.parentId === categoryId);

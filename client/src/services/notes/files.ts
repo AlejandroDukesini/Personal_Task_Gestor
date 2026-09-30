@@ -240,3 +240,33 @@ export async function collectGarbage(inUse: Set<string>): Promise<number> {
 export function __resetFilesForTests(): void {
   dbPromise = null;
 }
+
+export interface FileInfo {
+  key: string;
+  size: number;
+  createdAt: string;
+}
+
+export async function listFiles(): Promise<FileInfo[]> {
+  const db = await openFiles();
+  const tx = db.transaction(STORE);
+  const store = tx.objectStore(STORE);
+  const keysReq = store.getAllKeys();
+  const valsReq = store.getAll() as IDBRequest<StoredFile[]>;
+  await done(null, tx);
+  return keysReq.result.map((k, i) => ({ key: String(k), size: valsReq.result[i]?.size ?? 0, createdAt: valsReq.result[i]?.createdAt ?? "" }));
+}
+
+/**
+ * Limpieza EXPLÍCITA (la pide el usuario): borra solo los adjuntos que no usa
+ * ninguna nota actual NI ninguna copia de seguridad guardada, y que tienen
+ * más de `minAgeDays` días. Nada se borra automáticamente: una pestaña con
+ * datos desfasados borraba así adjuntos recién añadidos en otra.
+ */
+export async function cleanupOrphanFiles(inUse: Set<string>, minAgeDays = 7, now = Date.now()): Promise<{ removed: number; bytes: number }> {
+  const cutoff = now - minAgeDays * 86_400_000;
+  const victims = (await listFiles()).filter((f) => !inUse.has(f.key) && (!f.createdAt || new Date(f.createdAt).getTime() < cutoff));
+  if (!victims.length) return { removed: 0, bytes: 0 };
+  await releaseFiles(victims.map((v) => v.key), inUse);
+  return { removed: victims.length, bytes: victims.reduce((a, v) => a + v.size, 0) };
+}

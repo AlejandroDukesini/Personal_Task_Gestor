@@ -77,11 +77,59 @@ export interface HabitLog {
   note?: string | null;
 }
 
+export interface HabitDayProgress {
+  date: string;
+  /** Veces realizadas (total real, puede superar la meta). */
+  count: number;
+  target: number;
+  /** 0-100, nunca mayor de 100. */
+  percent: number;
+  done: boolean;
+}
+
 export interface HabitStats {
   streak: number;
   best: number;
   successRate: number;
-  last30: { date: string; done: boolean }[];
+  last30: { date: string; done: boolean; count: number; target: number }[];
+  today: HabitDayProgress;
+}
+
+export interface HabitSchedule {
+  id: string;
+  habitId: string;
+  kind: "once" | "recurring";
+  freq: "daily" | "weekly" | "monthly";
+  interval: number;
+  /** 0 = domingo … 6 = sábado. */
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string | null;
+  startDate: string;
+  endDate: string | null;
+  timezone: string;
+  active: boolean;
+  inactiveFrom: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OccurrenceStatus = "scheduled" | "pending" | "in_progress" | "completed" | "partial" | "missed";
+
+export interface HabitOccurrence {
+  id: string;
+  scheduleId: string;
+  habitId: string;
+  dateKey: string;
+  start: string;
+  end: string | null;
+  recurring: boolean;
+  status: OccurrenceStatus;
+  logDate: string;
+  count: number;
+  target: number;
+  threshold: number;
+  habit: { id: string; name: string; color: string; icon?: string | null; unit: string | null; dailyTarget: number };
 }
 
 /** Una celda del mapa de contribuciones. `level` 0-4, como en GitHub. */
@@ -114,6 +162,11 @@ export interface Habit {
   categoryId?: string | null;
   category?: Category | null;
   archived: boolean;
+  /** Unidad de la meta ("vasos", "min"…). null = veces. */
+  unit: string | null;
+  showInCalendar: boolean;
+  gcalSync: boolean;
+  schedules: HabitSchedule[];
   logs: HabitLog[];
   stats: HabitStats;
   createdAt: string;

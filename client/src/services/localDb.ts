@@ -2,12 +2,12 @@
 // misma forma de datos que el esquema de Prisma (las fechas viajan como ISO,
 // igual que las serializaba Express) para que la capa de rutas no cambie.
 
-import { createRestorePoint, openStorage, persistDb, type StorageInfo } from "./storage";
+import { __resetStorageForTests, configureStorage, createRestorePoint, openStorage, persistDb, type StorageInfo } from "./storage";
 
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export interface SettingsRow {
   id: number;
@@ -107,19 +107,137 @@ export interface HabitRow {
   endDate: string | null;
   categoryId: string | null;
   archived: boolean;
+  /** Unidad de la meta diaria ("vasos", "min"…). null = veces. */
+  unit?: string | null;
+  /** Mostrar sus horarios en el calendario interno (por defecto sí). */
+  showInCalendar?: boolean;
+  /** Incluir sus horarios en la sincronización con Google Calendar. */
+  gcalSync?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Origen de un cambio en el contador: hace trazable toda acción automática. */
+export type HabitLogSource = "manual" | "calendar" | "import" | "dashboard";
+
+export interface HabitLogTrail {
+  at: string;
+  op: "inc" | "dec" | "set";
+  /** Valor del contador tras la operación. */
+  value: number;
+  source: HabitLogSource;
+  /** Referencia externa (p. ej. id de la importación que lo registró). */
+  ref?: string;
 }
 
 export interface HabitLogRow {
   id: string;
   habitId: string;
   date: string;
+  /** Veces realizadas ese día (total real, puede superar la meta). */
   count: number;
   note: string | null;
+  /**
+   * Meta diaria vigente cuando se registró ese día. Cambiar la meta del hábito
+   * NO reescribe los días pasados. Ausente en registros de versiones previas
+   * (ver `services/habits/progress.ts#logTarget`).
+   */
+  target?: number;
+  /** Últimas operaciones sobre el contador (acotado). */
+  trail?: HabitLogTrail[];
   createdAt: string;
   /** Sin él, cambiar el contador de un día era invisible para la sincronización. */
   updatedAt?: string;
+}
+
+/**
+ * Programación de un hábito: UNA regla horaria. Se guarda la regla, no las
+ * ocurrencias (se calculan al leer), así que un hábito semanal no acumula
+ * eventos futuros. Varias horas en un mismo día = varias filas. Separada del
+ * historial (`habitLogs`): aparecer en el calendario nunca cuenta como hecho.
+ */
+export interface HabitScheduleRow {
+  id: string;
+  habitId: string;
+  /** `once`: una fecha concreta · `recurring`: se repite según `freq`. */
+  kind: "once" | "recurring";
+  freq: "daily" | "weekly" | "monthly";
+  /** Cada cuántos días/semanas/meses (>= 1). */
+  interval: number;
+  /** 0 = domingo … 6 = sábado (solo `weekly`). */
+  daysOfWeek: number[];
+  /** "HH:mm" en la zona `timezone`. */
+  startTime: string;
+  endTime: string | null;
+  /** `YYYY-MM-DD` (en `once`, la fecha del evento). */
+  startDate: string;
+  endDate: string | null;
+  /** Zona IANA en la que se interpretan las horas. */
+  timezone: string;
+  active: boolean;
+  /** Al desactivar: desde qué día (`YYYY-MM-DD`) deja de generar ocurrencias. */
+  inactiveFrom: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type GcalLinkState =
+  | "pending"
+  | "synced"
+  | "error"
+  | "conflict"
+  | "remote_changed"
+  | "remote_deleted"
+  | "pending_delete";
+
+/**
+ * Vínculo programación ↔ evento de Google Calendar. Id determinista por
+ * programación: dos dispositivos conectados a la misma cuenta comparten el
+ * vínculo (y el id del evento) en lugar de crear dos eventos.
+ */
+export interface GcalLinkRow {
+  id: string;
+  scheduleId: string;
+  habitId: string;
+  calendarId: string;
+  eventId: string;
+  etag: string | null;
+  /** Huella de los campos horarios la última vez que ambos lados coincidieron. */
+  syncedHash: string | null;
+  /** `updated` del evento remoto en ese momento. */
+  remoteUpdated: string | null;
+  syncedAt: string | null;
+  state: GcalLinkState;
+  lastError: string | null;
+  /** Resumen legible de la versión remota en conflicto. */
+  remote: Record<string, unknown> | null;
+  /** Solo en `pending_delete`: qué hacer en Google. */
+  deleteMode: "future" | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Registro de un evento confirmado desde una captura. Su id es una huella de
+ * (hábito, fecha, hora, título): importar dos veces la misma captura no
+ * duplica nada. No guarda la imagen.
+ */
+export interface HabitImportRow {
+  id: string;
+  habitId: string | null;
+  title: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  /** `scheduled`: solo estaba previsto · `done`: el usuario confirmó que lo hizo. */
+  action: "scheduled" | "done" | "ignored";
+  /** Veces sumadas al contador (0 si no se registró realización). */
+  counted: number;
+  /** Huella SHA-256 de la imagen (no la imagen): avisa de reimportaciones. */
+  imageHash: string | null;
+  confidence: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EventRow {
@@ -449,6 +567,9 @@ export interface Db {
   subtasks: SubtaskRow[];
   habits: HabitRow[];
   habitLogs: HabitLogRow[];
+  habitSchedules: HabitScheduleRow[];
+  gcalLinks: GcalLinkRow[];
+  habitImports: HabitImportRow[];
   events: EventRow[];
   reminders: ReminderRow[];
   goals: GoalRow[];
@@ -472,6 +593,9 @@ export const SYNCED_COLLECTIONS = [
   "subtasks",
   "habits",
   "habitLogs",
+  "habitSchedules",
+  "gcalLinks",
+  "habitImports",
   "events",
   "reminders",
   "goals",
@@ -614,6 +738,9 @@ function emptyDb(): Db {
     subtasks: [],
     habits: [],
     habitLogs: [],
+    habitSchedules: [],
+    gcalLinks: [],
+    habitImports: [],
     events: [],
     reminders: [],
     goals: [],
@@ -693,6 +820,19 @@ export const MIGRATIONS: Migration[] = [
       db.notes ??= [];
       db.noteCategories ??= [];
       if (db.noteCategories.length === 0) db.noteCategories = defaultNoteCategories();
+    },
+  },
+  {
+    version: 6,
+    description: "Hábitos: metas cuantificables, programación horaria, Google Calendar e importación de capturas",
+    up: (db) => {
+      // Solo colecciones nuevas. Los hábitos y registros existentes NO se
+      // reescriben: los campos nuevos se interpretan al leer con valores por
+      // defecto (ver services/habits/progress.ts). Reescribirlos con la misma
+      // marca dejaría a un dispositivo sin actualizar con otra versión.
+      db.habitSchedules ??= [];
+      db.gcalLinks ??= [];
+      db.habitImports ??= [];
     },
   },
 ];
@@ -879,6 +1019,26 @@ export function defaultFinCategories(): FinCategoryRow[] {
 
 let cache: Db | null = null;
 
+// La capa de almacenamiento necesita leer la memoria (para guardar siempre lo
+// último) y sustituirla cuando otra pestaña guardó algo o hubo que fusionar.
+configureStorage({
+  current: () => cache,
+  replace: (next) => {
+    cache = migrate(structuredClone(next) as RawDb);
+    for (const fn of listeners) {
+      try {
+        fn("remote");
+      } catch {
+        /* ignorado a propósito */
+      }
+    }
+    // Las vistas releen (mismo evento que la sincronización entre dispositivos).
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+      window.dispatchEvent(new CustomEvent("gt:sync-applied"));
+    }
+  },
+});
+
 /* --------------------------------------------------------- observabilidad */
 
 type ChangeListener = (origin: DbOrigin) => void;
@@ -933,16 +1093,23 @@ export async function bootDb(): Promise<StorageInfo> {
   const { raw, info } = await openStorage();
   if (raw) {
     const from = Number(raw.version) || 1;
+    let backedUp = true;
     if (from < DB_VERSION) {
       try {
-        await createRestorePoint(raw, `Antes de actualizar los datos de v${from} a v${DB_VERSION}`);
+        await createRestorePoint(raw, `Antes de actualizar los datos de v${from} a v${DB_VERSION}`, "pre-action");
       } catch {
-        /* sin espacio para la copia: se migra igualmente */
+        backedUp = false;
       }
     }
-    cache = migrate(raw);
-    if (from < DB_VERSION) saveDb(cache);
+    // Se migra una COPIA: el original sigue intacto en el almacenamiento.
+    cache = migrate(structuredClone(raw));
+    // Sin copia verificada, la versión migrada no se guarda todavía: el
+    // original sigue en disco hasta el próximo cambio del usuario (las
+    // migraciones solo añaden campos, así que es la misma información).
+    if (from < DB_VERSION && backedUp) saveDb(cache);
   } else {
+    // Solo se siembran datos de ejemplo si no hay NADA que recuperar
+    // (almacenamiento principal, espejo, copia antigua ni puntos de restauración).
     cache = seed(emptyDb());
     saveDb(cache);
   }
@@ -1019,6 +1186,7 @@ export function resetDb(): void {
   cache = null;
   lastStamp = 0;
   localStorage.removeItem(STORAGE_KEY);
+  __resetStorageForTests();
 }
 
 /** Datos de ejemplo: equivale al seed.ts que corría el servidor. */

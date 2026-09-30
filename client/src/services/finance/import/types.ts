@@ -1,7 +1,7 @@
 import type { ColumnMapping, ImportField, MappingSource } from "./columns";
 import type { Cell, DateOrder, DecimalSep } from "./normalize";
 
-export type SourceFormat = "csv" | "xlsx" | "json" | "sqlite";
+export type SourceFormat = "csv" | "tsv" | "xlsx" | "xls" | "json" | "sqlite" | "sql";
 
 /** Tabla genérica (CSV, hoja de Excel, lista JSON o tabla SQLite). */
 export interface TableSource {
@@ -15,6 +15,8 @@ export interface TableSource {
   firstRow: number;
   /** Arreglos hechos al leer el fichero (p. ej. CSV reenvuelto por Excel). */
   notes?: string[];
+  /** Columnas que son identificadores de otra tabla (no deben usarse como nombres). */
+  idColumns?: string[];
 }
 
 /** Tablas crudas de una copia de seguridad de Cashew (SQLite). */
@@ -25,27 +27,69 @@ export interface CashewSource {
   transactions: Record<string, Cell>[];
   objectives: Record<string, Cell>[];
   notes?: string[];
+  /** Origen: copia SQLite o volcado SQL de texto. */
+  origin?: "sqlite" | "sql";
 }
 
 export type ImportSource = TableSource | CashewSource;
+
+/** Campos que pueden formar la huella de «posible duplicado». */
+export const DUPLICATE_FIELDS = ["date", "account", "kind", "amount", "concept", "category"] as const;
+export type DuplicateField = (typeof DUPLICATE_FIELDS)[number];
+
+/** Decisión para una cuenta o categoría del archivo que no existe en la app. */
+export type EntityChoice = "create" | "none" | "exclude" | `id:${string}`;
 
 export interface ImportOptions {
   /** Orden de las fechas ambiguas; `auto` lo deduce de la columna. */
   dateOrder: "auto" | DateOrder;
   decimal: "auto" | DecimalSep;
+  /**
+   * Política de zona horaria para instantes (ISO con zona, timestamps Unix):
+   * `local` = el día del reloj de este dispositivo; `utc` = el día en UTC.
+   * Las fechas sin zona («2026-09-26 23:34») se toman literalmente.
+   */
+  zone: "local" | "utc";
+  /** Autoriza redondear a céntimos importes con más de 2 decimales. */
+  allowRounding: boolean;
   /** Cuenta para filas sin cuenta (o cuya cuenta no existe y no se crea). */
   defaultAccountId: string | null;
+  /** Moneda para las cuentas nuevas cuando el archivo no la indica. */
+  defaultCurrency: string | null;
   createAccounts: boolean;
   createCategories: boolean;
+  /** Nombre en el archivo (normalizado) -> decisión. Prevalece sobre `create*`. */
+  accountMap: Record<string, EntityChoice>;
+  categoryMap: Record<string, EntityChoice>;
+  duplicateFields: DuplicateField[];
+  /** Confirmaciones dadas por el usuario (ver `Confirmation`). */
+  confirmed: ConfirmationKey[];
 }
 
 export const DEFAULT_OPTIONS: ImportOptions = {
   dateOrder: "auto",
   decimal: "auto",
+  zone: "local",
+  allowRounding: false,
   defaultAccountId: null,
+  defaultCurrency: null,
   createAccounts: true,
   createCategories: true,
+  accountMap: {},
+  categoryMap: {},
+  duplicateFields: ["date", "account", "kind", "amount"],
+  confirmed: [],
 };
+
+export type ConfirmationKey = "dateOrder" | "decimal" | "currency" | "mapping";
+
+/** Decisión que el sistema no toma solo: sin ella no se puede importar. */
+export interface Confirmation {
+  key: ConfirmationKey;
+  message: string;
+  /** Lo que se hará si el usuario confirma sin cambiar nada. */
+  proposal: string;
+}
 
 /** Campos que el usuario puede corregir a mano en la vista previa. */
 export const EDITABLE_FIELDS = ["date", "amount", "kind", "account", "toAccount", "toAmount", "currency", "category", "concept", "description"] as const;
@@ -69,6 +113,15 @@ export interface SmartImportInput {
  */
 export type IssueSeverity = "error" | "warning" | "fixed";
 
+/**
+ * - `auto`: corregida automáticamente.
+ * - `pending`: requiere acción; la fila no se importa así.
+ * - `accepted`: advertencia revisable; la fila se importa igualmente.
+ * - `manual`: el usuario corrigió el valor a mano.
+ * - `excluded`: la fila queda fuera de la importación.
+ */
+export type IssueResolution = "auto" | "pending" | "accepted" | "manual" | "excluded";
+
 export interface ImportIssue {
   /** 0 = el fichero entero. */
   row: number;
@@ -77,10 +130,17 @@ export interface ImportIssue {
   original: string;
   message: string;
   suggestion: string;
+  resolution?: IssueResolution;
 }
 
 export type RowStatus = "valid" | "fixed" | "warning" | "error" | "duplicate" | "excluded" | "merged";
-export type DuplicateKind = "id" | "deleted" | "fingerprint";
+/**
+ * - `id`: mismo identificador que un movimiento existente (ya importado).
+ * - `exact`: mismo contenido (fecha, cuenta, tipo, importe y concepto) con otro id.
+ * - `fingerprint`: posible duplicado según los campos configurados.
+ * - `deleted`: se importó antes y el usuario lo borró.
+ */
+export type DuplicateKind = "id" | "exact" | "deleted" | "fingerprint";
 
 export interface PreviewRow {
   row: number;
@@ -100,6 +160,8 @@ export interface PreviewRow {
   issues: ImportIssue[];
   /** Valores actuales en texto, para precargar el editor. */
   raw: Partial<Record<EditableField, string>>;
+  /** Valores originales de la fila en el archivo (para el informe de filas no importadas). */
+  original: Record<string, string>;
 }
 
 export interface ImportTotals {
@@ -126,6 +188,13 @@ export interface SmartPreview {
   detected: { dateOrder: DateOrder; decimal: DecimalSep | null; dateAmbiguous: boolean };
   newAccounts: { name: string; currency: string }[];
   newCategories: { name: string; kind: string }[];
+  /** Decisiones pendientes: mientras haya alguna, no se puede importar. */
+  confirmations: Confirmation[];
+  /** Cuentas y categorías del archivo que no existen en la app. */
+  unresolved: {
+    accounts: { key: string; name: string; rows: number; currency: string | null; choice: EntityChoice }[];
+    categories: { key: string; name: string; kind: string; rows: number; choice: EntityChoice }[];
+  };
 }
 
 export interface SmartImportResult extends SmartPreview {
@@ -154,6 +223,10 @@ export interface RawRecord {
   /** El tipo lo fijó el adaptador (no hay que deducirlo). */
   kindLocked?: boolean;
   issues: ImportIssue[];
+  /** Valores originales tal como venían (para el informe de filas no importadas). */
+  original: Record<string, string>;
+  /** Pista para una fecha ausente (nunca se usa sola: solo se sugiere). */
+  dateSuggestion?: string;
 }
 
 export interface Extracted {

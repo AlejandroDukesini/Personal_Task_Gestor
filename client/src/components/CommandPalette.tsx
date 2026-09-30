@@ -27,6 +27,7 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   type LucideIcon,
+  StickyNote,
 } from "lucide-react";
 import { useTheme } from "@/store/theme";
 import { usePalette } from "@/store/palette";
@@ -91,6 +92,7 @@ export function CommandPalette() {
     const nav: Command[] = [
       { id: "nav-dash", group: "Ir a", label: "Dashboard", icon: LayoutDashboard, keywords: "inicio home panel", run: go("/") },
       { id: "nav-tasks", group: "Ir a", label: "Tareas", icon: CheckSquare, keywords: "todo pendientes", run: go("/tareas") },
+      { id: "nav-notes", group: "Ir a", label: "Notas", icon: StickyNote, keywords: "apuntes documentos adjuntos calculos", run: go("/notas") },
       { id: "nav-habits", group: "Ir a", label: "Hábitos", icon: Activity, keywords: "rachas streak", run: go("/habitos") },
       { id: "nav-cal", group: "Ir a", label: "Calendario", icon: Calendar, keywords: "eventos agenda", run: go("/calendario") },
       { id: "nav-cats", group: "Ir a", label: "Categorías", icon: Folder, run: go("/categorias") },
@@ -131,6 +133,15 @@ export function CommandPalette() {
         icon: Plus,
         keywords: "crear añadir todo",
         run: () => navigate("/tareas?new=1"),
+      },
+      {
+        id: "note-new",
+        group: "Acciones",
+        label: "Nueva nota",
+        hint: "título y a escribir",
+        icon: StickyNote,
+        keywords: "crear apunte documento",
+        run: () => navigate("/notas?new=1"),
       },
       {
         id: "fin-expense",

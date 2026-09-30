@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
+import { cloneElement, forwardRef, isValidElement, useId, type InputHTMLAttributes, type ReactElement, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 // `.gt-field` aporta fondo, borde, radio y anillo de foco desde los tokens del
@@ -44,11 +44,21 @@ export function Field({
   children: React.ReactNode;
   hint?: string;
 }) {
+  // La etiqueta se asocia al control (lectores de pantalla y clic en la etiqueta).
+  const auto = useId();
+  const child = isValidElement(children) ? (children as ReactElement<{ id?: string; "aria-describedby"?: string }>) : null;
+  const id = child?.props.id ?? auto;
+  const hintId = hint ? `${id}-hint` : undefined;
+  const control = child ? cloneElement(child, { id, "aria-describedby": child.props["aria-describedby"] ?? hintId }) : children;
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children}
-      {hint && <p className="text-xs text-subtle">{hint}</p>}
+      <Label htmlFor={child ? id : undefined}>{label}</Label>
+      {control}
+      {hint && (
+        <p id={hintId} className="text-xs text-subtle">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

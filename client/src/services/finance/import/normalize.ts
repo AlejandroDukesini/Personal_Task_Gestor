@@ -85,7 +85,16 @@ function fullYear(y: string): { year: number; fixed?: string } {
 }
 
 /** Fecha desde un número: AAAAMMDD, serial de Excel o timestamp Unix (s, ms o µs). */
-function fromNumber(n: number): DateResult {
+export type ZonePolicy = "local" | "utc";
+
+/** Día de un instante según la política: reloj local del dispositivo o UTC. */
+function dayOf(ms: number, zone: ZonePolicy): string {
+  const d = new Date(ms);
+  if (zone === "local") return toKey(d);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function fromNumber(n: number, zone: ZonePolicy = "local"): DateResult {
   if (!Number.isFinite(n) || n <= 0) return { date: null, error: "Número que no representa una fecha" };
   if (Number.isInteger(n) && n >= 19000101 && n <= 21001231) {
     const s = String(n);
@@ -98,7 +107,7 @@ function fromNumber(n: number): DateResult {
   else if (n >= 1e14 && n < 1e17) ms = n / 1000; // microsegundos
   if (ms !== null) {
     const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? { date: null, error: "Timestamp fuera de rango" } : { date: toKey(d), ts: ms };
+    return Number.isNaN(d.getTime()) ? { date: null, error: "Timestamp fuera de rango" } : { date: dayOf(ms, zone), ts: ms };
   }
   if (n >= 1 && n < 2958466) {
     // Serial de Excel: días desde 1899-12-30 (incluye el falso 29-feb-1900).
@@ -129,22 +138,22 @@ function withTime(y: number, m: number, d: number, h?: string, mi?: string, s?: 
  * inglés y portugués, `AAAAMMDD`, seriales de Excel y timestamps Unix.
  * `order` decide solo los casos ambiguos (`03/04/2026`).
  */
-export function parseFlexibleDate(v: unknown, order: DateOrder = "dmy"): DateResult {
+export function parseFlexibleDate(v: unknown, order: DateOrder = "dmy", zone: ZonePolicy = "local"): DateResult {
   if (isBlank(v)) return { date: null, error: "Fecha vacía" };
-  if (typeof v === "number") return fromNumber(v);
+  if (typeof v === "number") return fromNumber(v, zone);
   if (typeof v === "boolean") return { date: null, error: "No es una fecha" };
   const s = cleanText(v).replace(/\s+/g, " ");
 
-  if (/^\d+(\.\d+)?$/.test(s)) return fromNumber(Number(s));
+  if (/^\d+(\.\d+)?$/.test(s)) return fromNumber(Number(s), zone);
 
   let m = s.match(YMD_RE);
   if (m) {
-    const [, y, mo, d, h, mi, sec, zone] = m;
-    if (zone) {
-      // Instante con zona: el día contable es el del reloj local del usuario.
-      const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}T${(h ?? "0").padStart(2, "0")}:${mi ?? "00"}:${sec ?? "00"}${zone.length === 3 ? `${zone}:00` : zone.replace(/^([+-]\d{2})(\d{2})$/, "$1:$2")}`;
+    const [, y, mo, d, h, mi, sec, tz] = m;
+    if (tz) {
+      // Instante con zona: el día contable lo decide la política (`local` o `utc`).
+      const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}T${(h ?? "0").padStart(2, "0")}:${mi ?? "00"}:${sec ?? "00"}${tz.length === 3 ? `${tz}:00` : tz.replace(/^([+-]\d{2})(\d{2})$/, "$1:$2")}`;
       const t = Date.parse(iso);
-      if (!Number.isNaN(t)) return { date: toKey(new Date(t)), ts: t };
+      if (!Number.isNaN(t)) return { date: dayOf(t, zone), ts: t };
     }
     const key = keyFrom(Number(y), Number(mo), Number(d));
     if (!key) return { date: null, error: "Fecha imposible (día o mes fuera de rango)" };
@@ -232,6 +241,8 @@ export interface AmountResult {
   fixed?: string;
   /** El redondeo a céntimos cambia el valor más de un 1 % (p. ej. 0,007 BTC). */
   lossy?: boolean;
+  /** Hubo que redondear a céntimos (más de 2 decimales reales). */
+  rounded?: boolean;
   error?: string;
 }
 
@@ -258,6 +269,15 @@ function stripCurrency(s: string): { rest: string; currency: string | null; foun
  * Decide el separador decimal de una columna a partir de los valores que no
  * admiten dos lecturas (`1.234,56`, `12,5`, `0.007`). Null si ninguno decide.
  */
+/**
+ * ¿Hay importes que admiten dos lecturas (`1.234` = 1234 o 1,234) y ninguno
+ * en la columna que lo decida? Entonces hay que preguntar.
+ */
+export function decimalAmbiguous(values: unknown[]): boolean {
+  if (detectDecimal(values) !== null) return false;
+  return values.some((v) => typeof v === "string" && /^\s*[-+(]?\s*\D{0,4}\s*[1-9]\d{0,2}[.,]\d{3}\s*\D{0,4}\)?\s*$/.test(v));
+}
+
 export function detectDecimal(values: unknown[]): DecimalSep | null {
   let comma = 0;
   let dot = 0;
@@ -315,7 +335,7 @@ export function parseFlexibleAmount(v: unknown, decimal: DecimalSep | null = nul
     if (Math.abs(cents) > MAX_AMOUNT) return { cents: null, error: "Importe demasiado grande" };
     // El ruido de coma flotante (39999.99999999999) no es un ajuste real.
     const rounded = Math.abs(exact - cents) > 1e-6;
-    return { cents, fixed: rounded ? `Redondeado a 2 decimales (${v})` : undefined, lossy: rounded && Math.abs(exact - cents) > Math.abs(exact) * 0.01 };
+    return { cents, rounded, fixed: rounded ? `Redondeado a 2 decimales (${v})` : undefined, lossy: rounded && Math.abs(exact - cents) > Math.abs(exact) * 0.01 };
   }
 
   let s = cleanText(v).replace(/[−‒–]/g, "-").replace(/\s+/g, " ");
@@ -390,6 +410,7 @@ export function parseFlexibleAmount(v: unknown, decimal: DecimalSep | null = nul
     cents,
     currency: cur.currency,
     fixed: fixes.length ? fixes.join(". ") : undefined,
+    rounded,
     lossy: rounded && Math.abs(exact - Math.abs(cents)) > exact * 0.01,
   };
 }

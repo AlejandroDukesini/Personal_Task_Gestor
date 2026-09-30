@@ -9,7 +9,10 @@
 
 import { z } from "zod";
 import { IMPORT_FIELDS, headerKey, headerOverlap, headerSignature, mappingFromColumns, type ColumnMapping } from "./columns";
-import type { ImportOptions } from "./types";
+import { DUPLICATE_FIELDS, type ImportOptions } from "./types";
+
+/** Cabecera «virtual» para guardar las preferencias de las copias de Cashew (no tienen cabeceras). */
+export const CASHEW_PROFILE_HEADERS = ["__cashew_backup__"];
 
 const KEY = "gestion-tareas:import-profiles";
 const MAX_PROFILES = 30;
@@ -24,9 +27,16 @@ const profileSchema = z.object({
     .object({
       dateOrder: z.enum(["auto", "dmy", "mdy", "ymd"]).optional(),
       decimal: z.enum(["auto", ",", "."]).optional(),
+      zone: z.enum(["local", "utc"]).optional(),
+      allowRounding: z.boolean().optional(),
       defaultAccountId: z.string().max(128).nullable().optional(),
+      defaultCurrency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
       createAccounts: z.boolean().optional(),
       createCategories: z.boolean().optional(),
+      accountMap: z.record(z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/)).optional(),
+      categoryMap: z.record(z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/)).optional(),
+      duplicateFields: z.array(z.enum(DUPLICATE_FIELDS)).optional(),
+      confirmed: z.array(z.enum(["dateOrder", "decimal", "currency", "mapping"])).optional(),
     })
     .default({}),
   updatedAt: z.string(),
@@ -72,9 +82,16 @@ export function saveProfile(name: string, headers: string[], mapping: ColumnMapp
     options: {
       dateOrder: options.dateOrder,
       decimal: options.decimal,
+      zone: options.zone,
+      allowRounding: options.allowRounding,
       defaultAccountId: options.defaultAccountId ?? null,
+      defaultCurrency: options.defaultCurrency ?? null,
       createAccounts: options.createAccounts,
       createCategories: options.createCategories,
+      accountMap: options.accountMap,
+      categoryMap: options.categoryMap,
+      duplicateFields: options.duplicateFields,
+      confirmed: options.confirmed,
     },
     updatedAt: new Date().toISOString(),
   };

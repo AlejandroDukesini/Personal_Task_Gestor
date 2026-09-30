@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXPORT_FORMAT } from "../io";
-import { bankStatementXlsx, buildCashewDb, buildSqlite, CASHEW_TXS, sqliteAvailable } from "@/test/cashew-fixture";
+import { bankStatementXlsx, buildCashewDb, buildSqlite, buildZip, CASHEW_TXS, sqliteAvailable } from "@/test/cashew-fixture";
 import { parseCreateTable, readSqlite, SqliteError } from "./sqlite";
 import { readXlsx } from "./xlsx";
 import { decodeText, parseDelimited, readImportFile, ImportFileError } from "./sources";
@@ -62,7 +62,14 @@ describe("CREATE TABLE", () => {
       columns: ["a b", "c", "d", "e"],
       withoutRowid: false,
       rowidAlias: -1,
+      foreignKeys: [],
     });
+    expect(
+      parseCreateTable(`CREATE TABLE t (id INTEGER PRIMARY KEY, "cat_fk" TEXT REFERENCES categories (category_pk), w TEXT, CONSTRAINT x FOREIGN KEY ([w]) REFERENCES "wallets")`).foreignKeys
+    ).toEqual([
+      { column: "cat_fk", table: "categories", refColumn: "category_pk" },
+      { column: "w", table: "wallets", refColumn: null },
+    ]);
     expect(parseCreateTable(`CREATE TABLE y (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, v TEXT)`).rowidAlias).toBe(0);
     expect(parseCreateTable(`CREATE TABLE z (k TEXT PRIMARY KEY, v) WITHOUT ROWID`).withoutRowid).toBe(true);
   });
@@ -82,8 +89,9 @@ describe("lector XLSX", () => {
     expect(rows[7]).toEqual([true]);
   });
 
-  it("detecta .xls antiguo y .ods con un mensaje útil", async () => {
-    await expect(readImportFile("a.xls", new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0]))).rejects.toThrow(/\.xlsx/);
+  it("un ZIP que no es un libro de Excel da un mensaje claro", async () => {
+    await expect(readImportFile("hoja.ods", await buildZip({ "content.xml": "<office/>" }))).rejects.toThrow(/OpenDocument/);
+    await expect(readImportFile("a.zip", await buildZip({ "hola.txt": "x" }))).rejects.toThrow(/no contiene un libro/);
   });
 });
 
@@ -160,7 +168,8 @@ describe("detección de formato", () => {
     if (other.kind === "tables") expect(other.tables.map((t) => t.name)).toEqual(["movimientos", "config"]);
   });
 
-  it("nunca ejecuta scripts SQL de texto", async () => {
-    await expect(readImportFile("dump.sql", enc("CREATE TABLE x (a); INSERT INTO x VALUES (1);"))).rejects.toThrow(/no se ejecuta/);
+  it("un SQL sin datos o con solo sentencias peligrosas se rechaza sin ejecutarse", async () => {
+    await expect(readImportFile("dump.sql", enc("DROP TABLE users; DELETE FROM x;"))).rejects.toThrow(/INSERT/);
+    await expect(readImportFile("dump.sql", enc("CREATE TABLE x (a, b);\nINSERT INTO x SELECT * FROM y;"))).rejects.toThrow(/INSERT con datos/);
   });
 });

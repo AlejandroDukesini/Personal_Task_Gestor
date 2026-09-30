@@ -74,12 +74,12 @@ syn("flexIncome", "ingreso|ingresos|income|is income|es ingreso|entrada|entradas
 syn("flexExpense", "gasto|gastos|egreso|egresos|expense|expenses|salida|salidas");
 syn("debit", "debito|debitos|debit|debits|cargo|cargos|retiro|retiros|withdrawal|withdrawals|money out|paid out|valor debito|monto debito");
 syn("credit", "credito|creditos|credit|credits|abono|abonos|deposito|depositos|deposit|deposits|money in|paid in|valor credito|monto credito");
-syn("account", "cuenta|account|billetera|wallet|cartera|banco|bank|cuenta origen|from account|source account|account name|wallet name|medio de pago|payment method|metodo de pago|forma de pago|monedero|conta");
+syn("account", "cuenta|account|wallet fk|wallet id|account id|cuenta id|id cuenta|billetera|wallet|cartera|banco|bank|cuenta origen|from account|source account|account name|wallet name|medio de pago|payment method|metodo de pago|forma de pago|monedero|conta");
 syn("toAccount", "cuenta destino|destino|to account|destination|destination account|target account|transfer to|cuenta de destino|hacia");
 syn("toAmount", "importe destino|to amount|amount received|monto destino|importe recibido|valor destino");
 syn("currency", "moneda|divisa|currency|curr|ccy|currency code|codigo moneda|moneda original|concurrencia|moeda");
-syn("category", "categoria|category|rubro|category name|nombre categoria|grupo|clasificacion|categoria principal|main category");
-syn("subcategory", "subcategoria|subcategory|subcategory name|sub category|sub categoria");
+syn("category", "categoria|category|category fk|category id|categoria id|id categoria|rubro|category name|nombre categoria|grupo|clasificacion|categoria principal|main category");
+syn("subcategory", "subcategoria|subcategory|sub category fk|subcategory fk|subcategory id|subcategory name|sub category|sub categoria");
 syn("concept", "concepto|concept|titulo|title|nombre|name|payee|beneficiario|comercio|merchant|detalle|glosa|descripcion corta|establecimiento|contraparte|counterparty|destinatario");
 syn("description", "descripcion|description|nota|notas|note|notes|memo|comentario|comentarios|observaciones|observacion|details|detalles|referencia|reference|informacion adicional");
 syn("tags", "etiquetas|tags|labels|etiqueta|tag|label");
@@ -175,6 +175,7 @@ interface ColumnStats {
   bool: number;
   kind: number;
   accountMatch: number;
+  idLike: number;
   distinct: number;
   avgLen: number;
 }
@@ -182,7 +183,7 @@ interface ColumnStats {
 function stats(values: Cell[], accountKeys: Set<string>): ColumnStats {
   const sample = values.filter((v) => !isBlank(v)).slice(0, 300);
   const decimal = detectDecimal(sample);
-  const s: ColumnStats = { filled: sample.length, date: 0, amount: 0, bool: 0, kind: 0, accountMatch: 0, distinct: new Set(sample.map(String)).size, avgLen: 0 };
+  const s: ColumnStats = { filled: sample.length, date: 0, amount: 0, bool: 0, kind: 0, accountMatch: 0, idLike: 0, distinct: new Set(sample.map(String)).size, avgLen: 0 };
   for (const v of sample) {
     const text = String(v);
     s.avgLen += text.length;
@@ -192,6 +193,7 @@ function stats(values: Cell[], accountKeys: Set<string>): ColumnStats {
     if (parseBool(v) !== null && !/^\d+$/.test(text.trim()) || typeof v === "boolean") s.bool++;
     if (parseKind(v)) s.kind++;
     if (accountKeys.has(normKey(v))) s.accountMatch++;
+    if (ID_LIKE.test(text.trim())) s.idLike++;
   }
   if (s.filled) s.avgLen /= s.filled;
   return s;
@@ -229,18 +231,38 @@ export interface DetectedMapping {
   mapping: ColumnMapping;
   source: MappingSource[];
   preset: Preset | null;
+  /** Avisos de la detección (p. ej. columnas de identificadores sin tabla de nombres). */
+  warnings: string[];
 }
+
+/** Sinónimo de una cabecera; `category (nombre)` cuenta como `category`. */
+function synonymOf(h: string): Synonym | undefined {
+  const k = headerKey(h);
+  return SYNONYMS[k] ?? SYNONYMS[k.replace(/\s(nombre|name)$/, "")];
+}
+
+const ID_LIKE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{24,40}|\d{1,12})$/i;
+
+/** ¿La columna contiene identificadores (UUID, hashes o números) en vez de nombres? */
+function looksLikeIds(values: Cell[]): boolean {
+  const filled = values.filter((v) => !isBlank(v)).slice(0, 200);
+  return filled.length > 0 && filled.filter((v) => ID_LIKE.test(String(v).trim())).length >= filled.length * 0.8;
+}
+
+const NAME_FIELDS = new Set<ImportField>(["account", "toAccount", "category", "subcategory"]);
 
 /**
  * Asignación automática. `accountNames`: cuentas existentes, para reconocer
  * una columna de cuenta por su contenido aunque la cabecera diga otra cosa.
  */
-export function detectMapping(headers: string[], rows: Cell[][], accountNames: string[] = []): DetectedMapping {
+export function detectMapping(headers: string[], rows: Cell[][], accountNames: string[] = [], idColumns: string[] = []): DetectedMapping {
   const preset = findPreset(headers);
   if (preset) {
     const mapping = mappingFromColumns(headers, preset.columns);
-    return { mapping, source: mapping.map((f) => (f ? "preset" : null)), preset };
+    return { mapping, source: mapping.map((f) => (f ? "preset" : null)), preset, warnings: [] };
   }
+  const warnings: string[] = [];
+  const isIdColumn = new Set(idColumns.map(headerKey));
 
   const accountKeys = new Set(accountNames.map(normKey));
   const col = (i: number) => rows.map((r) => r[i] ?? null);
@@ -258,8 +280,14 @@ export function detectMapping(headers: string[], rows: Cell[][], accountNames: s
 
   // 1) Por cabecera, corrigiendo con el contenido cuando contradice al nombre.
   headers.forEach((h, i) => {
-    const s = SYNONYMS[headerKey(h)];
+    if (isIdColumn.has(headerKey(h))) return; // se usa su columna «(nombre)»
+    const s = synonymOf(h);
     if (!s || s === "ignore") return;
+    // Un identificador nunca es un nombre de cuenta o categoría.
+    if (NAME_FIELDS.has(s as ImportField) && looksLikeIds(col(i))) {
+      warnings.push(`La columna «${h}» contiene identificadores, no nombres: no se asigna sola. Si el archivo trae la tabla con los nombres, usa esa; si no, asígnala a mano sabiendo que se crearán con esos códigos`);
+      return;
+    }
     const numeric = ratio(st[i].amount, st[i]) >= 0.8;
     const boolean = ratio(st[i].bool, st[i]) >= 0.8;
     if (s === "flexIncome") set(i, boolean ? "incomeFlag" : numeric ? "credit" : "kind", "header");
@@ -291,7 +319,7 @@ export function detectMapping(headers: string[], rows: Cell[][], accountNames: s
   }
 
   // 3) Por contenido, para lo imprescindible que siga sin asignar.
-  const free = (i: number) => !mapping[i] && SYNONYMS[headerKey(headers[i])] !== "ignore";
+  const free = (i: number) => !mapping[i] && synonymOf(headers[i]) !== "ignore" && !isIdColumn.has(headerKey(headers[i]));
   const best = (score: (s: ColumnStats) => number, min: number) => {
     let bi = -1;
     let bs = min;
@@ -323,11 +351,11 @@ export function detectMapping(headers: string[], rows: Cell[][], accountNames: s
       set(i, "concept", source[i] ?? "header");
     } else {
       // El texto más variado y largo suele ser el concepto.
-      const i = best((s) => (s.distinct / Math.max(1, s.filled)) * Math.min(1, s.avgLen / 8) - ratio(s.amount, s) - ratio(s.date, s), 0.3);
+      const i = best((s) => (s.distinct / Math.max(1, s.filled)) * Math.min(1, s.avgLen / 8) - ratio(s.amount, s) - ratio(s.date, s) - ratio(s.idLike, s), 0.3);
       if (i >= 0) set(i, "concept", "content");
     }
   }
-  return { mapping, source, preset: null };
+  return { mapping, source, preset: null, warnings };
 }
 
 /** Firma de un conjunto de cabeceras, para reconocer ficheros del mismo origen. */

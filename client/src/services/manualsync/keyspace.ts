@@ -197,6 +197,11 @@ const REFS: Partial<Record<EntryCollection, Ref[]>> = {
     { field: "accountIds", target: "finAccounts", many: true },
   ],
   finGoals: [{ field: "accountIds", target: "finAccounts", many: true }],
+  noteCategories: [{ field: "parentId", target: "noteCategories" }],
+  notes: [
+    { field: "categoryId", target: "noteCategories" },
+    { field: "subcategoryId", target: "noteCategories" },
+  ],
 };
 
 /** Claves a las que apunta una fila. */
@@ -246,6 +251,8 @@ export const COLLECTION_LABEL: Record<string, string> = {
   finGoals: "Meta de ahorro",
   finRecurring: "Recurrente",
   finTags: "Etiqueta financiera",
+  noteCategories: "Categoría de notas",
+  notes: "Nota",
   taskTags: "Etiquetas de tarea",
   settings: "Ajustes",
 };

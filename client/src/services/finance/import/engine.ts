@@ -1,5 +1,5 @@
 /**
- * Importación inteligente de movimientos (CSV, Excel, JSON, SQLite, Cashew).
+ * Importación inteligente de movimientos (CSV, TSV, Excel, JSON, SQL, SQLite, Cashew).
  *
  * A diferencia de la importación JSON propia (`io.ts`), que es todo o nada
  * porque restaura un estado completo, aquí cada fila se valida por separado:
@@ -14,6 +14,9 @@
  *     filas que ya existen (mismo id) no se pueden forzar.
  *   - Cuentas y categorías nuevas también tienen id determinista: importar el
  *     mismo fichero en dos dispositivos no crea dos cuentas al sincronizar.
+ *   - Lo que el sistema no puede decidir con seguridad (fechas ambiguas,
+ *     separador decimal dudoso, moneda desconocida, columnas deducidas por su
+ *     contenido) se pide al usuario: sin su confirmación no se importa.
  */
 
 import {
@@ -31,12 +34,13 @@ import {
 import { stripDangerousKeys } from "@/services/routeKit";
 import { toInputValue } from "@/lib/money";
 import { FINANCE_ROW_SCHEMAS } from "../schemas";
-import { addDays, todayKey } from "../dates";
+import { addDays, diffDays, todayKey } from "../dates";
 import { stableHash } from "../io";
 import { cashewRecords } from "./cashew";
-import { detectHeaderRow, detectMapping, headerSignature, IMPORT_FIELDS, type ColumnMapping, type ImportField } from "./columns";
+import { detectHeaderRow, detectMapping, FIELD_LABEL, headerSignature, IMPORT_FIELDS, type ColumnMapping, type ImportField } from "./columns";
 import {
   cleanText,
+  decimalAmbiguous,
   detectDateOrder,
   detectDecimal,
   isBalanceCorrection,
@@ -50,13 +54,16 @@ import {
   type Cell,
   type DateOrder,
   type DecimalSep,
+  type ZonePolicy,
 } from "./normalize";
 import {
   DEFAULT_OPTIONS,
   EDITABLE_FIELDS,
   type AccountHint,
+  type Confirmation,
   type DuplicateKind,
   type EditableField,
+  type EntityChoice,
   type Extracted,
   type ImportIssue,
   type ImportOptions,
@@ -77,10 +84,12 @@ const KIND_ES: Record<FinTxKind, string> = { income: "ingreso", expense: "gasto"
 
 function extractTable(db: Db, src: TableSource, wanted?: ColumnMapping): Extracted {
   const headers = src.headers.map((h, i) => cleanText(h) || `Columna ${i + 1}`);
-  const detected = detectMapping(headers, src.rows, db.finAccounts.map((a) => a.name));
+  const detected = detectMapping(headers, src.rows, db.finAccounts.map((a) => a.name), src.idColumns ?? []);
   const valid = wanted && wanted.length === headers.length && wanted.every((f) => f === null || (IMPORT_FIELDS as readonly string[]).includes(f));
   const mapping = valid ? wanted! : detected.mapping;
-  const mappingSource = valid ? mapping.map((f, i) => (f && f === detected.mapping[i] ? detected.source[i] : f ? "profile" : null)) : detected.source;
+  // Con una asignación explícita (del usuario o de su perfil), lo que coincide
+  // con la detección conserva su origen y lo demás es elección suya.
+  const mappingSource = valid ? mapping.map((f, i) => (f && f === detected.mapping[i] && detected.source[i] !== "content" ? detected.source[i] : f ? "profile" : null)) : detected.source;
 
   const sig = headerSignature(headers);
   const records: RawRecord[] = [];
@@ -90,7 +99,8 @@ function extractTable(db: Db, src: TableSource, wanted?: ColumnMapping): Extract
     mapping.forEach((f, c) => {
       if (f && isBlank(values[f]) && !isBlank(cells[c])) values[f] = cells[c];
     });
-    const rec: RawRecord = { row: src.firstRow + i, values, issues: [] };
+    const original = Object.fromEntries(headers.map((h, c) => [h, cells[c] === null || cells[c] === undefined ? "" : String(cells[c])]));
+    const rec: RawRecord = { row: src.firstRow + i, values, issues: [], original };
     // Los ids de otro programa («1», «2»…) se aíslan por formato de fichero
     // para que no choquen con los de otro origen.
     const id = cleanText(values.id);
@@ -102,6 +112,7 @@ function extractTable(db: Db, src: TableSource, wanted?: ColumnMapping): Extract
   });
 
   const fileIssues: ImportIssue[] = (src.notes ?? []).map((n) => issue(0, "file", "fixed", "", n, ""));
+  for (const w of detected.warnings) fileIssues.push(issue(0, "file", "warning", "", w, "Revisa la asignación en el apartado Columnas"));
   const has = (f: ImportField) => mapping.includes(f);
   if (!has("date")) fileIssues.push(issue(0, "date", "error", "", "No se encontró la columna de fecha", "Asigna la columna «Fecha» en el apartado Columnas"));
   if (!has("amount") && !has("debit") && !has("credit")) {
@@ -158,27 +169,42 @@ interface Draft {
   purposes: string;
   id: string;
   mergedInto?: number;
+  /** Hay que redondear a céntimos y el usuario aún no lo ha autorizado. */
+  roundingPending: boolean;
+  /** La fila queda fuera por decisión sobre su cuenta o categoría. */
+  entityExcluded?: string;
 }
 
 interface Ctx {
   order: DateOrder;
   decimal: DecimalSep | null;
+  zone: ZonePolicy;
+  allowRounding: boolean;
   today: string;
 }
 
 function normalize(rec: RawRecord, edits: Partial<Record<EditableField, string>> | undefined, ctx: Ctx): Draft {
   const v: RawRecord["values"] = { ...rec.values };
-  // Una corrección manual sustituye al valor original de ese campo.
-  for (const f of EDITABLE_FIELDS) if (edits && typeof edits[f] === "string") v[f] = edits[f]!;
   const row = rec.row;
   const out: ImportIssue[] = [...rec.issues];
   const add = (field: ImportIssue["field"], sev: IssueSeverity, original: unknown, message: string, suggestion = "") => out.push(issue(row, field, sev, original, message, suggestion));
+  // Una corrección manual sustituye al valor original de ese campo (y queda anotada).
+  for (const f of EDITABLE_FIELDS) {
+    if (!edits || typeof edits[f] !== "string") continue;
+    const target: ImportField = f === "category" && !isBlank(v.subcategory) ? "subcategory" : f;
+    const before = v[target];
+    v[target] = edits[f]!;
+    if (cleanText(before) !== cleanText(edits[f])) {
+      out.push({ ...issue(row, f, "fixed", before, `Corregido a mano: «${cleanText(edits[f]) || "(vacío)"}»`, ""), resolution: "manual" });
+    }
+  }
 
-  // Fecha
-  const d = parseFlexibleDate(v.date, ctx.order);
+  // Fecha: nunca se inventa. Si falta, es un error corregible desde la vista previa.
+  const d = parseFlexibleDate(v.date, ctx.order, ctx.zone);
   let date = d.date;
-  if (!date) add("date", "error", v.date, isBlank(v.date) ? "Falta la fecha" : `${d.error ?? "Fecha no válida"}: «${cleanText(v.date)}»`, "Escribe la fecha como AAAA-MM-DD o DD/MM/AAAA");
-  else {
+  if (!date) {
+    add("date", "error", v.date, isBlank(v.date) ? "Falta la fecha" : `${d.error ?? "Fecha no válida"}: «${cleanText(v.date)}»`, rec.dateSuggestion ?? "Escribe la fecha como AAAA-MM-DD o DD/MM/AAAA");
+  } else {
     const year = Number(date.slice(0, 4));
     if (year < 1900 || year > 2100) {
       add("date", "error", v.date, `Año fuera de rango (${year})`, "Revisa la fecha: se admiten años entre 1900 y 2100");
@@ -191,15 +217,19 @@ function normalize(rec: RawRecord, edits: Partial<Record<EditableField, string>>
   let amount: number | null = null;
   let currency: string | null = null;
   let sideKind: FinTxKind | null = null;
+  let roundingPending = false;
   const parseAmt = (field: ImportField, value: Cell | undefined) => {
     const r = parseFlexibleAmount(value, ctx.decimal);
     if (r.cents === null && !isBlank(value)) add(field, "error", value, `Importe no válido: «${cleanText(value)}» (${r.error})`, "Escribe el importe como 1234,56 o 1234.56");
     if (r.currency) currency = r.currency;
-    if (r.cents === 0 && (r.fixed || (typeof value === "number" && value !== 0))) {
+    if (r.cents === 0 && (r.rounded || (typeof value === "number" && value !== 0))) {
       add(field, "error", value, `El importe ${cleanText(value)} se queda en 0 al redondear a 2 decimales`, "La app guarda importes con 2 decimales (p. ej. criptomonedas en otra unidad): excluye la fila o regístrala a mano");
       return null;
     }
-    if (r.lossy) add(field, "warning", value, `${r.fixed}: el redondeo cambia el importe más de un 1 %`, "Comprueba el importe; la app guarda 2 decimales");
+    if (r.rounded && !ctx.allowRounding) {
+      roundingPending = true;
+      add(field, "warning", value, `${r.fixed}: la app guarda 2 decimales y el redondeo necesita tu autorización`, "Activa «Permitir redondeo» en Opciones o marca la fila para importarla redondeada");
+    } else if (r.lossy) add(field, "warning", value, `${r.fixed}: el redondeo cambia el importe más de un 1 %`, "Comprueba el importe; la app guarda 2 decimales");
     else if (r.fixed) add(field, "fixed", value, r.fixed);
     return r.cents;
   };
@@ -214,7 +244,7 @@ function normalize(rec: RawRecord, edits: Partial<Record<EditableField, string>>
     }
   } else add("amount", "error", "", "Falta el importe", "Asigna la columna de importe o escribe el valor");
 
-  // Moneda explícita del movimiento
+  // Moneda explícita del movimiento (nunca se convierte).
   let invalidCurrency: string | null = null;
   if (!isBlank(v.currency)) {
     const c = parseCurrency(v.currency);
@@ -223,6 +253,7 @@ function normalize(rec: RawRecord, edits: Partial<Record<EditableField, string>>
   }
 
   // Tipo: columna explícita > categoría de corrección > marca ingreso > débito/crédito > signo.
+  // El signo solo decide cuando el archivo no dice nada más.
   let kind: FinTxKind | null = null;
   let kindFromCorrection = false;
   let explicit = false;
@@ -301,6 +332,7 @@ function normalize(rec: RawRecord, edits: Partial<Record<EditableField, string>>
     purposes: cleanText(v.purposes),
     id: cleanText(v.id),
     mergedInto: rec.mergedInto,
+    roundingPending,
   };
 }
 
@@ -359,15 +391,38 @@ const ACCOUNT_STYLE: Record<string, { color: string; icon: string }> = {
   other: { color: "#64748b", icon: "Circle" },
 };
 
+/** Días de margen para señalar movimientos «parecidos» (mismo importe y cuenta). */
+const SIMILAR_DAYS = 3;
+
 export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
   const input = stripDangerousKeys(rawInput);
-  const options: ImportOptions = { ...DEFAULT_OPTIONS, ...(input.options ?? {}) };
+  const given = input.options ?? {};
+  const options: ImportOptions = {
+    ...DEFAULT_OPTIONS,
+    ...given,
+    accountMap: { ...(given.accountMap ?? {}) },
+    categoryMap: { ...(given.categoryMap ?? {}) },
+    duplicateFields: given.duplicateFields?.length ? given.duplicateFields : DEFAULT_OPTIONS.duplicateFields,
+    confirmed: given.confirmed ?? [],
+  };
+  const confirmed = new Set(options.confirmed);
   const ex: Extracted = input.source.type === "cashew" ? cashewRecords(input.source) : extractTable(db, input.source, input.mapping);
   const format = input.source.type === "cashew" ? "cashew" : input.source.format;
   const fileIssues = [...ex.fileIssues];
+  const confirmations: Confirmation[] = [];
 
   if (ex.records.length > MAX_IMPORT_ROWS) {
     throw new ApiError(413, `El fichero tiene ${ex.records.length} filas; el máximo por importación es ${MAX_IMPORT_ROWS}`);
+  }
+
+  // Columnas deducidas solo por su contenido: el usuario debe revisarlas.
+  const guessed = ex.mappingSource.map((s, i) => (s === "content" ? i : -1)).filter((i) => i >= 0);
+  if (!input.mapping && guessed.length && !confirmed.has("mapping")) {
+    confirmations.push({
+      key: "mapping",
+      message: `Estas columnas se asignaron por su contenido y no por su nombre: ${guessed.map((i) => `«${ex.headers[i]}» → ${FIELD_LABEL[ex.mapping[i]!]}`).join(", ")}`,
+      proposal: "Revísalas en el apartado Columnas y confirma la asignación",
+    });
   }
 
   // Convenciones de la columna entera (solo valores de texto: los números no son ambiguos).
@@ -375,14 +430,29 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
   const detectedOrder = detectDateOrder(dates);
   const amountsText = ex.records.flatMap((r) => [r.values.amount, r.values.debit, r.values.credit, r.values.toAmount]);
   const detectedDecimal = detectDecimal(amountsText);
+  if (options.dateOrder === "auto" && detectedOrder.ambiguous && !confirmed.has("dateOrder")) {
+    const sample = dates.find((x) => typeof x === "string" && /^\d{1,2}[/.\-\s]\d{1,2}[/.\-\s]\d{2,4}/.test(x.trim()));
+    confirmations.push({
+      key: "dateOrder",
+      message: `Las fechas son ambiguas (p. ej. «${cleanText(sample)}»): pueden ser DD/MM/AAAA o MM/DD/AAAA`,
+      proposal: "Elige el formato; si confirmas sin cambiarlo se leerán como DD/MM/AAAA",
+    });
+  }
+  if (options.decimal === "auto" && decimalAmbiguous(amountsText) && !confirmed.has("decimal")) {
+    const sample = amountsText.find((x) => typeof x === "string" && /\d[.,]\d{3}\b/.test(x));
+    confirmations.push({
+      key: "decimal",
+      message: `Los importes admiten dos lecturas (p. ej. «${cleanText(sample)}» puede ser mil o uno con decimales)`,
+      proposal: "Elige el separador decimal; si confirmas sin cambiarlo, «1.234» se leerá como mil doscientos treinta y cuatro",
+    });
+  }
   const ctx: Ctx = {
     order: options.dateOrder === "auto" ? detectedOrder.order : options.dateOrder,
     decimal: options.decimal === "auto" ? detectedDecimal : options.decimal,
+    zone: options.zone,
+    allowRounding: options.allowRounding,
     today: todayKey(),
   };
-  if (options.dateOrder === "auto" && detectedOrder.ambiguous) {
-    fileIssues.push(issue(0, "date", "warning", "", "Las fechas son ambiguas (p. ej. 03/04/2026): se leyeron como DD/MM/AAAA", "Si son MM/DD/AAAA, cámbialo en Opciones"));
-  }
 
   const edits = input.edits ?? {};
   const drafts = ex.records.map((r) => normalize(r, edits[String(r.row)], ctx));
@@ -400,7 +470,12 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
   for (const a of [...db.finAccounts].sort((x, y) => Number(y.archived) - Number(x.archived))) accountsByKey.set(normKey(a.name), a);
   const accountsById = new Map(db.finAccounts.map((a) => [a.id, a]));
   const plannedAccounts = new Map<string, FinAccountRow>();
+  /** Cuentas del archivo que no existen: nombre, filas y moneda deducida. */
+  const unknownAccounts = new Map<string, { name: string; rows: number; currency: string | null; choice: EntityChoice }>();
+  /** Moneda de cuentas nuevas tomada por defecto (no del archivo): requiere confirmación. */
+  const assumedCurrency = new Set<string>();
   const defaultAccount = options.defaultAccountId ? accountsById.get(options.defaultAccountId) ?? null : null;
+  const fallbackCurrency = options.defaultCurrency && /^[A-Z]{3}$/.test(options.defaultCurrency) ? options.defaultCurrency : db.settings.currency;
   if (options.defaultAccountId && !defaultAccount) fileIssues.push(issue(0, "account", "warning", options.defaultAccountId, "La cuenta por defecto ya no existe", "Elige otra en Opciones"));
   if (!ex.mapping.includes("account") && input.source.type === "table" && !defaultAccount) {
     fileIssues.push(issue(0, "account", "error", "", "No hay columna de cuenta ni cuenta por defecto", "Asigna la columna «Cuenta» o elige una cuenta por defecto en Opciones"));
@@ -423,40 +498,55 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
     }
     const key = normKey(name);
     const hint: AccountHint | undefined = ex.accountHints.get(key);
-    const existing = (hint?.id && accountsById.get(hint.id)) || accountsByKey.get(key) || plannedAccounts.get(key);
-    if (existing) return existing;
-    if (options.createAccounts) {
-      const cur = hint?.currency || (field === "account" ? d.currency ?? d.invalidCurrency : null) || db.settings.currency;
-      if (!/^[A-Z]{3}$/.test(cur)) {
-        d.issues.push(
-          issue(row, field, "error", name, `No se puede crear la cuenta «${name}»: su moneda «${cur}» no es un código ISO de 3 letras`, `Crea a mano una cuenta llamada «${name}» (p. ej. en USD) y vuelve a previsualizar, o excluye la fila`)
-        );
-        return null;
+    const known = (hint?.id && accountsById.get(hint.id)) || accountsByKey.get(key);
+    if (known) return known;
+
+    // Cuenta que no existe: decide el usuario (o, por defecto, las opciones generales).
+    const choice: EntityChoice = options.accountMap[key] ?? (options.createAccounts ? "create" : defaultAccount && field === "account" ? `id:${defaultAccount.id}` : "exclude");
+    const fileCurrency = hint?.currency || (field === "account" ? d.currency ?? d.invalidCurrency : null) || null;
+    const entry = unknownAccounts.get(key) ?? { name, rows: 0, currency: fileCurrency, choice };
+    entry.rows++;
+    unknownAccounts.set(key, entry);
+
+    if (choice.startsWith("id:")) {
+      const target = accountsById.get(choice.slice(3));
+      if (target) {
+        d.issues.push({ ...issue(row, field, "fixed", name, `La cuenta «${name}» no existe: se asignó a «${target.name}»`, ""), resolution: options.accountMap[key] ? "manual" : "auto" });
+        return target;
       }
-      const type = hint?.type ?? "other";
-      const acc: FinAccountRow = {
-        id: hint?.id ?? `imp-acc-${stableHash(key)}`,
-        name: name.slice(0, 60),
-        type,
-        currency: cur,
-        initialBalance: 0,
-        description: `Creada al importar (${format})`,
-        color: (ACCOUNT_STYLE[type] ?? ACCOUNT_STYLE.other).color,
-        icon: (ACCOUNT_STYLE[type] ?? ACCOUNT_STYLE.other).icon,
-        archived: hint?.archived ?? false,
-        includeInTotal: true,
-        createdAt: ts,
-        updatedAt: ts,
-      };
-      plannedAccounts.set(key, acc);
-      return acc;
     }
-    if (defaultAccount && field === "account") {
-      d.issues.push(issue(row, field, "warning", name, `La cuenta «${name}» no existe: se usó «${defaultAccount.name}»`, "Activa «Crear cuentas que falten» si quieres conservarla"));
-      return defaultAccount;
+    if (choice === "exclude" || choice === "none") {
+      d.entityExcluded = `La cuenta «${name}» no existe en la app y elegiste no importarla`;
+      d.issues.push(issue(row, field, "warning", name, `Cuenta «${name}» no encontrada: la fila no se importa`, "Asígnala a una cuenta existente o elige «Crear» en «Cuentas del archivo»"));
+      return null;
     }
-    d.issues.push(issue(row, field, "error", name, `Cuenta «${name}» no encontrada`, "Activa «Crear cuentas que falten», elige una cuenta por defecto o corrige el nombre"));
-    return null;
+    const planned = plannedAccounts.get(key);
+    if (planned) return planned;
+    const cur = fileCurrency || fallbackCurrency;
+    if (!/^[A-Z]{3}$/.test(cur)) {
+      d.issues.push(
+        issue(row, field, "error", name, `No se puede crear la cuenta «${name}»: su moneda «${cur}» no es un código ISO de 3 letras`, `Asígnala a una cuenta existente en «Cuentas del archivo», créala a mano (p. ej. en USD) o excluye la fila`)
+      );
+      return null;
+    }
+    if (!fileCurrency) assumedCurrency.add(name);
+    const type = hint?.type ?? "other";
+    const acc: FinAccountRow = {
+      id: hint?.id ?? `imp-acc-${stableHash(key)}`,
+      name: name.slice(0, 60),
+      type,
+      currency: cur,
+      initialBalance: 0,
+      description: `Creada al importar (${format})`,
+      color: (ACCOUNT_STYLE[type] ?? ACCOUNT_STYLE.other).color,
+      icon: (ACCOUNT_STYLE[type] ?? ACCOUNT_STYLE.other).icon,
+      archived: hint?.archived ?? false,
+      includeInTotal: true,
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    plannedAccounts.set(key, acc);
+    return acc;
   };
 
   /* ------------------------------------------------ categorías */
@@ -467,6 +557,7 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
   }
   const catsById = new Map(db.finCategories.map((c) => [c.id, c]));
   const plannedCats = new Map<string, FinCategoryRow>();
+  const unknownCats = new Map<string, { name: string; kind: string; rows: number; choice: EntityChoice }>();
   const fits = (c: FinCategoryRow, kind: FinTxKind) => c.kind === "both" || c.kind === kind;
 
   const resolveCategory = (d: Draft): string | null => {
@@ -478,15 +569,42 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
     const ok = found.find((c) => fits(c, kind));
     if (ok) return ok.id;
     const label = kind === "income" ? "ingreso" : "gasto";
-    if (!options.createCategories) {
-      d.issues.push(
-        found.length
-          ? issue(d.rec.row, "category", "warning", name, `La categoría «${name}» no es de ${label}: el movimiento queda sin categoría`, "Cambia el tipo de la categoría a «Ambos» o elige otra")
-          : issue(d.rec.row, "category", "warning", name, `La categoría «${name}» no existe: el movimiento queda sin categoría`, "Activa «Crear categorías que falten» o créala antes")
-      );
+
+    const choice: EntityChoice = options.categoryMap[key] ?? (options.createCategories ? "create" : "none");
+    const entry = unknownCats.get(key) ?? { name, kind, rows: 0, choice };
+    if (entry.kind !== kind) entry.kind = "both";
+    entry.rows++;
+    unknownCats.set(key, entry);
+    const manual = options.categoryMap[key] ? "manual" : "accepted";
+
+    if (choice.startsWith("id:")) {
+      const target = catsById.get(choice.slice(3));
+      if (target && fits(target, kind)) {
+        d.issues.push({ ...issue(d.rec.row, "category", "fixed", name, `Categoría «${name}» asignada a «${target.name}»`, ""), resolution: "manual" });
+        return target.id;
+      }
+      d.issues.push(issue(d.rec.row, "category", "warning", name, `La categoría elegida para «${name}» no admite ${label}s: queda sin categoría`, "Elige una categoría de ese tipo o «Ambos»"));
       return null;
     }
-    // Con el nombre ocupado por una categoría del otro tipo se crea una variante.
+    if (choice === "exclude") {
+      d.entityExcluded = `Elegiste no importar las filas de la categoría «${name}»`;
+      return null;
+    }
+    if (choice === "none") {
+      d.issues.push({
+        ...issue(
+          d.rec.row,
+          "category",
+          "warning",
+          name,
+          found.length ? `La categoría «${name}» no es de ${label}: el movimiento queda sin categoría` : `La categoría «${name}» no existe: el movimiento queda sin categoría`,
+          "Asígnala o créala en «Categorías del archivo»"
+        ),
+        resolution: manual,
+      });
+      return null;
+    }
+    // Crear. Con el nombre ocupado por una categoría del otro tipo se crea una variante.
     const finalName = found.length ? `${name.slice(0, 48)} (${label})` : name.slice(0, 60);
     const finalKey = normKey(finalName);
     const variant = (catsByKey.get(finalKey) ?? []).find((c) => fits(c, kind));
@@ -518,11 +636,36 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
   const purposeByName = new Map((db.finTags ?? []).filter((t) => tagOwnerActive(db, t)).map((t) => [normKey(t.name), t]));
 
   /* ------------------------------------------------ duplicados */
+  // Tres niveles: exacto (mismo id, o mismo contenido incluido el concepto),
+  // posible (coinciden los campos configurados) y parecido (mismo importe y
+  // cuenta a pocos días: solo aviso). Nunca se descarta nada con incertidumbre
+  // sin que el usuario pueda decidir.
   const existingIds = new Map(db.finTransactions.map((t) => [t.id, t]));
   const deletedIds = new Set(db.tombstones.filter((t) => t.collection === "finTransactions").map((t) => t.id));
-  const print = (t: Pick<FinTransactionRow, "date" | "accountId" | "kind" | "amount">) => `${t.date}|${t.accountId}|${t.kind}|${t.amount}`;
-  const remaining = new Map<string, number>();
-  for (const t of db.finTransactions) remaining.set(print(t), (remaining.get(print(t)) ?? 0) + 1);
+  const catName = (id: string | null) => (id ? normKey(catsById.get(id)?.name ?? plannedCatName(id)) : "");
+  const plannedCatName = (id: string) => [...plannedCats.values()].find((c) => c.id === id)?.name ?? "";
+  const exactKey = (t: FinTransactionRow) => `${t.date}|${t.accountId}|${t.kind}|${t.amount}|${normKey(t.concept)}`;
+  const fpKey = (t: FinTransactionRow) =>
+    options.duplicateFields
+      .map((f) => (f === "account" ? t.accountId : f === "concept" ? normKey(t.concept) : f === "category" ? catName(t.categoryId) : String(t[f])))
+      .join("|");
+  const counter = (key: (t: FinTransactionRow) => string) => {
+    const m = new Map<string, number>();
+    for (const t of db.finTransactions) m.set(key(t), (m.get(key(t)) ?? 0) + 1);
+    return m;
+  };
+  const exactLeft = counter(exactKey);
+  const fpLeft = counter(fpKey);
+  const similarIndex = new Map<string, string[]>();
+  for (const t of db.finTransactions) {
+    const k = `${t.accountId}|${t.kind}|${t.amount}`;
+    similarIndex.set(k, [...(similarIndex.get(k) ?? []), t.date]);
+  }
+  const take = (m: Map<string, number>, k: string) => {
+    const n = m.get(k) ?? 0;
+    if (n > 0) m.set(k, n - 1);
+    return n > 0;
+  };
   const occurrences = new Map<string, number>();
   const seenIds = new Set<string>();
 
@@ -626,15 +769,25 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
           } else if (existingIds.has(id)) {
             duplicate = "id";
             const prev = existingIds.get(id)!;
-            remaining.set(print(prev), (remaining.get(print(prev)) ?? 1) - 1);
+            take(exactLeft, exactKey(prev));
+            take(fpLeft, fpKey(prev));
             d.issues.push(issue(row, "id", "warning", id, "Ya importado antes (mismo identificador)", "No se vuelve a importar"));
           } else if (deletedIds.has(id)) {
             duplicate = "deleted";
             d.issues.push(issue(row, "id", "warning", id, "Lo importaste antes y después lo borraste", "Márcalo para importarlo de nuevo si fue un error"));
-          } else if ((remaining.get(print(tx)) ?? 0) > 0) {
+          } else if (take(exactLeft, exactKey(tx))) {
+            duplicate = "exact";
+            take(fpLeft, fpKey(tx));
+            d.issues.push(issue(row, "row", "warning", "", "Duplicado exacto: ya existe un movimiento con la misma fecha, cuenta, tipo, importe y concepto", "Márcalo solo si de verdad son dos movimientos"));
+          } else if (take(fpLeft, fpKey(tx))) {
             duplicate = "fingerprint";
-            remaining.set(print(tx), remaining.get(print(tx))! - 1);
-            d.issues.push(issue(row, "row", "warning", "", "Posible duplicado: ya hay un movimiento con la misma fecha, cuenta, tipo e importe", "Márcalo para importarlo si es un movimiento distinto"));
+            const fields = options.duplicateFields.map((f) => ({ date: "fecha", account: "cuenta", kind: "tipo", amount: "importe", concept: "concepto", category: "categoría" })[f]).join(", ");
+            d.issues.push(issue(row, "row", "warning", "", `Posible duplicado: ya hay un movimiento con la misma ${fields}`, "Márcalo para importarlo si es un movimiento distinto"));
+          } else {
+            const near = (similarIndex.get(`${tx.accountId}|${tx.kind}|${tx.amount}`) ?? []).find((x) => x !== tx!.date && Math.abs(diffDays(x, tx!.date)) <= SIMILAR_DAYS);
+            if (near) {
+              d.issues.push(issue(row, "row", "warning", "", `Parecido a un movimiento del ${near} (mismo importe y cuenta): probablemente es distinto`, "Se importa; revísalo si dudas"));
+            }
           }
           seenIds.add(id);
         }
@@ -644,27 +797,35 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
     const hasError = d.issues.some((i) => i.severity === "error");
     const hasWarning = d.issues.some((i) => i.severity === "warning" && !(duplicate && (i.field === "id" || i.field === "row")));
     const hasFixed = d.issues.some((i) => i.severity === "fixed");
-    const canInclude = !d.mergedInto && !hasError && !!tx && duplicate !== "id";
-    const defaultIn = canInclude && !duplicate && !d.rec.defaultExcluded;
+    const canInclude = !d.mergedInto && !hasError && !!tx && duplicate !== "id" && !d.entityExcluded;
+    const defaultIn = canInclude && !duplicate && !d.rec.defaultExcluded && !d.roundingPending;
     const included = canInclude && (decision === "exclude" ? false : decision === "include" ? true : defaultIn);
     if (d.rec.defaultExcluded && !d.mergedInto) d.issues.push(issue(row, "row", "warning", "", d.rec.defaultExcluded, "Se omite salvo que la marques para importar"));
+    if (d.entityExcluded && !d.issues.some((i) => i.message === d.entityExcluded)) d.issues.push(issue(row, "row", "warning", "", d.entityExcluded, "Cámbialo en «Cuentas y categorías del archivo»"));
 
     const status: PreviewRow["status"] = d.mergedInto
       ? "merged"
-      : d.rec.defaultExcluded && hasError
-        ? "excluded" // fila de totales o similar: no es un error que haya que corregir
+      : (d.rec.defaultExcluded || d.entityExcluded) && (hasError || !canInclude)
+        ? "excluded" // fila de totales o excluida por decisión: no es un error que corregir
         : hasError
-        ? "error"
-        : duplicate && !included
-          ? "duplicate"
-          : !included
-            ? "excluded"
-            : hasWarning
-              ? "warning"
-              : hasFixed
-                ? "fixed"
-                : "valid";
+          ? "error"
+          : duplicate && !included
+            ? "duplicate"
+            : !included
+              ? "excluded"
+              : hasWarning
+                ? "warning"
+                : hasFixed
+                  ? "fixed"
+                  : "valid";
     if (d.mergedInto) d.issues.push(issue(row, "row", "fixed", "", `Otra pata de la transferencia de la fila ${d.mergedInto}`, ""));
+
+    // Estado de resolución de cada incidencia, según lo que le pasa a la fila.
+    for (const i of d.issues) {
+      if (i.resolution === "manual") continue;
+      i.resolution =
+        i.severity === "fixed" ? "auto" : status === "excluded" || status === "merged" ? "excluded" : i.severity === "error" ? "pending" : included ? "accepted" : canInclude ? "pending" : "excluded";
+    }
 
     if (tx && included) {
       txById.set(tx.id, tx);
@@ -699,6 +860,7 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
         concept: d.concept,
         description: d.description ?? "",
       },
+      original: d.rec.original,
     });
   }
 
@@ -707,6 +869,16 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
   const usedCats = new Set([...categoryOfRow.values()].filter(Boolean));
   const accounts = [...plannedAccounts.values()].filter((a) => usedAccounts.has(a.id));
   const categories = [...plannedCats.values()].filter((c) => usedCats.has(c.id));
+
+  // Moneda obligatoria no indicada en el archivo: no se asume sin avisar.
+  const assumed = accounts.filter((a) => assumedCurrency.has(a.name));
+  if (assumed.length && !options.defaultCurrency && !confirmed.has("currency")) {
+    confirmations.push({
+      key: "currency",
+      message: `El archivo no indica la moneda de ${assumed.length === 1 ? "la cuenta nueva" : "las cuentas nuevas"} ${assumed.map((a) => `«${a.name}»`).join(", ")}`,
+      proposal: `Elige la moneda; si confirmas sin cambiarla se crearán en ${fallbackCurrency}`,
+    });
+  }
 
   const count = (s: PreviewRow["status"]) => rows.filter((r) => r.status === s).length;
   const preview: SmartPreview = {
@@ -731,17 +903,25 @@ export function planSmartImport(db: Db, rawInput: SmartImportInput): Plan {
     detected: { dateOrder: ctx.order, decimal: ctx.decimal, dateAmbiguous: detectedOrder.ambiguous },
     newAccounts: accounts.map((a) => ({ name: a.name, currency: a.currency })),
     newCategories: categories.map((c) => ({ name: c.name, kind: c.kind })),
+    confirmations,
+    unresolved: {
+      accounts: [...unknownAccounts.entries()].map(([key, a]) => ({ key, ...a })),
+      categories: [...unknownCats.entries()].map(([key, c]) => ({ key, ...c })),
+    },
   };
   return { preview, transactions: [...txById.values()], accounts, categories };
 }
 
 /**
  * Aplica la importación. Debe llamarse dentro de `mutate`: si algo lanza, la
- * base queda intacta. Las filas con error nunca se importan; el resto, según
- * las decisiones del usuario.
+ * base queda intacta (se trabaja sobre una copia y se guarda de una vez). Las
+ * filas con error nunca se importan; el resto, según las decisiones del usuario.
  */
 export function applySmartImport(db: Db, input: SmartImportInput): SmartImportResult {
   const plan = planSmartImport(db, input);
+  if (plan.preview.confirmations.length) {
+    throw new ApiError(400, `Falta tu confirmación: ${plan.preview.confirmations.map((c) => c.message).join(" · ")}`);
+  }
   if (plan.transactions.length === 0) throw new ApiError(400, "No hay movimientos válidos marcados para importar");
   const activeNames = new Set(db.finAccounts.filter((a) => !a.archived).map((a) => normKey(a.name)));
   for (const a of plan.accounts) {

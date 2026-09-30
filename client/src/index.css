@@ -260,3 +260,54 @@ body {
     user-select: text;
   }
 }
+
+/* ------------------------------------------------------------ notas */
+/* Contenido del editor de notas: jerarquía tipográfica coherente con la app.
+   Tailwind resetea listas y títulos; aquí se restauran solo dentro del editor. */
+.note-content {
+  outline: none;
+  line-height: 1.65;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.note-content > * + * { margin-top: 0.6em; }
+.note-content h1 { font-size: 1.75rem; line-height: 1.25; font-weight: 700; margin-top: 1em; }
+.note-content h2 { font-size: 1.35rem; line-height: 1.3; font-weight: 650; margin-top: 0.9em; }
+.note-content h3 { font-size: 1.1rem; line-height: 1.35; font-weight: 600; margin-top: 0.8em; }
+.note-content h1:first-child, .note-content h2:first-child, .note-content h3:first-child { margin-top: 0; }
+.note-content ul { list-style: disc; padding-left: 1.5rem; }
+.note-content ol { list-style: decimal; padding-left: 1.5rem; }
+.note-content li > p { margin: 0.15em 0; }
+.note-content blockquote { border-left: 3px solid rgb(var(--border)); padding-left: 0.9rem; color: rgb(var(--subtle)); }
+.note-content hr { border: none; border-top: 1px solid rgb(var(--border)); margin: 1.2em 0; }
+.note-content a { color: rgb(var(--primary)); text-decoration: underline; text-underline-offset: 2px; }
+.note-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: rgb(var(--subtle));
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Cálculos: la operación y su resultado quedan visualmente unidos. */
+.note-calc-expr { background: rgb(var(--primary) / 0.08); border-radius: 3px; }
+.note-calc-result {
+  display: inline-block;
+  margin-left: 1px;
+  padding: 0 0.3em;
+  border-radius: 4px;
+  background: rgb(var(--primary) / 0.16);
+  color: rgb(var(--primary));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+}
+.note-calc-result:hover { background: rgb(var(--primary) / 0.28); }
+.note-content:not([contenteditable="true"]) .note-calc-result { cursor: default; }
+.note-calc-error { text-decoration: underline wavy rgb(var(--warning)); text-underline-offset: 3px; cursor: help; }
+.note-calc-mismatch { text-decoration: underline wavy rgb(var(--danger)); text-underline-offset: 3px; cursor: help; }
+.note-calc-checked { background: rgb(var(--success) / 0.08); }
+@media print {
+  .note-calc-result { background: none; color: inherit; }
+}

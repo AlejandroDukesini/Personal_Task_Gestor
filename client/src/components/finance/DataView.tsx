@@ -37,6 +37,7 @@ export function DataView({ data, reload }: { data: FinanceData; reload: () => vo
   const [jsonImport, setJsonImport] = useState<{ payload: unknown; mode: "newer" | "merge"; summary: ImportSummary } | null>(null);
   const [smart, setSmart] = useState<Exclude<DetectedFile, { kind: "native" }> | null>(null);
   const [reading, setReading] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const stamp = new Date().toISOString().slice(0, 10);
 
@@ -135,17 +136,33 @@ export function DataView({ data, reload }: { data: FinanceData; reload: () => vo
             <Upload size={16} aria-hidden /> Importar
           </CardTitle>
           <CardDescription>
-            CSV, Excel (.xlsx), JSON o base de datos SQLite (incluidas las copias de Cashew). Cada fila se valida por separado y ves una vista previa antes de aplicar nada. Por seguridad nunca se ejecuta SQL importado.
+            CSV, TSV, Excel (.xlsx y .xls), JSON, volcados SQL o bases de datos SQLite (incluidas las copias de Cashew). Cada fila se valida por separado y ves una vista previa antes de aplicar nada. Por seguridad nunca se ejecuta SQL importado.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button variant="outline" onClick={() => fileRef.current?.click()} loading={reading}>
-            <FileUp size={14} /> Elegir archivo
-          </Button>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) pickFile(f).catch((err) => toast.error(errorMessage(err)));
+            }}
+            className={`rounded-md border-2 border-dashed p-4 flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left transition-colors ${dragging ? "border-primary bg-primary/10" : "border-border"}`}
+          >
+            <Button variant="outline" onClick={() => fileRef.current?.click()} loading={reading}>
+              <FileUp size={14} /> Elegir archivo
+            </Button>
+            <span className="text-xs text-subtle">o arrástralo aquí · CSV, TSV, Excel (.xlsx y .xls), JSON, SQL o SQLite</span>
+          </div>
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,.tsv,.txt,.xlsx,.json,.sql,.sqlite,.db,.sqlite3,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".csv,.tsv,.txt,.xlsx,.xls,.json,.sql,.sqlite,.db,.sqlite3,text/csv,text/tab-separated-values,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

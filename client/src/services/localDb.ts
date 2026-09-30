@@ -7,7 +7,7 @@ import { createRestorePoint, openStorage, persistDb, type StorageInfo } from "./
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export interface SettingsRow {
   id: number;
@@ -367,6 +367,67 @@ export interface FinRecurringRow {
   updatedAt: string;
 }
 
+/* ------------------------------------------------------------------ notas */
+
+/**
+ * Categoría de notas. Con `parentId` es una subcategoría (un solo nivel): las
+ * subcategorías solo se muestran dentro de su categoría principal.
+ */
+export interface NoteCategoryRow {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Metadatos de un adjunto. El contenido binario NO vive aquí (la base se
+ * guarda y sincroniza entera): está en el almacén de archivos de IndexedDB,
+ * indexado por el SHA-256 de su contenido (`fileKey`). Dos notas con el mismo
+ * archivo comparten el binario; solo se borra cuando ninguna nota lo usa.
+ */
+export interface NoteAttachment {
+  id: string;
+  fileKey: string;
+  /** Nombre original saneado (sin rutas ni caracteres peligrosos). */
+  name: string;
+  /** Nombre o descripción personalizada. */
+  label: string | null;
+  /** Tipo detectado por el contenido, no el que declara el navegador. */
+  kind: string;
+  mime: string;
+  size: number;
+  addedAt: string;
+}
+
+export interface NoteRow {
+  id: string;
+  title: string;
+  /** Resumen breve opcional (además del contenido enriquecido). */
+  description: string | null;
+  /** Documento ProseMirror/TipTap ya saneado (ver notes/content.ts). */
+  content: unknown;
+  /** Texto plano derivado del contenido: búsqueda y vista previa. */
+  text: string;
+  categoryId: string | null;
+  subcategoryId: string | null;
+  /** Color de identificación (`#rrggbb`) o null = el de la categoría. */
+  color: string | null;
+  icon: string;
+  attachments: NoteAttachment[];
+  archived: boolean;
+  /** Papelera: fecha de borrado lógico; null = no está en la papelera. */
+  deletedAt: string | null;
+  /** Cálculos automáticos en el editor y decimales (null = automático). */
+  mathEnabled: boolean;
+  mathDecimals: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Lápida de borrado. Sin ella, sincronizar dos dispositivos por "última
  * escritura gana" resucitaría cualquier fila borrada en A la próxima vez que B
@@ -398,6 +459,8 @@ export interface Db {
   finGoals: FinGoalRow[];
   finRecurring: FinRecurringRow[];
   finTags: FinTagRow[];
+  noteCategories: NoteCategoryRow[];
+  notes: NoteRow[];
   tombstones: TombstoneRow[];
 }
 
@@ -419,6 +482,8 @@ export const SYNCED_COLLECTIONS = [
   "finGoals",
   "finRecurring",
   "finTags",
+  "noteCategories",
+  "notes",
 ] as const;
 
 export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
@@ -559,6 +624,8 @@ function emptyDb(): Db {
     finGoals: [],
     finRecurring: [],
     finTags: [],
+    noteCategories: [],
+    notes: [],
     tombstones: [],
   };
 }
@@ -616,6 +683,16 @@ export const MIGRATIONS: Migration[] = [
       // asignaciones (ver finance/calc `allocationsOf`). Reescribirlos
       // cambiaría su contenido con la misma marca y un dispositivo sin
       // actualizar podría quedarse con otra versión de la misma fila.
+    },
+  },
+  {
+    version: 5,
+    description: "Módulo de notas: notas, categorías y subcategorías de notas",
+    up: (db) => {
+      // Solo añade colecciones nuevas: no toca ningún dato existente.
+      db.notes ??= [];
+      db.noteCategories ??= [];
+      if (db.noteCategories.length === 0) db.noteCategories = defaultNoteCategories();
     },
   },
 ];
@@ -741,6 +818,27 @@ export function listDbBackups(): { key: string; version: number; size: number }[
   return out.sort((a, b) => b.version - a.version);
 }
 
+/** Categorías de notas iniciales. Ids fijos: dos dispositivos no las duplican. */
+export function defaultNoteCategories(): NoteCategoryRow[] {
+  const c = (id: string, name: string, color: string, icon: string): NoteCategoryRow => ({
+    id: `notecat-${id}`,
+    name,
+    color,
+    icon,
+    parentId: null,
+    createdAt: SEED_STAMP,
+    updatedAt: SEED_STAMP,
+  });
+  return [
+    c("personal", "Personal", "#6366f1", "User"),
+    c("work", "Trabajo", "#f59e0b", "Briefcase"),
+    c("study", "Estudios", "#0ea5e9", "GraduationCap"),
+    c("ideas", "Ideas", "#eab308", "Lightbulb"),
+    c("finance", "Finanzas", "#16a34a", "Wallet"),
+    c("projects", "Proyectos", "#8b5cf6", "FolderKanban"),
+  ];
+}
+
 /** Categorías financieras iniciales. Ids fijos: dos dispositivos no las duplican. */
 export function defaultFinCategories(): FinCategoryRow[] {
   const c = (
@@ -852,10 +950,14 @@ export async function bootDb(): Promise<StorageInfo> {
 }
 
 export function saveDb(db: Db, origin: DbOrigin = "local"): void {
+  const previous = cache;
   cache = db;
   try {
     persistDb(db);
   } catch {
+    // Si no se pudo guardar, la memoria vuelve al estado anterior: la app no
+    // debe mostrar datos (p. ej. una importación) que no están persistidos.
+    cache = previous;
     throw new ApiError(
       507,
       "No hay espacio en el almacenamiento del navegador. Exporta una copia y elimina datos antiguos."
@@ -1081,6 +1183,7 @@ function seed(db: Db): Db {
   ];
 
   db.finCategories = defaultFinCategories();
+  db.noteCategories = defaultNoteCategories();
 
   return db;
 }

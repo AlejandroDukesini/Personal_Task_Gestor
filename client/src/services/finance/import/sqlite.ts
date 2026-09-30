@@ -12,10 +12,18 @@
 
 export type SqliteValue = string | number | null;
 
+export interface ForeignKey {
+  column: string;
+  table: string;
+  /** Columna referenciada; null = la clave primaria de la otra tabla. */
+  refColumn: string | null;
+}
+
 export interface SqliteTable {
   name: string;
   columns: string[];
   rows: SqliteValue[][];
+  foreignKeys?: ForeignKey[];
 }
 
 const MAGIC = "SQLite format 3\u0000";
@@ -48,7 +56,7 @@ export class SqliteReader {
   }
 
   /** Tablas de usuario con sus columnas (sin leer todavía las filas). */
-  tables(): { name: string; columns: string[]; rootPage: number; withoutRowid: boolean; rowidAlias: number }[] {
+  tables(): ({ name: string; rootPage: number } & ReturnType<typeof parseCreateTable>)[] {
     const out: ReturnType<SqliteReader["tables"]> = [];
     for (const row of this.scan(1)) {
       const [type, name, , rootPage, sql] = row.values;
@@ -73,7 +81,7 @@ export class SqliteReader {
       rows.push(row);
       if (rows.length > maxRows) throw new SqliteError(`La tabla «${name}» supera ${maxRows} filas`);
     }
-    return { name, columns: t.columns, rows };
+    return { name, columns: t.columns, rows, foreignKeys: t.foreignKeys };
   }
 
   /** Recorre en orden un árbol B de tabla (hojas 0x0D, interiores 0x05). */
@@ -183,10 +191,10 @@ export class SqliteReader {
 }
 
 /** Nombres de columna de un `CREATE TABLE`, sin evaluar nada. */
-export function parseCreateTable(sql: string): { columns: string[]; withoutRowid: boolean; rowidAlias: number } {
+export function parseCreateTable(sql: string): { columns: string[]; withoutRowid: boolean; rowidAlias: number; foreignKeys: ForeignKey[] } {
   const open = sql.indexOf("(");
   const close = sql.lastIndexOf(")");
-  if (open < 0 || close < open) return { columns: [], withoutRowid: false, rowidAlias: -1 };
+  if (open < 0 || close < open) return { columns: [], withoutRowid: false, rowidAlias: -1, foreignKeys: [] };
   const body = sql.slice(open + 1, close);
   const withoutRowid = /\)\s*WITHOUT\s+ROWID/i.test(sql.slice(close - 1));
   const defs: string[] = [];
@@ -216,8 +224,15 @@ export function parseCreateTable(sql: string): { columns: string[]; withoutRowid
   if (cur.trim()) defs.push(cur.trim());
 
   const columns: string[] = [];
+  const foreignKeys: ForeignKey[] = [];
   let rowidAlias = -1;
   for (const def of defs) {
+    // [CONSTRAINT x] FOREIGN KEY (a) REFERENCES t (b)
+    const tableFk = def.match(FK_TABLE_RE);
+    if (tableFk) {
+      foreignKeys.push({ column: unquote(tableFk[2]), table: unquote(tableFk[3]), refColumn: tableFk[4] ? unquote(tableFk[4]) : null });
+      continue;
+    }
     if (/^(CONSTRAINT|PRIMARY\s+KEY|UNIQUE|CHECK|FOREIGN\s+KEY)\b/i.test(def)) continue;
     const m = def.match(/^(?:"((?:[^"]|"")*)"|`([^`]*)`|\[([^\]]*)\]|'((?:[^']|'')*)'|(\S+))/);
     if (!m) continue;
@@ -226,9 +241,23 @@ export function parseCreateTable(sql: string): { columns: string[]; withoutRowid
     if (/^\s*INTEGER\b(?![^,]*\bDESC\b)[^,]*\bPRIMARY\s+KEY\b/i.test(def.slice(m[0].length))) {
       rowidAlias = columns.length;
     }
+    const colFk = def.slice(m[0].length).match(FK_COLUMN_RE);
+    if (colFk) foreignKeys.push({ column: name, table: unquote(colFk[1]), refColumn: colFk[2] ? unquote(colFk[2]) : null });
     columns.push(name);
   }
-  return { columns, withoutRowid, rowidAlias };
+  return { columns, withoutRowid, rowidAlias, foreignKeys };
+}
+
+/** Identificador SQL: "x", `x`, [x] o sin comillas. */
+const IDENT = String.raw`("(?:[^"]|"")*"|\`[^\`]*\`|\[[^\]]*\]|[\w$]+)`;
+const FK_TABLE_RE = new RegExp(String.raw`^(?:CONSTRAINT\s+${IDENT}\s+)?FOREIGN\s+KEY\s*\(\s*${IDENT}\s*\)\s*REFERENCES\s+${IDENT}\s*(?:\(\s*${IDENT}\s*\))?`, "i");
+const FK_COLUMN_RE = new RegExp(String.raw`\bREFERENCES\s+${IDENT}\s*(?:\(\s*${IDENT}\s*\))?`, "i");
+
+export function unquote(id: string): string {
+  const t = id.trim();
+  if (t.length >= 2 && t[0] === '"' && t.endsWith('"')) return t.slice(1, -1).replace(/""/g, '"');
+  if (t.length >= 2 && ((t[0] === "`" && t.endsWith("`")) || (t[0] === "[" && t.endsWith("]")))) return t.slice(1, -1);
+  return t;
 }
 
 /** Todas las tablas de usuario de un fichero SQLite. */

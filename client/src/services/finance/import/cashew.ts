@@ -91,11 +91,26 @@ export function cashewRecords(src: CashewSource): Extracted {
     const note = cleanText(t.note);
     const objective = objectives.get(str(t.objective_fk));
     const description = [note, objective ? `Objetivo en Cashew: ${objective}` : ""].filter(Boolean).join("\n") || null;
+    // Fecha ausente o a cero: se deja vacía (nunca se inventa); la de
+    // modificación solo se ofrece como pista en la sugerencia.
+    const created = typeof t.date_created === "number" && t.date_created > 0 ? t.date_created : null;
+    const modified = typeof t.date_time_modified === "number" && t.date_time_modified > 0 ? new Date(t.date_time_modified * 1000).toISOString().slice(0, 10) : undefined;
     const base: RawRecord = {
       row,
-      values: { id: `cashew-${pk}`, date: num(t.date_created), concept: cleanText(t.name), description, account: walletName(t.wallet_fk) },
+      values: { id: `cashew-${pk}`, date: created, concept: cleanText(t.name), description, account: walletName(t.wallet_fk) },
       kindLocked: true,
       issues: [],
+      original: {
+        transaction_pk: pk,
+        name: str(t.name),
+        amount: str(t.amount),
+        date_created: str(t.date_created),
+        wallet: walletName(t.wallet_fk),
+        category: categoryName(t.category_fk),
+        subcategory: categoryName(t.sub_category_fk),
+        note: str(t.note),
+      },
+      dateSuggestion: created ? undefined : modified && `Cashew registra una modificación el ${modified}; si es la fecha del movimiento, escríbela`,
     };
     if (num(t.paid) === 0) base.defaultExcluded = "Pendiente de pago en Cashew";
 

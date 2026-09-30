@@ -54,7 +54,7 @@ import { todayKey } from "./dates";
 import { applyFinanceImport, applyCsvImport, exportFinance, planCsvImport, planFinanceImport } from "./io";
 import { applySmartImport, MAX_IMPORT_ROWS, planSmartImport } from "./import/engine";
 import { IMPORT_FIELDS } from "./import/columns";
-import { EDITABLE_FIELDS } from "./import/types";
+import { DUPLICATE_FIELDS, EDITABLE_FIELDS, type EntityChoice } from "./import/types";
 import type { Cell } from "./import/normalize";
 
 const ACCOUNT_COLORS: Record<string, string> = {
@@ -995,18 +995,23 @@ const cellRecords = (max: number) =>
     (rows) => Array.isArray(rows) && rows.length <= max && rows.every((r) => !!r && typeof r === "object" && !Array.isArray(r) && Object.values(r).every(isCell)),
     "Registros con formato no válido"
   );
-const notes = z.array(z.string().max(500)).max(20).optional();
+const notes = z.array(z.string().max(500)).max(40).optional();
+/** Nombre normalizado de una cuenta/categoría del archivo -> decisión del usuario. */
+const entityMap = z
+  .record(z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/, "Decisión no válida"))
+  .refine((m) => Object.keys(m).length <= 5000, "Demasiadas asignaciones") as z.ZodType<Record<string, EntityChoice>>;
 
 const smartBody = z.object({
   source: z.discriminatedUnion("type", [
     z.object({
       type: z.literal("table"),
-      format: z.enum(["csv", "xlsx", "json", "sqlite"]),
+      format: z.enum(["csv", "tsv", "xlsx", "xls", "json", "sqlite", "sql"]),
       name: z.string().max(200).optional(),
       headers: z.array(z.string().max(500)).max(300),
       rows: cellRows,
       firstRow: z.number().int().min(1).max(10_000_000),
       notes,
+      idColumns: z.array(z.string().max(500)).max(300).optional(),
     }),
     z.object({
       type: z.literal("cashew"),
@@ -1015,6 +1020,7 @@ const smartBody = z.object({
       transactions: cellRecords(MAX_IMPORT_ROWS),
       objectives: cellRecords(2000).optional().transform((v) => v ?? []),
       notes,
+      origin: z.enum(["sqlite", "sql"]).optional(),
     }),
   ]),
   mapping: z.array(z.enum(IMPORT_FIELDS).nullable()).max(300).optional(),
@@ -1022,9 +1028,16 @@ const smartBody = z.object({
     .object({
       dateOrder: z.enum(["auto", "dmy", "mdy", "ymd"]),
       decimal: z.enum(["auto", ",", "."]),
+      zone: z.enum(["local", "utc"]),
+      allowRounding: z.boolean(),
       defaultAccountId: idSchema.nullable(),
+      defaultCurrency: z.string().regex(/^[A-Z]{3}$/, "Moneda inválida (código ISO de 3 letras)").nullable(),
       createAccounts: z.boolean(),
       createCategories: z.boolean(),
+      accountMap: entityMap,
+      categoryMap: entityMap,
+      duplicateFields: z.array(z.enum(DUPLICATE_FIELDS)).max(DUPLICATE_FIELDS.length),
+      confirmed: z.array(z.enum(["dateOrder", "decimal", "currency", "mapping"])).max(4),
     })
     .partial()
     .optional(),

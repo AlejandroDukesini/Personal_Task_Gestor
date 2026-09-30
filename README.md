@@ -293,7 +293,7 @@ Sección **Finanzas** (`/finanzas`) con pestañas: Resumen, Movimientos, Cuentas
 | **Metas de ahorro** | Aportaciones y retiradas como transferencias reales (sin doble conteo), ritmo medio, aportación mensual necesaria y fecha estimada. Pausar, completar, archivar. |
 | **Recurrentes** | Salario, arriendo, facturas, suscripciones. Calendario de próximos movimientos y obligaciones. **Lo previsto nunca se marca solo como pagado**: se registra el importe/fecha reales con un clic (idempotente). |
 | **Análisis** | Ingresos vs gastos, evolución del saldo y del ahorro, gastos/ingresos por categoría, comparación con el periodo anterior, flujo entre cuentas, cumplimiento de presupuestos y metas. Cada gráfico tiene vista de tabla y permite ver los movimientos que lo componen. Recomendaciones con su **base declarada**; si no hay historial suficiente, lo dice. Simulador de recortes y calculadora de ahorro necesario. |
-| **Datos** | Exportación JSON (reimportable), CSV y **SQL** (SQLite). Importación JSON/CSV con vista previa, validación completa, detección de duplicados y aplicación atómica. El SQL no se importa: ejecutar scripts ajenos sería ejecutar código arbitrario. |
+| **Datos** | Exportación JSON (reimportable), CSV y **SQL** (SQLite). **Importación universal** (ver abajo) de CSV, TSV, Excel, JSON, volcados SQL y bases SQLite —incluidas las copias de **Cashew**— con validación fila a fila; la copia JSON propia se restaura de forma atómica (todo o nada). El SQL importado **nunca se ejecuta**: se analiza como texto. |
 
 ### Etiquetas financieras y finalidades
 
@@ -314,6 +314,47 @@ Cada presupuesto y meta de ahorro tiene una **etiqueta obligatoria** (`#Ordenado
 *   **Recurrentes**: plantilla de reparto que se aplica al registrar cada ocurrencia (ids deterministas, nunca asigna más de lo cobrado).
 *   **Importación/exportación**: JSON incluye etiquetas; CSV con columna `finalidades` (`#Ordenador=500|#ViajeJapon=300`); SQL con la migración `V2__finance_tags`.
 
+### Importación universal de movimientos
+
+Pestaña **Datos → Importar**: se elige o se arrastra un archivo, se revisa el análisis automático, se resuelven las dudas y se confirma. Todo ocurre en el navegador: ningún dato financiero sale del dispositivo.
+
+**Formatos** (detectados por su **contenido**, no por la extensión; si no coinciden se avisa):
+
+| Formato | Lector | Notas |
+| :--- | :--- | :--- |
+| CSV / TSV | `import/sources.ts` | Separador `,` `;` tab `\|` o `sep=`; UTF-8, UTF-16 o Windows-1252; repara CSV reenvueltos por Excel. |
+| Excel `.xlsx` | `import/xlsx.ts` | ZIP + XML sin dependencias; todas las hojas; fechas por formato de celda; tope anti ZIP-bomba. |
+| Excel 97-2003 `.xls` | `import/xls.ts` | Contenedor OLE2 + BIFF8; fórmulas por su último resultado (nunca se evalúan); sistema de fechas 1904; detecta archivos cifrados. |
+| JSON | `import/sources.ts` | Listas de objetos (anidadas o varias listas relacionadas: `accountId` → nombre de la cuenta). |
+| SQL de texto | `import/sqldump.ts` | Solo `CREATE TABLE` e `INSERT … VALUES` con literales; el resto se ignora y se informa. `sqlite3 .dump` y `mysqldump`. |
+| SQLite | `import/sqlite.ts` | Lectura de solo lectura de las páginas del archivo (sin WebAssembly, que la CSP bloquea); claves foráneas → nombres. |
+| Cashew | `import/cashew.ts` | Copia `.sql` (SQLite), volcado SQL o CSV (perfil predefinido para sus cabeceras en español/inglés). |
+
+Añadir un formato (OFX, QIF…) = registrar un `ImportReader` con `registerReader`; el resto del sistema no cambia.
+
+**Proceso**
+
+1. **Columnas**: reconocidas por nombre (sinónimos en español, inglés y portugués), por contenido o por un perfil guardado. Las columnas de identificadores (`category_fk`, `wallet_id`…) nunca se toman como nombres: se usan las tablas relacionadas. Lo deducido solo por contenido requiere confirmación.
+2. **Normalización** (`import/normalize.ts`): fechas ISO con o sin hora/milisegundos/zona, `DD/MM/AAAA`, `MM/DD/AAAA`, `DD-MM-AAAA`, `AAAA/MM/DD`, nombres de mes, seriales de Excel y timestamps Unix (s, ms, µs); importes con cualquier separador, símbolo o código de moneda, `(1.200)`, `20-`, `CR/DR`. Tipo: columna explícita > marca ingreso/gasto > débito/crédito > signo.
+3. **Confirmaciones obligatorias**: fechas ambiguas (`03/04/2026`), separador decimal dudoso (`1.500`), moneda de cuentas nuevas no indicada y columnas deducidas por contenido. Sin respuesta, no se importa.
+4. **Validación fila a fila** con tres niveles —*corregido automáticamente*, *advertencia* y *error crítico*— y, por cada incidencia, fila, campo, valor original, problema, solución y estado de resolución. Una fila con error no bloquea las demás.
+5. **Decisiones del usuario**: corregir campos desde la vista previa, incluir/excluir filas, asignar cuentas y categorías desconocidas a existentes, crearlas, dejar sin categoría o excluir sus filas.
+6. **Duplicados** en tres niveles: *exacto* (mismo id —no se puede forzar— o mismo contenido), *posible* (campos configurables: fecha, cuenta, tipo, importe, concepto, categoría) y *parecido* (mismo importe y cuenta a ±3 días: solo aviso). Lo dudoso se omite por defecto pero se puede importar.
+7. **Guardado atómico**: tras un diálogo de confirmación, todo se escribe en una sola operación sobre una copia (`mutate`); si falla (p. ej. sin espacio), no queda nada a medias ni en memoria ni en disco. Ids deterministas: repetir la importación no duplica.
+8. **Informe**: resumen de importados, corregidos, omitidos y rechazados; CSV con todas las incidencias y CSV con las filas no importadas (valores originales + motivo) para corregirlas y reimportarlas.
+
+Las preferencias (columnas, formato de fecha y decimales, zona horaria, cuentas/categorías asignadas, criterio de duplicados) se guardan por origen en este dispositivo y se aplican solas la próxima vez.
+
+**Limitaciones conocidas**
+
+*   La app guarda importes con **2 decimales**: importes con más (p. ej. criptomonedas) requieren autorización para redondear, y los que quedarían en 0 se rechazan.
+*   Solo se guarda el **día** del movimiento (no la hora); los instantes con zona se convierten según la política elegida (día local del dispositivo o UTC).
+*   No se convierten monedas: un movimiento en una moneda distinta a la de su cuenta es un error.
+*   Cuentas con monedas que no son códigos ISO de 3 letras (p. ej. `USDT`) no se crean solas: se asignan a una cuenta existente.
+*   No se admiten `.ods`, Excel anterior a 97, páginas HTML guardadas como `.xls` ni archivos protegidos con contraseña (se explica cómo convertirlos).
+*   De Cashew no se importan presupuestos ni objetivos como entidades (el objetivo queda anotado en la descripción); las transferencias cuya pareja se borró en Cashew entran como correcciones con aviso.
+*   La escritura en IndexedDB es una única transacción; si fallara de forma asíncrona, la app muestra el aviso de almacenamiento existente y al recargar se ve el estado anterior completo.
+
 **Decisiones de integridad**
 
 *   Importes en **céntimos enteros** (`lib/money.ts`): sin errores de coma flotante.
@@ -325,6 +366,46 @@ Cada presupuesto y meta de ahorro tiene una **etiqueta obligatoria** (`#Ordenado
 
 *   Base local versionada (`localDb.MIGRATIONS`, versión actual 4: crea de forma determinista la etiqueta de cada presupuesto y meta existentes). Antes de migrar se guarda una copia íntegra del JSON previo (`gestion-tareas:db:backup-v<N>`).
 *   SQL versionado para el servidor: `server/prisma/migrations/finance/V1__finance.sql` (tablas `fin_*`, CHECKs de signo, claves foráneas e índices) y `V2__finance_tags.sql` (`fin_tags`, `fin_allocations` y trigger de tope), generado desde `client/src/services/finance/sql.ts` con `npm run sql:gen`. Un test comprueba que el fichero y el código coinciden y ejecuta esquema + volcado en SQLite real. Los modelos Prisma equivalentes están en `schema.prisma`. Para aplicar las restricciones CHECK en una base del servidor: `sqlite3 server/prisma/dev.db < server/prisma/migrations/finance/V1__finance.sql`.
+
+---
+
+## 📝 Módulo de Notas
+
+Sección **Notas** (`/notas`, también en la paleta de comandos: «Nueva nota»). Notas con texto enriquecido, categorías y subcategorías, color y símbolo, archivos adjuntos y **cálculos automáticos** dentro del texto.
+
+| Funcionalidad | Detalle |
+| :--- | :--- |
+| **CRUD** | Crear (título obligatorio; el contenido puede quedar vacío), ver, editar todos los campos, duplicar (id y fechas propias, adjuntos compartidos), archivar/desarchivar y **papelera** (borrado lógico, restaurar, eliminar definitivamente, vaciar). |
+| **Organización** | Categorías y subcategorías (un nivel) con color y símbolo. Al borrar una categoría con notas se elige: moverlas a otra, dejarlas sin categoría o enviarlas a la papelera. Las categorías nunca se identifican solo por color (siempre icono + nombre). |
+| **Consulta** | Vista de tarjetas o de lista, búsqueda sin tildes en título, descripción, contenido, categorías y nombres de adjuntos; filtros por estado, categoría, subcategoría, fechas y adjuntos; orden por modificación, creación, título o categoría; carga progresiva de 30 en 30. |
+| **Editor** | TipTap/ProseMirror: tipografía, tamaño, color (paleta, personalizado o predeterminado), negrita, cursiva, subrayado, tachado, título/subtítulo/sección/cuerpo, listas, alineación, enlaces (solo http(s), mailto, tel), deshacer/rehacer y atajos de teclado. Barra desplazable en el móvil. |
+| **Autoguardado** | Agrupa cambios (0,9 s), indicador «Guardado / Guardando / Sin guardar», guarda al salir, al ocultar la pestaña y al cerrarla. Copia de recuperación en `localStorage` que solo se borra cuando la escritura en disco termina: tras un cierre brusco se ofrece **recuperar** los cambios. |
+| **Adjuntos** | Varios por nota, arrastrar y soltar, vista previa de imágenes y texto, PDF en pestaña nueva, descarga, renombrar/descripción, reemplazar y quitar. PDF, PNG, JPG, WEBP, GIF, texto (txt, md, csv, json), RTF, Word, Excel, PowerPoint y OpenDocument; ampliable con `registerAttachmentType`. |
+| **Exportar** | Markdown, HTML (autónomo y escapado) y texto, con los resultados de los cálculos incluidos. |
+
+### Cálculos automáticos
+
+Al escribir `200+200=` aparece `400` justo después del `=`. Admite `+ - * /` (también `× ÷`), paréntesis, decimales (punto o coma), negativos y porcentaje con una convención fija: **`x%` = `x/100`** (`1500*19%=285`).
+
+*   **Seguro**: analizador propio de descenso recursivo; nunca `eval` ni `Function`. Límites de longitud, cifras y anidación.
+*   **Exacto**: fracciones de `BigInt` (`0.1+0.2=0.3`). Solo se redondea al mostrar: automático hasta 10 decimales o un número fijo por nota, redondeo «mitad lejos de cero»; el resultado redondeado se indica.
+*   **Sin sorpresas al escribir**: el resultado se dibuja (no se inserta en el texto), así que no se duplica, no mueve el cursor y se actualiza al cambiar la operación sin tocar el resto de la nota. Solo se recalculan los párrafos modificados.
+*   **Control del usuario**: clic en el resultado (o `Ctrl/Cmd+Mayús+Intro`) lo fija como texto normal editable; el botón «Fijar resultados» los fija todos; los cálculos se pueden desactivar por nota. Un resultado escrito a mano que no coincide se subraya; una expresión incompleta o con división entre cero se marca con el motivo, nunca con un resultado falso.
+*   **No calcula lo que no es un cálculo**: fechas (`26/09/2026`, `2026-09-26`), teléfonos (`300-555-1234`), códigos con ceros a la izquierda (`007`), cifras pegadas a palabras (`abc12+3`) ni comparaciones (`==`, `<=`, `>=`, `!=`).
+
+### Datos, seguridad y sincronización
+
+*   **Modelo** (`localDb.ts`, migración **v5**, solo añade colecciones): `noteCategories` (con `parentId`) y `notes` (título, descripción, contenido JSON, texto derivado para buscar, categoría/subcategoría, color, símbolo, adjuntos, archivado, `deletedAt`, ajustes de cálculo, fechas). Categorías iniciales con ids fijos (dos dispositivos no las duplican).
+*   **Contenido** guardado como JSON estructurado (no HTML). `sanitizeDoc` aplica listas blancas de nodos, marcas y atributos (colores `#rrggbb`, tipografías y tamaños permitidos, enlaces seguros) en cada escritura, en las copias de seguridad y en la sincronización: una fila con contenido no saneado se rechaza.
+*   **Adjuntos**: el binario va a una base IndexedDB propia (`gestion-tareas-files`), no al JSON de la app, con clave SHA-256 (un mismo archivo en dos notas se guarda una vez y solo se borra cuando ninguna nota, ni de la papelera, lo usa). El tipo se decide por la firma del contenido, no por la extensión ni por el MIME del navegador; se rechazan ejecutables, scripts, HTML y SVG, dobles extensiones engañosas y nombres con rutas o caracteres peligrosos. Al abrir se usa el MIME de la app. Máximo 15 MB por archivo, 60 MB y 30 adjuntos por nota.
+*   **Sincronización y copias**: notas y categorías se sincronizan entre dispositivos y entran en la copia JSON con las mismas validaciones.
+
+**Limitaciones conocidas**
+
+*   Los **binarios de los adjuntos no se sincronizan ni van en la copia JSON** (solo sus datos): en otro dispositivo aparecen como «no disponible en este dispositivo». Sincronizar binarios requeriría ampliar el protocolo de sincronización.
+*   El PDF se abre en el visor del navegador (pestaña nueva); los documentos de Office se descargan (no hay visor integrado). La exportación a PDF se hace imprimiendo el HTML exportado.
+*   La sincronización resuelve conflictos por nota completa: si la misma nota se edita a la vez en dos dispositivos, se elige una versión (no se fusionan párrafos).
+*   Separador de miles no admitido en los cálculos: `1.500` se lee como 1,5 (se recomienda escribir `1500`).
 
 ---
 

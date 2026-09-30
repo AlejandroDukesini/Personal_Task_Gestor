@@ -130,6 +130,13 @@ function textOf(xml: string): string {
 
 const BUILTIN_DATE_FORMATS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
 
+/** ¿Este código de formato numérico de Excel pinta una fecha u hora? */
+export function isDateFormatCode(code: string): boolean {
+  // Se ignora lo entrecomillado y entre corchetes (colores, locales).
+  const bare = code.replace(/"[^"]*"|\[[^\]]*\]|\\./g, "");
+  return /[dmyh]/i.test(bare) && !/^[#0.,%\s]*$/.test(bare);
+}
+
 /** Índices de estilo (`s="N"`) cuyas celdas son fechas. */
 function dateStyles(stylesXml: string | null): Set<number> {
   const out = new Set<number>();
@@ -142,10 +149,7 @@ function dateStyles(stylesXml: string | null): Set<number> {
   const isDateFmt = (id: number) => {
     if (BUILTIN_DATE_FORMATS.has(id)) return true;
     const code = custom.get(id);
-    if (!code) return false;
-    // Se ignora lo entrecomillado y entre corchetes (colores, locales).
-    const bare = code.replace(/"[^"]*"|\[[^\]]*\]|\\./g, "");
-    return /[dmyh]/i.test(bare) && !/^[#0.,%\s]*$/.test(bare);
+    return !!code && isDateFormatCode(code);
   };
   const xfs = stylesXml.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/)?.[1] ?? "";
   let i = 0;
@@ -156,7 +160,7 @@ function dateStyles(stylesXml: string | null): Set<number> {
   return out;
 }
 
-function serialToText(serial: number): string {
+export function serialToText(serial: number): string {
   const whole = Math.floor(serial);
   const d = new Date(1899, 11, 30 + whole);
   d.setSeconds(Math.round((serial - whole) * 86400));

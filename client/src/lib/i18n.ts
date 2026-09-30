@@ -6,6 +6,7 @@ const es: Dict = {
   // Navegación
   "nav.dashboard": "Dashboard",
   "nav.tasks": "Tareas",
+  "nav.notes": "Notas",
   "nav.habits": "Hábitos",
   "nav.calendar": "Calendario",
   "nav.categories": "Categorías",
@@ -155,6 +156,7 @@ const es: Dict = {
 const en: Dict = {
   "nav.dashboard": "Dashboard",
   "nav.tasks": "Tasks",
+  "nav.notes": "Notes",
   "nav.habits": "Habits",
   "nav.calendar": "Calendar",
   "nav.categories": "Categories",

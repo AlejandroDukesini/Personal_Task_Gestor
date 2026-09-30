@@ -199,3 +199,129 @@ export function bankStatementXlsx(): Promise<Uint8Array> {
     "xl/worksheets/sheet2.xml": `<?xml version="1.0"?><worksheet><sheetData/></worksheet>`,
   });
 }
+
+/* -------------------------------------------------------------------- XLS */
+
+const le16 = (n: number) => [n & 0xff, (n >> 8) & 0xff];
+const le32 = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >>> 24) & 0xff];
+const f64 = (n: number) => {
+  const b = new DataView(new ArrayBuffer(8));
+  b.setFloat64(0, n, true);
+  return [...new Uint8Array(b.buffer)];
+};
+const rec = (type: number, data: number[]) => [...le16(type), ...le16(data.length), ...data];
+const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0) & 0xff);
+const utf16 = (s: string) => [...s].flatMap((c) => le16(c.charCodeAt(0)));
+/** XLUnicodeString: longitud de 16 bits + opciones + caracteres (8 o 16 bits). */
+const xlString = (s: string) => ([...s].some((c) => c.charCodeAt(0) > 255) ? [...le16(s.length), 1, ...utf16(s)] : [...le16(s.length), 0, ...ascii(s)]);
+const rkInt100 = (cents: number) => (((cents << 2) | 0x03) >>> 0); // entero ×100
+
+/** Contenedor CFB v3 mínimo con los flujos indicados (sin mini flujo: cada uno ≥ 4096 bytes). */
+export function buildCfb(streams: Record<string, Uint8Array>): Uint8Array {
+  const S = 512;
+  const names = Object.keys(streams);
+  const padded = names.map((n) => {
+    const d = streams[n];
+    const len = Math.max(4096, Math.ceil(d.length / S) * S);
+    const out = new Uint8Array(len);
+    out.set(d);
+    return out;
+  });
+  const fat: number[] = [0xfffffffd, 0xfffffffe]; // sector 0 = FAT, 1 = directorio
+  const starts: number[] = [];
+  for (const p of padded) {
+    const first = fat.length;
+    starts.push(p.length ? first : 0xfffffffe);
+    const n = p.length / S;
+    for (let i = 0; i < n; i++) fat.push(i === n - 1 ? 0xfffffffe : first + i + 1);
+  }
+  if (fat.length > S / 4) throw new Error("fixture demasiado grande");
+  while (fat.length < S / 4) fat.push(0xffffffff);
+  const header = new Uint8Array(S);
+  header.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  const hv = new DataView(header.buffer);
+  hv.setUint16(0x18, 0x3e, true);
+  hv.setUint16(0x1a, 3, true);
+  hv.setUint16(0x1c, 0xfffe, true);
+  hv.setUint16(0x1e, 9, true);
+  hv.setUint16(0x20, 6, true);
+  hv.setUint32(0x2c, 1, true);
+  hv.setUint32(0x30, 1, true);
+  hv.setUint32(0x38, 4096, true);
+  hv.setUint32(0x3c, 0xfffffffe, true);
+  hv.setUint32(0x44, 0xfffffffe, true);
+  hv.setUint32(0x4c, 0, true);
+  for (let i = 1; i < 109; i++) hv.setUint32(0x4c + i * 4, 0xffffffff, true);
+  const fatSector = new Uint8Array(fat.flatMap(le32));
+  const dir = new Uint8Array(S);
+  const entry = (i: number, name: string, type: number, start: number, size: number) => {
+    const o = i * 128;
+    const n = utf16(name);
+    dir.set(n, o);
+    new DataView(dir.buffer).setUint16(o + 0x40, n.length + 2, true);
+    dir[o + 0x42] = type;
+    new DataView(dir.buffer).setUint32(o + 0x74, start, true);
+    new DataView(dir.buffer).setUint32(o + 0x78, size, true);
+  };
+  entry(0, "Root Entry", 5, 0xfffffffe, 0);
+  names.forEach((n, i) => entry(i + 1, n, 2, starts[i], padded[i].length));
+  const parts = [header, fatSector, dir, ...padded];
+  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+
+/**
+ * Libro BIFF8 con una hoja «Movimientos»: cadenas del SST (una partida entre
+ * SST y CONTINUE), texto en línea de 16 bits, fecha con formato, RK, MULRK,
+ * fórmulas con resultado numérico y de texto, y un booleano.
+ */
+export function buildXls(opts: { encrypted?: boolean; date1904?: boolean } = {}): Uint8Array {
+  const long = "Supermercado del barrio";
+  const sstStrings = ["Fecha", "Concepto", "Importe"];
+  // SST: las 3 primeras enteras y la larga partida en dos registros.
+  const sstHead = [...le32(4), ...le32(4), ...sstStrings.flatMap(xlString), ...le16(long.length), 0, ...ascii(long.slice(0, 10))];
+  const sstCont = [0, ...ascii(long.slice(10))]; // el CONTINUE empieza con un byte de opciones
+  const globalsWithoutSheet = (sheetPos: number) => [
+    ...rec(0x0809, [...le16(0x0600), ...le16(0x0005), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    ...(opts.encrypted ? rec(0x002f, [0, 0, 0, 0]) : []),
+    ...(opts.date1904 ? rec(0x0022, le16(1)) : []),
+    ...rec(0x041e, [...le16(164), ...xlString("dd/mm/yyyy")]),
+    ...rec(0x00e0, [0, 0, ...le16(0), ...new Array(16).fill(0)]),
+    ...rec(0x00e0, [0, 0, ...le16(14), ...new Array(16).fill(0)]),
+    ...rec(0x00e0, [0, 0, ...le16(164), ...new Array(16).fill(0)]),
+    ...rec(0x0085, [...le32(sheetPos), 0, 0, 11, 0, ...ascii("Movimientos")]),
+    ...rec(0x00fc, sstHead),
+    ...rec(0x003c, sstCont),
+    ...rec(0x000a, []),
+  ];
+  const size = globalsWithoutSheet(0).length;
+  const cell = (r: number, c: number, xf: number) => [...le16(r), ...le16(c), ...le16(xf)];
+  const serial = opts.date1904 ? 46291 - 1462 : 46291;
+  const sheet = [
+    ...rec(0x0809, [...le16(0x0600), ...le16(0x0010), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    ...rec(0x00fd, [...cell(0, 0, 0), ...le32(0)]),
+    ...rec(0x00fd, [...cell(0, 1, 0), ...le32(1)]),
+    ...rec(0x00fd, [...cell(0, 2, 0), ...le32(2)]),
+    // Fila 2: fecha (NUMBER con formato 14), concepto del SST largo, importe RK ×100.
+    ...rec(0x0203, [...cell(1, 0, 1), ...f64(serial)]),
+    ...rec(0x00fd, [...cell(1, 1, 0), ...le32(3)]),
+    ...rec(0x027e, [...cell(1, 2, 0), ...le32(rkInt100(-4500050))]),
+    // Fila 3: fecha con formato propio (dd/mm/yyyy) por fórmula, texto en línea UTF-16 y MULRK.
+    ...rec(0x0006, [...cell(2, 0, 2), ...f64(serial + 1), 0, 0, 0, 0, 0, 0]),
+    ...rec(0x0204, [...cell(2, 1, 0), ...xlString("Nómina €")]),
+    ...rec(0x00bd, [...le16(2), ...le16(2), ...le16(0), ...le32(rkInt100(250000000)), ...le16(0), ...le32(rkInt100(100)), ...le16(3)]),
+    // Fila 4: fórmula de texto (resultado en STRING) y booleano.
+    ...rec(0x0203, [...cell(3, 0, 0), ...f64(serial + 2)]),
+    ...rec(0x0006, [...cell(3, 1, 0), 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 0, 0, 0, 0]),
+    ...rec(0x0207, xlString("Café")),
+    ...rec(0x0205, [...cell(3, 2, 0), 1, 0]),
+    ...rec(0x000a, []),
+  ];
+  const workbook = new Uint8Array([...globalsWithoutSheet(size), ...sheet]);
+  return buildCfb({ Workbook: workbook });
+}

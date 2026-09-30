@@ -36,6 +36,8 @@ import {
   type Route,
 } from "./routeKit";
 import { financeRoutes } from "./finance/routes";
+import { notesRoutes } from "./notes/routes";
+import { NOTE_ROW_SCHEMAS } from "./notes/schemas";
 import { goalProgress } from "./finance/calc";
 import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
 import { todayKey } from "./finance/dates";
@@ -546,6 +548,7 @@ function safeSettings(db: Db) {
 const routes: Route[] = [
   ["GET", "/health", () => ok({ ok: true, version: "1.1.0" })],
   ...financeRoutes,
+  ...notesRoutes,
 
   // Categorías
   ["GET", "/categories", () => {
@@ -1291,6 +1294,9 @@ const routes: Route[] = [
         finGoals: db.finGoals,
         finRecurring: db.finRecurring,
         finTags: db.finTags,
+        noteCategories: db.noteCategories,
+        // Los binarios de los adjuntos no viajan en la copia (solo sus datos).
+        notes: db.notes,
         // Sin el hash del PIN: una copia no debe servir para atacarlo offline.
         settings: { ...db.settings, pinHash: null },
       },
@@ -1328,6 +1334,8 @@ const routes: Route[] = [
           finGoals: rows,
           finRecurring: rows,
           finTags: rows,
+          noteCategories: rows,
+          notes: rows,
           // `settings` viaja en el fichero por compatibilidad, pero nunca se
           // aplica: importar ajustes ajenos permitiría, por ejemplo, sustituir
           // el hash del PIN por uno conocido por el atacante.
@@ -1349,8 +1357,20 @@ const routes: Route[] = [
       });
     }
 
+    // Las notas también: su contenido enriquecido debe venir ya saneado.
+    for (const c of ["noteCategories", "notes"] as const) {
+      (data[c] ?? []).forEach((r, i) => {
+        const res = NOTE_ROW_SCHEMAS[c].safeParse(stripDangerousKeys(r));
+        if (!res.success) {
+          throw new ApiError(400, `Copia no válida: ${c}[${i}] ${res.error.issues[0]?.path.join(".")}: ${res.error.issues[0]?.message}`);
+        }
+      });
+    }
+
     mutate((db) => {
       if (replace) {
+        db.notes = [];
+        db.noteCategories = [];
         db.categories = [];
         db.tags = [];
         db.tasks = [];
@@ -1386,6 +1406,8 @@ const routes: Route[] = [
       upsert(db.reminders, data.reminders ?? []);
       upsert(db.goals, data.goals ?? []);
       for (const c of FINANCE_COLLECTIONS) upsert(db[c] as { id: string }[], data[c] ?? []);
+      upsert(db.noteCategories, data.noteCategories ?? []);
+      upsert(db.notes, data.notes ?? []);
       // Filas de versiones anteriores: rellena los campos nuevos.
       for (const t of db.tasks) {
         t.recurrence ??= null;

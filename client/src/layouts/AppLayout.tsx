@@ -16,6 +16,7 @@ import {
   Laptop,
   Search,
   Wallet,
+  StickyNote,
   RefreshCw,
   MoreHorizontal,
   X,
@@ -38,6 +39,7 @@ interface NavItem {
 const nav: NavItem[] = [
   { to: "/", icon: LayoutDashboard, label: "nav.dashboard" },
   { to: "/tareas", icon: CheckSquare, label: "nav.tasks" },
+  { to: "/notas", icon: StickyNote, label: "nav.notes" },
   { to: "/habitos", icon: Activity, label: "nav.habits" },
   { to: "/calendario", icon: Calendar, label: "nav.calendar" },
   { to: "/categorias", icon: Folder, label: "nav.categories" },

@@ -31,6 +31,7 @@
 import {
   FINANCE_ROW_SCHEMAS,
 } from "@/services/finance/schemas";
+import { NOTE_ROW_SCHEMAS } from "@/services/notes/schemas";
 import {
   SYNCED_COLLECTIONS,
   ensureOwnerTags,
@@ -231,6 +232,9 @@ function validateEntry(w: WireEntry): string | null {
   if (String(w.row.id) !== id) return `${w.key}: el id no coincide`;
   const schema = (FINANCE_ROW_SCHEMAS as Record<string, { safeParse: (v: unknown) => { success: boolean } }>)[collection];
   if (schema && !schema.safeParse(w.row).success) return `${w.key}: datos financieros no válidos`;
+  // Notas: el contenido enriquecido debe llegar ya saneado (nada de HTML ni estilos peligrosos).
+  const noteSchema = (NOTE_ROW_SCHEMAS as Record<string, { safeParse: (v: unknown) => { success: boolean } }>)[collection];
+  if (noteSchema && !noteSchema.safeParse(w.row).success) return `${w.key}: nota no válida`;
   return null;
 }
 

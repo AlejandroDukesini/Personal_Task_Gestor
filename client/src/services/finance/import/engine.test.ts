@@ -35,7 +35,13 @@ describe("formatos de fecha e importe", () => {
         "07/09/26;20-;Año corto;Banco",
       ].join("\n")
     );
-    const p = await preview({ source });
+    // «02/09/2026» y «07/09/26» no deciden el orden: el usuario lo confirma (DD/MM).
+    const first = await preview({ source });
+    expect(first.confirmations.map((c) => c.key)).toEqual(["dateOrder"]);
+    await expectStatus(400, apply({ source }));
+    const options = { dateOrder: "dmy" as const };
+    const p = await preview({ source, options });
+    expect(p.confirmations).toEqual([]);
     expect(p.totals).toMatchObject({ total: 7, errors: 0, toImport: 7 });
     expect(p.detected.decimal).toBe(",");
     const got = p.rows.map((r) => [r.date, r.kind, r.amount]);
@@ -51,7 +57,7 @@ describe("formatos de fecha e importe", () => {
     expect(messages(row(p, 8))).toMatch(/2 cifras/); // el año corto se avisa como autocorrección
     expect(row(p, 8).status).toBe("fixed");
 
-    const res = await apply({ source });
+    const res = await apply({ source, options });
     expect(res.imported).toBe(7);
     expect(accountBalances(loadDb()).get(bank.id)).toBe(123456 - 4500 + 200000 + 500050 - 30000 + 1000 - 2000);
   });
@@ -67,14 +73,19 @@ describe("formatos de fecha e importe", () => {
     ]);
   });
 
-  it("fechas ambiguas: se avisa a nivel de archivo y la opción manda", async () => {
+  it("fechas ambiguas: se pide confirmación y no se importa sin ella", async () => {
     await makeAccount({ name: "Banco" });
     const source = csv("fecha,importe,concepto,cuenta\n03/04/2026,10,a,Banco\n05/06/2026,10,b,Banco\n");
     const p = await preview({ source });
-    expect(p.fileIssues.some((i) => /ambiguas/.test(i.message))).toBe(true);
-    expect(p.rows[0].date).toBe("2026-04-03");
+    expect(p.confirmations).toEqual([expect.objectContaining({ key: "dateOrder", message: expect.stringMatching(/03\/04\/2026/) })]);
+    expect(await expectStatus(400, apply({ source }))).toMatch(/Falta tu confirmación/);
+    // Confirmar la propuesta (DD/MM) o elegir el orden resuelve la duda.
+    const ok = await preview({ source, options: { confirmed: ["dateOrder"] } });
+    expect(ok.confirmations).toEqual([]);
+    expect(ok.rows[0].date).toBe("2026-04-03");
     const mdy = await preview({ source, options: { dateOrder: "mdy" } });
     expect(mdy.rows[0].date).toBe("2026-03-04");
+    expect((await apply({ source, options: { dateOrder: "mdy" } })).imported).toBe(2);
   });
 
   it("columnas de débito y crédito, y tipos en inglés", async () => {
@@ -205,7 +216,9 @@ describe("categorías y cuentas desconocidas", () => {
     const p = await preview({ source });
     expect(p.newAccounts).toEqual([{ name: "Revolut", currency: "EUR" }]);
     const off = await preview({ source, options: { createAccounts: false } });
-    expect(off.rows[0].issues.find((i) => i.field === "account")?.suggestion).toMatch(/Crear cuentas/);
+    expect(off.rows[0]).toMatchObject({ status: "excluded", canInclude: false });
+    expect(off.rows[0].issues.find((i) => i.field === "account")?.suggestion).toMatch(/Cuentas del archivo/);
+    expect(off.unresolved.accounts).toEqual([{ key: "revolut", name: "Revolut", rows: 1, currency: "EUR", choice: "exclude" }]);
   });
 });
 
@@ -325,10 +338,11 @@ describe("informe", () => {
     await makeAccount({ name: "Banco" });
     const p = await preview({ source: csv("fecha,importe,concepto,cuenta\n2026-09-01,=1+1,x,Banco\n") });
     const lines = parseCsv(importReportCsv(p).replace(/^﻿/, ""));
-    expect(lines[0]).toEqual(["fila", "estado", "se_importa", "campo", "gravedad", "valor_original", "problema", "solucion_sugerida"]);
+    expect(lines[0]).toEqual(["fila", "estado", "se_importa", "campo", "gravedad", "valor_original", "problema", "solucion_sugerida", "resolucion"]);
     const err = lines.find((l) => l[4] === "Error crítico")!;
     expect(err.slice(0, 6)).toEqual(["2", "Error", "no", "Importe (con signo)", "Error crítico", "'=1+1"]); // fórmula neutralizada
     expect(err[7]).toMatch(/1234/);
+    expect(err[8]).toBe("Pendiente");
   });
 });
 

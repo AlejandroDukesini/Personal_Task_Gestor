@@ -1,7 +1,7 @@
 {
   "name": "gestion-tareas",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "Sistema de Productividad Personal Local-First (Tareas, Hábitos, Calendario, Objetivos)",
   "workspaces": [
     "server",

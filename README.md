@@ -1,4 +1,4 @@
-![Imagen del menú del proyecto](site-web.png)
+![Imagen del menú del proyecto](<img width="1919" height="900" alt="image" src="https://github.com/user-attachments/assets/55da33d2-d56b-4b5d-ac0d-56b07cc35a46" />)
 # 🚀 Sistema de Productividad Personal (Local-First by Vibecoding) 1.0.0v
 
 Una plataforma modular de productividad personal al estilo **Notion + Todoist + Google Calendar + Habit Tracker**, diseñada bajo el concepto **Local-First** para garantizar total privacidad, rapidez y control de tus datos sin depender de servidores en la nube.

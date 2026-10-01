@@ -512,7 +512,7 @@ function safeSettings(db: Db) {
 // -------------------------------------------------------------------- rutas
 
 const routes: Route[] = [
-  ["GET", "/health", () => ok({ ok: true, version: "1.1.0" })],
+  ["GET", "/health", () => ok({ ok: true, version: "1.2.1" })],
   ...financeRoutes,
   ...notesRoutes,
   ...habitRoutes,

@@ -17,6 +17,9 @@ server/prisma/migrations/*
 # …salvo las migraciones SQL versionadas de finanzas, que SÍ se versionan.
 !server/prisma/migrations/finance/
 client/dist/
+# Tauri (escritorio): compilación de Rust e instaladores generados.
+client/src-tauri/target/
+client/src-tauri/gen/schemas/
 .vscode/
 .idea/
 

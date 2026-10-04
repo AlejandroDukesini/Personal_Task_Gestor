@@ -33,9 +33,10 @@ function serviceWorkerPrecache(): Plugin {
         }
       };
       walk(dist);
-      // Fuera: el propio SW, mapas de código, redirecciones y la imagen para
-      // redes sociales (pesada e innecesaria offline).
-      const precache = files.filter((f) => !/\/(sw\.js|_redirects|robots\.txt|sitemap\.xml|og-image\.png)$|\.map$/.test(f)).sort();
+      // Fuera: el propio SW, mapas de código, redirecciones, la imagen para
+      // redes sociales (pesada e innecesaria offline) y el motor de OCR (~17 MB:
+      // se descarga solo si se usa y lo guarda el propio tesseract.js).
+      const precache = files.filter((f) => !/\/(sw\.js|_redirects|robots\.txt|sitemap\.xml|og-image\.png)$|\.map$|^\/ocr\//.test(f)).sort();
       precache.unshift("/");
       const hash = crypto.createHash("sha256");
       for (const f of precache) if (f !== "/") hash.update(f).update(fs.readFileSync(path.join(dist, f)));
@@ -50,8 +51,49 @@ function serviceWorkerPrecache(): Plugin {
   };
 }
 
+/**
+ * Motor de OCR servido desde la propia app (en `/ocr/…`), sin CDN: el worker
+ * de tesseract.js, los núcleos WebAssembly solo-LSTM (la app usa `oem 1`; el
+ * worker elige uno según el soporte SIMD del equipo) y los datos de idioma
+ * `spa`/`eng` (`4.0.0_best_int`, los mismos que servía jsDelivr). En
+ * desarrollo se sirven desde node_modules; en el build se copian a `dist`.
+ */
+function localOcrAssets(): Plugin {
+  const modules = path.resolve(__dirname, "../node_modules");
+  const assets: Record<string, string> = {
+    "ocr/worker.min.js": "tesseract.js/dist/worker.min.js",
+    "ocr/core/tesseract-core-lstm.wasm.js": "tesseract.js-core/tesseract-core-lstm.wasm.js",
+    "ocr/core/tesseract-core-simd-lstm.wasm.js": "tesseract.js-core/tesseract-core-simd-lstm.wasm.js",
+    "ocr/core/tesseract-core-relaxedsimd-lstm.wasm.js": "tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js",
+    "ocr/lang/spa.traineddata.gz": "@tesseract.js-data/spa/4.0.0_best_int/spa.traineddata.gz",
+    "ocr/lang/eng.traineddata.gz": "@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
+  };
+  const source = (file: string) => path.join(modules, assets[file]);
+  return {
+    name: "gt-local-ocr",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const file = req.url?.split("?")[0].replace(/^\//, "") ?? "";
+        if (!(file in assets)) return next();
+        // Se sirven tal cual: el .gz lo descomprime tesseract.js, no el navegador.
+        res.setHeader("Content-Type", file.endsWith(".js") ? "text/javascript" : "application/octet-stream");
+        fs.createReadStream(source(file)).pipe(res);
+      });
+    },
+    generateBundle() {
+      for (const file of Object.keys(assets)) {
+        this.emitFile({ type: "asset", fileName: file, source: fs.readFileSync(source(file)) });
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), serviceWorkerPrecache()],
+  plugins: [react(), localOcrAssets(), serviceWorkerPrecache()],
+  // Tauri: no borrar la consola (se ven sus errores de Rust) y exponer sus
+  // variables TAURI_ENV_* además de las VITE_* que ya usa la app.
+  clearScreen: false,
+  envPrefix: ["VITE_", "TAURI_ENV_"],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },

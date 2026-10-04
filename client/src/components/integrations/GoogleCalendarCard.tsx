@@ -14,10 +14,40 @@ import { chooseCalendar, connect, disconnect, listCalendars, resolve, sessionAct
 import type { CalendarListItem } from "@/services/gcal/client";
 import type { Habit } from "@/types";
 import { cn } from "@/lib/utils";
+import { isDesktop } from "@/lib/desktop";
 
 const ATTENTION: GcalLinkRow["state"][] = ["conflict", "remote_changed", "remote_deleted", "error"];
 
 export function GoogleCalendarCard() {
+  return isDesktop ? <DesktopUnavailable /> : <GoogleCalendarIntegration />;
+}
+
+/**
+ * Versión de escritorio: Google no admite el origen de la app de Windows en
+ * su autorización OAuth del navegador, así que la integración no se ofrece.
+ * Los datos (hábitos con «Sincronizar con Google Calendar», vínculos) se
+ * conservan intactos y siguen funcionando desde la versión web.
+ */
+function DesktopUnavailable() {
+  return (
+    <Card className="lg:col-span-2" id="integraciones">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 flex-wrap">
+          <CalendarCheck2 size={16} /> Integraciones · Google Calendar
+          <Badge>No disponible en escritorio</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-subtle">
+          La sincronización con Google Calendar todavía no está disponible en la versión de escritorio. Puedes seguir usándola desde la
+          versión web; tus hábitos y su configuración se conservan.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GoogleCalendarIntegration() {
   const [prefs, setPrefs] = useState<GcalPrefs>(loadPrefs);
   const [mode, setMode] = useState<GcalMode>(prefs.mode);
   const [busy, setBusy] = useState<string | null>(null);

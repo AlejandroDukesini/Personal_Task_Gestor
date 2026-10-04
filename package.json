@@ -22,7 +22,9 @@
     "db:seed": "npm run db:seed -w server",
     "test": "npm run test -w client && npm run test -w gestion-tareas-sync",
     "sql:gen": "npm run sql:gen -w client",
-    "pc": "npm run build && npm run start -w gestion-tareas-sync"
+    "pc": "npm run build && npm run start -w gestion-tareas-sync",
+    "desktop:dev": "npm run tauri:dev -w client",
+    "desktop:build": "npm run tauri:build -w client"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

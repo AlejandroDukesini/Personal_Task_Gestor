@@ -1,0 +1,4 @@
+# Compilación de Rust e instaladores generados.
+/target/
+# Esquemas que genera Tauri al compilar.
+/gen/schemas

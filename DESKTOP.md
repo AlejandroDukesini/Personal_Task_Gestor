@@ -83,7 +83,8 @@ reinstalación posterior vuelve a ver los datos.
 | Función | Offline | Notas |
 |---|---|---|
 | Tareas, hábitos, calendario, objetivos, notas, finanzas, estadísticas | Sí | Todo es local (IndexedDB). |
-| Copias de seguridad / restauración / importaciones de archivos | Sí | |
+| Copias de seguridad / restauración / importaciones de archivos | Sí | Las descargas van a la carpeta Descargas de Windows. |
+| Recordatorios (notificaciones) | Sí | Notificaciones nativas de Windows (plugin `notification`); solo con la app abierta, igual que en la web. Se activan/desactivan en Configuración › Sistema › Notificaciones de Windows. |
 | Fuente Inter | Sí | Incluida con `@fontsource/inter` (antes Google Fonts). |
 | Importar hábitos desde una captura (OCR) | Sí | Motor y datos de idioma incluidos (ver abajo). |
 | Google Calendar | **No disponible en escritorio** | Ver «Google Calendar». Sigue disponible en la web. |
@@ -109,9 +110,15 @@ a la misma versión.
 
 ## Seguridad
 
-- **Capacidades** (`src-tauri/capabilities/default.json`): `core:default` y
-  `opener:allow-open-url` limitado a `http(s)://` y `mailto:`. Sin acceso al
-  sistema de archivos, sin `shell` y sin comandos nativos propios.
+- **Capacidades** (`src-tauri/capabilities/default.json`):
+
+  | Permiso | Para qué |
+  |---|---|
+  | `core:default` | Núcleo de Tauri (ventana, eventos). |
+  | `opener:allow-open-url` (solo `http(s)://` y `mailto:`) | Abrir enlaces externos en el navegador del sistema. |
+  | `notification:allow-notify` | Mostrar los recordatorios. La WebView2 de Tauri deniega la Notification API del navegador (`requestPermission()` → `denied`), por eso `lib/notifications.ts` usa el plugin en escritorio. |
+
+  Sin acceso al sistema de archivos, sin `shell` y sin comandos nativos propios.
 - **CSP** (`src-tauri/tauri.conf.json`): solo recursos de la propia app;
   `wasm-unsafe-eval` para el WebAssembly del OCR; `style-src 'unsafe-inline'`
   por framer-motion/recharts/FullCalendar (igual que en la web). `devCsp`
@@ -144,10 +151,33 @@ navegador) exige un origen web autorizado, y Google no acepta
    solo cambia `auth.ts` en escritorio.
 5. Añadir `https://www.googleapis.com` a `connect-src` de la CSP de escritorio.
 
-## Pruebas pendientes en la app de escritorio
+## Pruebas realizadas (1.2.1, 2026-10-04, Windows 11 x64, WebView2 154)
 
-Comprobar tras el primer `desktop:build`: descargas de copias/CSV (`<a download>`
-en WebView2), notificaciones de recordatorios (Notification API en WebView2),
-vista previa de adjuntos (`window.open` de un `blob:`), OCR de una captura sin
-conexión, recarga en rutas internas (`/tareas`…), persistencia tras cerrar,
-reiniciar y actualizar, y desinstalación con y sin borrar datos.
+Sobre el instalador NSIS instalado (no sobre `tauri dev`), automatizadas con el
+protocolo de depuración de WebView2:
+
+| Prueba | Resultado |
+|---|---|
+| Instalación silenciosa por usuario, accesos directos de escritorio y menú Inicio | OK |
+| Arranque y recarga con la red emulada como **sin conexión** | OK |
+| Las 12 rutas (`/`, `/tareas` … `/configuracion`) sin errores | OK |
+| Inter cargada en local (400/500/600/700); sin Service Worker; versión v1.2.1 visible | OK |
+| Crear, editar, buscar y eliminar tareas (con el `confirm()` nativo) | OK |
+| Guardado en IndexedDB y en el espejo de `localStorage` | OK |
+| Datos conservados al cerrar a la fuerza y reabrir | OK |
+| Datos conservados al instalar encima (actualización de la misma versión) | OK |
+| Descarga de copia de seguridad (llega a Descargas) | OK |
+| Notificación de prueba (registrada por Windows con el identificador de la app) | OK |
+| Enlace externo → navegador del sistema (`plugin:opener`), la app no navega | OK |
+| OCR de una captura sin conexión (detectó los 3 eventos de prueba) y 2 min estable después | OK |
+| Ninguna petición a internet en todas las pruebas | OK |
+| Google Calendar muestra «No disponible en escritorio» | OK |
+| Desinstalación: quita programa, entrada y accesos; conserva los datos | OK |
+
+No probado: la casilla «borrar datos» del desinstalador (solo con interfaz),
+la instalación en un equipo sin WebView2, la vista previa de adjuntos
+(`window.open` de un `blob:`) y una actualización a un número de versión mayor.
+
+Nota para pruebas automatizadas: si la app se lanza desde una terminal
+gestionada por otra herramienta, puede quedar dentro de su *Job Object* y
+cerrarse cuando esa herramienta termina. No ocurre al abrirla desde el menú Inicio.

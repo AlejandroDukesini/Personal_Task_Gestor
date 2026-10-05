@@ -465,8 +465,10 @@ Al escribir `200+200=` aparece `400` justo después del `=`. Admite `+ - * /` (t
 
 ```bash
 npm test                 # cliente (vitest) + relé de sincronización (node:test)
-npm run test -w client   # 424 pruebas: restauración entre dispositivos y detección de cifrado, persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, sincronización manual (incl. por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas
+npm run test -w client   # 475 pruebas: reglas de negocio (fechas, obligatorios, precondiciones), restauración entre dispositivos y detección de cifrado, persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, sincronización manual (incl. por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas
 ```
+
+Las reglas de negocio que hace cumplir la API (fechas coherentes, campos obligatorios, precondiciones y códigos de error) están documentadas en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
 
 ---
 

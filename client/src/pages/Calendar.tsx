@@ -17,6 +17,8 @@ import { useResource } from "@/hooks/useResource";
 import { api } from "@/services/api";
 import { HabitCounter } from "@/components/habits/HabitCounter";
 import { STATUS_LABEL } from "@/services/habits/schedule";
+import { eventRangeError, localToday } from "@/services/rules";
+import { fromLocalInput, toLocalInput } from "@/lib/utils";
 import type { Category, Event, HabitDayProgress, HabitOccurrence, OccurrenceStatus, Task } from "@/types";
 
 /** Símbolo por estado: el color no es la única pista (accesibilidad). */
@@ -106,12 +108,21 @@ export function CalendarPage() {
     return [...evs, ...ts, ...hs];
   }, [events.data, tasks.data, occurrences.data]);
 
+  const [errors, setErrors] = useState<{ title?: string; start?: string; end?: string }>({});
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing.title || !editing.start || !editing.end) return;
+    const next = {
+      title: editing.title?.trim() ? undefined : "El título es obligatorio.",
+      start: editing.start ? undefined : "Indica la fecha de inicio.",
+      end: editing.end ? undefined : "Indica la fecha de fin.",
+    };
+    if (!next.start && !next.end) next.end = eventRangeError(editing) ?? undefined;
+    setErrors(next);
+    if (next.title || next.start || next.end) return;
     try {
       const payload = {
-        title: editing.title,
+        title: editing.title!.trim(),
         description: editing.description ?? null,
         start: editing.start,
         end: editing.end,
@@ -153,6 +164,7 @@ export function CalendarPage() {
               const now = new Date();
               const end = new Date(now.getTime() + 60 * 60 * 1000);
               setEditing({ start: now.toISOString(), end: end.toISOString(), allDay: false });
+              setErrors({});
               setOpen(true);
             }}
           >
@@ -189,11 +201,14 @@ export function CalendarPage() {
           editable
           selectable
           select={(info) => {
+            // Date -> ISO: `startStr` de un día completo ("2026-10-05") se
+            // leería como medianoche UTC, es decir, la víspera en América.
             setEditing({
-              start: info.startStr,
-              end: info.endStr,
+              start: info.start.toISOString(),
+              end: info.end.toISOString(),
               allDay: info.allDay,
             });
+            setErrors({});
             setOpen(true);
           }}
           eventClick={(info) => {
@@ -209,20 +224,30 @@ export function CalendarPage() {
                 start: new Date(e.start).toISOString(),
                 end: new Date(e.end).toISOString(),
               });
+              setErrors({});
               setOpen(true);
             }
           }}
           eventDrop={async (info) => {
             const props = info.event.extendedProps as any;
             try {
+              const start = info.event.start!;
               if (props.kind === "event") {
+                // Sin `end` (evento sin duración) se conserva la duración original.
+                const ref = props.ref as Event;
+                const duration = Math.max(new Date(ref.end).getTime() - new Date(ref.start).getTime(), 30 * 60000);
+                const end = info.event.end ?? new Date(start.getTime() + duration);
                 await api.put(`/events/${props.ref.id}`, {
-                  start: info.event.start!.toISOString(),
-                  end: info.event.end!.toISOString(),
+                  start: start.toISOString(),
+                  end: end.toISOString(),
                 });
               } else if (props.kind === "task") {
+                // El vencimiento es un día de calendario: se envía el día LOCAL
+                // donde se soltó y, si cayó en una franja horaria, su hora.
+                const pad = (n: number) => String(n).padStart(2, "0");
                 await api.put(`/tasks/${props.ref.id}`, {
-                  dueDate: info.event.start!.toISOString(),
+                  dueDate: localToday(start),
+                  dueTime: info.event.allDay ? null : `${pad(start.getHours())}:${pad(start.getMinutes())}`,
                 });
               }
               events.reload();
@@ -290,7 +315,7 @@ export function CalendarPage() {
         title={editing.id ? "Editar evento" : "Nuevo evento"}
       >
         <form onSubmit={save} className="space-y-3">
-          <Field label="Título">
+          <Field label="Título" error={errors.title}>
             <Input
               autoFocus
               required
@@ -299,24 +324,21 @@ export function CalendarPage() {
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Inicio">
+            <Field label="Inicio" error={errors.start}>
               <Input
                 type="datetime-local"
                 required
-                value={editing.start ? editing.start.slice(0, 16) : ""}
-                onChange={(e) =>
-                  setEditing({ ...editing, start: new Date(e.target.value).toISOString() })
-                }
+                value={toLocalInput(editing.start)}
+                onChange={(e) => setEditing({ ...editing, start: fromLocalInput(e.target.value) })}
               />
             </Field>
-            <Field label="Fin">
+            <Field label="Fin" error={errors.end}>
               <Input
                 type="datetime-local"
                 required
-                value={editing.end ? editing.end.slice(0, 16) : ""}
-                onChange={(e) =>
-                  setEditing({ ...editing, end: new Date(e.target.value).toISOString() })
-                }
+                min={toLocalInput(editing.start) || undefined}
+                value={toLocalInput(editing.end)}
+                onChange={(e) => setEditing({ ...editing, end: fromLocalInput(e.target.value) })}
               />
             </Field>
           </div>

@@ -78,7 +78,8 @@ describe("tareas", () => {
       recurrence: "monthly",
       recurrenceInterval: 1,
     });
-    await call("POST", `/tasks/${t.id}/subtasks`, { title: "Transferir" });
+    // Hecho en la original: la copia de la serie debe salir desmarcada igualmente.
+    await call("POST", `/tasks/${t.id}/subtasks`, { title: "Transferir", done: true });
     await call("PUT", `/tasks/${t.id}`, { status: "completed" });
     // Re-completar (p. ej. tras reabrir) no genera otra.
     await call("PUT", `/tasks/${t.id}`, { status: "pending" });

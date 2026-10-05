@@ -97,3 +97,22 @@ export function relativeDay(d?: string | null) {
   if (diff < -1 && diff > -7) return `Hace ${-diff} días`;
   return formatDate(d);
 }
+
+/**
+ * ISO -> valor de `<input type="datetime-local">` en hora LOCAL. Antes se
+ * cortaba el ISO (que está en UTC): en Bogotá un evento de las 10:00 aparecía
+ * a las 15:00 y, al guardar, se desplazaba 5 horas cada vez.
+ */
+export function toLocalInput(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Valor local del input -> ISO. Un campo vaciado queda vacío en vez de lanzar. */
+export function fromLocalInput(value: string): string {
+  const d = new Date(value);
+  return value && !Number.isNaN(d.getTime()) ? d.toISOString() : "";
+}

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Markdown } from "@/components/Markdown";
 import { SubtaskList } from "@/components/tasks/SubtaskList";
 import { api } from "@/services/api";
+import { MESSAGES, taskCompletionError, taskDatesError } from "@/services/rules";
 import type { Category, Goal, Subtask, Tag, Task } from "@/types";
 
 const REMINDER_OPTIONS = [
@@ -56,6 +57,7 @@ export function TaskForm({
     reminder: currentReminder ? String(currentReminder.minutesBefore) : "",
   });
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<"title" | "dates" | "time" | "reminder" | "status", string>>>({});
   const [preview, setPreview] = useState(false);
   const [steps, setSteps] = useState<Subtask[]>(task?.subtasks ?? []);
 
@@ -63,18 +65,35 @@ export function TaskForm({
   // para no ofrecer dos controles que se contradicen.
   const hasSteps = steps.length > 0;
 
+  /** Mismas reglas que la API local: se avisa aquí, la API decide. */
+  function validate() {
+    const next: typeof errors = {};
+    if (!form.title.trim()) next.title = "El título es obligatorio.";
+    const dates = taskDatesError({ startDate: form.startDate || null, dueDate: form.dueDate || null, dueTime: form.dueTime || null });
+    if (dates === MESSAGES.taskTimeWithoutDate) next.time = dates;
+    else if (dates) next.dates = dates;
+    if (form.reminder && !form.dueDate) next.reminder = MESSAGES.taskReminderWithoutDate;
+    if (form.status === "completed" && task?.status !== "completed") {
+      const pending = taskCompletionError(steps);
+      if (pending) next.status = pending;
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!validate()) {
+      toast.error("Revisa los campos marcados");
+      return;
+    }
     setSaving(true);
     try {
       const { reminder, ...rest } = form;
-      if (reminder && !form.dueDate) {
-        toast.error("Para programar un recordatorio indica la fecha de vencimiento");
-        setSaving(false);
-        return;
-      }
       const payload = {
         ...rest,
+        title: form.title.trim(),
+        dueTime: form.dueTime || null,
         startDate: form.startDate || null,
         dueDate: form.dueDate || null,
         categoryId: form.categoryId || null,
@@ -110,7 +129,7 @@ export function TaskForm({
     // es HTML inválido: por eso vive fuera del formulario principal.
     <>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Título">
+        <Field label="Título" error={errors.title}>
           <Input
             autoFocus
             required
@@ -168,7 +187,7 @@ export function TaskForm({
               <option value="critical">Crítica</option>
             </Select>
           </Field>
-          <Field label="Estado">
+          <Field label="Estado" error={errors.status}>
             <Select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value as any })}
@@ -202,14 +221,15 @@ export function TaskForm({
               onChange={(e) => setForm({ ...form, startDate: e.target.value })}
             />
           </Field>
-          <Field label="Vencimiento">
+          <Field label="Vencimiento" error={errors.dates}>
             <Input
               type="date"
+              min={form.startDate || undefined}
               value={form.dueDate}
               onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
             />
           </Field>
-          <Field label="Hora">
+          <Field label="Hora" error={errors.time}>
             <Input
               type="time"
               value={form.dueTime ?? ""}
@@ -239,7 +259,7 @@ export function TaskForm({
               onChange={(e) => setForm({ ...form, recurrenceInterval: Number(e.target.value) })}
             />
           </Field>
-          <Field label="Recordatorio">
+          <Field label="Recordatorio" error={errors.reminder}>
             <Select value={form.reminder} onChange={(e) => setForm({ ...form, reminder: e.target.value })}>
               {REMINDER_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>

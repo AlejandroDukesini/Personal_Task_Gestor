@@ -7,6 +7,7 @@
  */
 
 import { flushStorage } from "@/services/storage";
+import { isDesktop } from "@/lib/desktop";
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let registration: ServiceWorkerRegistration | null = null;
@@ -52,6 +53,9 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function registerServiceWorker(): void {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  // Escritorio: los archivos ya vienen en el instalador y las versiones nuevas
+  // llegan con él; un SW solo añadiría una caché que podría quedar desfasada.
+  if (isDesktop) return;
 
   // Chrome guarda el evento para que la app decida CUÁNDO ofrecer instalar,
   // en lugar de mostrar un banner que el usuario descarta por reflejo.

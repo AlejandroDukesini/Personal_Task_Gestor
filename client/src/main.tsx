@@ -4,10 +4,16 @@ import { BrowserRouter } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 import App from "./App";
 import { registerServiceWorker } from "./lib/pwa";
+import { setupDesktop } from "./lib/desktop";
 import { bootDb } from "./services/localDb";
 import { checkForExternalChanges, persistNow, requestPersistence } from "./services/storage";
 import { startAutoBackup } from "./services/backup/backup";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// Fuente Inter incluida en la app (antes Google Fonts): mismos pesos, sin red.
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
 import "./index.css";
 // Se importa después de index.css a propósito: en empates de especificidad
 // (p. ej. `.dark` vs `[data-skin=x]`) debe ganar el skin.
@@ -94,5 +100,6 @@ function BootError({ message }: { message: string }) {
   );
 }
 
+setupDesktop();
 void start();
 registerServiceWorker();

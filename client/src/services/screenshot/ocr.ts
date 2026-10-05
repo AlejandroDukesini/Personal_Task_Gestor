@@ -1,14 +1,14 @@
 // Carga, validación y reconocimiento de texto de capturas. Todo ocurre en el
-// dispositivo: la imagen nunca se envía a ningún servidor. Solo se descarga
-// (una vez, y la cachea el navegador) el motor de OCR y los datos de idioma.
+// dispositivo: la imagen nunca se envía a ningún servidor. El motor de OCR y
+// los datos de idioma vienen con la propia app (ver `localOcrAssets` en
+// vite.config.ts): no hace falta conexión.
 // La imagen vive en memoria mientras dura el asistente y no se guarda.
 
 import type { Bbox, OcrLine } from "./parse";
 import { findChips, meanLuminance, mergeChipLines, normalizeChip } from "./chips";
 
-/** Origen del motor de OCR (solo código y datos de idioma; nunca la imagen). */
-export const OCR_CDN = "https://cdn.jsdelivr.net/npm";
-export const OCR_VERSION = "7.0.0";
+/** Ruta del motor de OCR dentro de la app (solo código y datos de idioma). */
+export const OCR_BASE = "/ocr";
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
@@ -118,9 +118,10 @@ export async function recognize(canvas: HTMLCanvasElement, onProgress?: (p: numb
   const { createWorker } = await import("tesseract.js");
   let phase = 0; // 0 = página, 1 = bloques
   const worker = await createWorker(["spa", "eng"], 1, {
-    // Rutas fijadas a la versión instalada: coinciden con la CSP (netlify.toml).
-    workerPath: `${OCR_CDN}/tesseract.js@${OCR_VERSION}/dist/worker.min.js`,
-    corePath: `${OCR_CDN}/tesseract.js-core@${OCR_VERSION}`,
+    // URLs absolutas: el worker arranca desde un blob y no resuelve rutas relativas.
+    workerPath: new URL(`${OCR_BASE}/worker.min.js`, location.href).href,
+    corePath: new URL(`${OCR_BASE}/core`, location.href).href,
+    langPath: new URL(`${OCR_BASE}/lang`, location.href).href,
     logger: (m) => {
       if (phase === 0) onProgress?.((m.progress ?? 0) * (m.status?.startsWith("recogniz") ? 0.6 : 0.3), m.status ?? "");
     },

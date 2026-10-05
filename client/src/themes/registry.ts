@@ -20,19 +20,19 @@ export const SKINS: SkinMeta[] = [
     id: "default",
     name: "Clásico",
     description: "Interfaz neutra, sans-serif y sombras suaves. Claro y oscuro.",
-    swatch: { bg: "#f8fafc", surface: "#ffffff", accent: "#6366f1", text: "#0f172a" },
+    swatch: { bg: "#f4f1ea", surface: "#fbf9f4", accent: "#6366f1", text: "#0f172a" },
   },
   {
     id: "brutalist",
     name: "Neobrutalismo",
     description: "Mono, bordes gruesos, esquinas rectas y sombra sólida.",
-    swatch: { bg: "#fff6e0", surface: "#ffffff", accent: "#ff4e00", text: "#111111" },
+    swatch: { bg: "#fff6e0", surface: "#fdfaf3", accent: "#ff4e00", text: "#111111" },
   },
   {
     id: "glass",
     name: "Glassmorfismo",
     description: "Cristal esmerilado, degradados y profundidad por desenfoque.",
-    swatch: { bg: "#e8ecf8", surface: "#ffffffaa", accent: "#635bff", text: "#181b2e" },
+    swatch: { bg: "#eeeae1", surface: "#fcf9f2aa", accent: "#635bff", text: "#181b2e" },
   },
   {
     id: "terminal",

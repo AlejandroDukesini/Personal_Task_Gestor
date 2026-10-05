@@ -12,7 +12,6 @@ import { parseCalendarText, type CalendarView, type DetectedEvent } from "@/serv
 import { matchHabits, type HabitMatch } from "@/services/screenshot/match";
 import {
   ImageValidationError,
-  OCR_CDN,
   checkDimensions,
   imageToCanvas,
   recognize,
@@ -294,8 +293,8 @@ export function ScreenshotImport({ open, onClose, onImported }: { open: boolean;
           <label className="flex items-start gap-2 text-sm rounded-lg bg-muted p-3">
             <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <span>
-              Entiendo que la captura se analiza <strong>en este dispositivo</strong> y no se envía a ningún servidor. La primera vez se
-              descargará el motor de reconocimiento de texto (unos MB) desde <code className="text-xs">{new URL(OCR_CDN).host}</code>.
+              Entiendo que la captura se analiza <strong>en este dispositivo</strong> y no se envía a ningún servidor. El motor de
+              reconocimiento de texto viene incluido en la app y funciona sin conexión.
             </span>
           </label>
           <div className="flex justify-between gap-2">

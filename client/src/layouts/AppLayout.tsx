@@ -31,6 +31,7 @@ import { SaveIndicator } from "@/components/backup/SaveIndicator";
 import { StorageAlerts } from "@/components/backup/StorageAlerts";
 import { RestoreWizard } from "@/components/backup/RestoreWizard";
 import { loadPrefs, onPrefsChange } from "@/services/gcal/prefs";
+import { isDesktop } from "@/lib/desktop";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +72,8 @@ export function AppLayout() {
   // Google Calendar: sincroniza tras cada cambio si el usuario lo conectó.
   // El módulo se carga solo entonces (no pesa en el arranque de quien no lo usa).
   useEffect(() => {
+    // Escritorio: integración no disponible (ver GoogleCalendarCard).
+    if (isDesktop) return;
     let stop: (() => void) | null = null;
     let disposed = false;
     const ensure = (connected: boolean) => {

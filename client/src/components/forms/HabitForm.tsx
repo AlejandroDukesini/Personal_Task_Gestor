@@ -6,6 +6,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { ScheduleEditor, draftToInput, toDraft, validateDraft, type ScheduleDraft } from "@/components/habits/ScheduleEditor";
 import { api } from "@/services/api";
 import { loadPrefs } from "@/services/gcal/prefs";
+import { isDesktop } from "@/lib/desktop";
 import type { GcalLinkRow } from "@/services/localDb";
 import type { Category, Habit, HabitFrequency } from "@/types";
 import { cn } from "@/lib/utils";
@@ -196,7 +197,9 @@ export function HabitForm({
           <span>
             Sincronizar con Google Calendar
             <span className="block text-xs text-subtle">
-              {!gcal.connected
+              {isDesktop
+                ? "Google Calendar no está disponible en la versión de escritorio; se aplicará desde la versión web."
+                : !gcal.connected
                 ? "Google Calendar no está conectado en este dispositivo (Configuración › Integraciones)."
                 : gcal.scope === "all"
                   ? "La integración sincroniza todos los hábitos programados; esta opción cuenta si eliges «solo los seleccionados»."

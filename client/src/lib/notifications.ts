@@ -11,18 +11,27 @@
  * 2. La API solo existe en contextos seguros: https o localhost. Servida por
  *    IP de red local sobre http, `window.Notification` es `undefined`. De ahí
  *    que el servidor de sincronización ofrezca https (ver `sync/server.mjs`).
+ *
+ * 3. En la app de escritorio (Tauri) la WebView2 deniega la Notification API:
+ *    allí se usan notificaciones nativas de Windows (plugin `notification`).
+ *    En Windows no hay permiso por app que pedir en tiempo de ejecución: el
+ *    usuario las controla en Configuración › Sistema › Notificaciones.
  */
 
+import { isDesktop } from "@/lib/desktop";
+
 export const notificationsSupported = (): boolean =>
-  typeof window !== "undefined" && "Notification" in window;
+  isDesktop || (typeof window !== "undefined" && "Notification" in window);
 
 export function notificationPermission(): NotificationPermission | "unsupported" {
+  if (isDesktop) return "granted";
   if (!notificationsSupported()) return "unsupported";
   return Notification.permission;
 }
 
 /** Pide permiso. Debe invocarse desde un gesto del usuario (click). */
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (isDesktop) return true;
   if (!notificationsSupported()) return false;
   if (Notification.permission === "granted") return true;
   if (Notification.permission === "denied") return false;
@@ -44,6 +53,15 @@ export interface NotifyOptions {
 
 /** Muestra una notificación. Devuelve false si no se pudo (sin permiso, etc.). */
 export async function notify(title: string, options: NotifyOptions = {}): Promise<boolean> {
+  if (isDesktop) {
+    try {
+      const { sendNotification } = await import("@tauri-apps/plugin-notification");
+      sendNotification({ title, body: options.body });
+      return true;
+    } catch {
+      return false;
+    }
+  }
   if (!notificationsSupported() || Notification.permission !== "granted") return false;
 
   const payload: NotificationOptions & { data?: unknown } = {

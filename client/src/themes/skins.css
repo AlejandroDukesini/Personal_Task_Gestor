@@ -61,7 +61,7 @@
 
 [data-skin="brutalist"] {
   --bg: 255 246 224;
-  --surface: 255 255 255;
+  --surface: 253 250 243;
   --muted: 255 237 194;
   --border: 17 17 17;
   --text: 17 17 17;
@@ -114,12 +114,17 @@
    compositing (backdrop-filter es caro: no se aplica a todo el árbol). */
 
 [data-skin="glass"] {
-  --bg: 232 236 248;
-  --surface: 255 255 255;
-  --muted: 226 232 245;
-  --border: 255 255 255;
+  /* Base blanco hueso. `--subtle` va más oscuro que en los otros skins: el
+     texto secundario también se pinta sobre los halos de color del fondo y
+     ahí debe seguir por encima de 4.5:1. */
+  --bg: 238 234 225;
+  --surface: 252 249 242;
+  --muted: 232 227 216;
+  /* Borde cálido visible: en blanco puro desaparecían los bordes y los
+     círculos de completar tarea (usan `border-border`). */
+  --border: 214 206 190;
   --text: 24 27 46;
-  --subtle: 88 95 124;
+  --subtle: 64 70 96;
   --primary: 99 91 255;
   --primary-fg: 255 255 255;
   --danger: 233 65 96;
@@ -149,28 +154,35 @@
 
 .dark[data-skin="glass"] {
   --bg: 10 12 26;
-  /* Superficie clara al 12%: es lo que produce el cristal sobre fondo oscuro.
-     El borde va aparte y apagado — a plena luminosidad marcaría cada tarjeta
-     con una línea brillante y rompería el efecto. */
-  --surface: 148 163 214;
-  --muted: 30 35 60;
+  /* Cristal oscuro tintado: la superficie es oscura y translúcida (alpha 0.5
+     + desenfoque). Antes era una superficie clara al 12%, pero la barra
+     lateral, la cabecera y los diálogos usan `--surface` casi opaco y ahí se
+     volvía lavanda claro bajo texto blanco. Oscura, el contraste aguanta con
+     cualquier opacidad. El borde va aparte y apagado — a plena luminosidad
+     marcaría cada tarjeta con una línea brillante y rompería el efecto. */
+  --surface: 30 36 68;
+  --muted: 46 53 92;
   --border: 82 92 133;
-  --text: 240 243 255;
-  --subtle: 168 176 205;
-  --primary: 145 138 255;
+  /* Texto, secundario y primario más claros, y halos del fondo más tenues:
+     sobre el halo cian el secundario bajaba a 3.5:1 y el primario a 2.6:1.
+     Ahora, en la zona más desfavorable: texto ≥ 10:1, secundario ≥ 7:1 y
+     primario ≥ 5:1. */
+  --text: 246 248 255;
+  --subtle: 198 205 230;
+  --primary: 170 164 255;
   --primary-fg: 12 14 30;
   --danger: 255 118 141;
   --success: 52 211 153;
   --warning: 251 191 36;
   color-scheme: dark;
 
-  --surface-alpha: 0.12;
+  --surface-alpha: 0.5;
   --shadow-1: 0 8px 32px -8px rgba(0, 0, 0, 0.6);
   --shadow-2: 0 24px 64px -12px rgba(0, 0, 0, 0.75);
   --bg-image:
-    radial-gradient(at 12% 18%, rgba(99, 91, 255, 0.40) 0px, transparent 55%),
-    radial-gradient(at 85% 8%, rgba(217, 70, 239, 0.28) 0px, transparent 50%),
-    radial-gradient(at 72% 88%, rgba(6, 182, 212, 0.30) 0px, transparent 55%);
+    radial-gradient(at 12% 18%, rgba(99, 91, 255, 0.26) 0px, transparent 55%),
+    radial-gradient(at 85% 8%, rgba(217, 70, 239, 0.18) 0px, transparent 50%),
+    radial-gradient(at 72% 88%, rgba(6, 182, 212, 0.20) 0px, transparent 55%);
 }
 
 /* --------------------------------------------------- 4. TERMINAL / DEV DARK */

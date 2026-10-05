@@ -7,12 +7,14 @@
    de este archivo desde main.tsx para que los skins puedan sobrescribirlos. */
 
 :root {
-  --bg: 248 250 252;
-  --surface: 255 255 255;
-  --muted: 241 245 249;
-  --border: 226 232 240;
+  /* Blanco hueso en lugar de blanco puro: menos deslumbrante. `--subtle` se
+     oscurece un poco para mantener ≥ 4.5:1 sobre estos fondos. */
+  --bg: 244 241 234;
+  --surface: 251 249 244;
+  --muted: 237 233 224;
+  --border: 226 220 208;
   --text: 15 23 42;
-  --subtle: 100 116 139;
+  --subtle: 86 99 120;
   --primary: 99 102 241;
   --primary-fg: 255 255 255;
   --danger: 239 68 68;

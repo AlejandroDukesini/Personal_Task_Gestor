@@ -1,7 +1,7 @@
 [package]
 name = "plan-gestor-task"
 # Mantener igual que client/package.json (tauri.conf.json toma la versión de ahí).
-version = "1.2.1"
+version = "1.3.0"
 description = "Plan Gestor Task: tareas, hábitos, calendario, notas y finanzas, local-first"
 authors = ["Alejandro Dukesini"]
 edition = "2021"

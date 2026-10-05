@@ -55,9 +55,11 @@ export const useTheme = create<ThemeState>()(
         } else {
           // En modo oscuro se aclara el primario para asegurar contraste AA del
           // texto/enlaces primarios sobre superficies oscuras (WCAG 4.5:1).
+          // El cristal oscuro deja pasar los halos de color del fondo: ahí hace
+          // falta aclararlo más (con el acento por defecto, 3.9:1 → 5:1).
           root.style.setProperty(
             "--primary",
-            isDark ? lightenHexToRgb(primaryColor) : hexToRgb(primaryColor)
+            isDark ? lightenHexToRgb(primaryColor, skin === "glass" ? 0.4 : undefined) : hexToRgb(primaryColor)
           );
         }
 

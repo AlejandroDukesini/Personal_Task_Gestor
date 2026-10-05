@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as { version: string };
 
@@ -59,16 +60,23 @@ function serviceWorkerPrecache(): Plugin {
  * desarrollo se sirven desde node_modules; en el build se copian a `dist`.
  */
 function localOcrAssets(): Plugin {
-  const modules = path.resolve(__dirname, "../node_modules");
+  // Resolución de Node (no una ruta fija a node_modules): funciona igual con
+  // las dependencias en la raíz del monorepo o dentro de client/ (Netlify).
+  const require = createRequire(__filename);
+  const pkgDir = (name: string, from?: string) =>
+    path.dirname(require.resolve(`${name}/package.json`, from ? { paths: [from] } : undefined));
+  const tesseract = pkgDir("tesseract.js");
+  // tesseract.js-core es dependencia de tesseract.js: se busca desde ahí.
+  const core = pkgDir("tesseract.js-core", tesseract);
   const assets: Record<string, string> = {
-    "ocr/worker.min.js": "tesseract.js/dist/worker.min.js",
-    "ocr/core/tesseract-core-lstm.wasm.js": "tesseract.js-core/tesseract-core-lstm.wasm.js",
-    "ocr/core/tesseract-core-simd-lstm.wasm.js": "tesseract.js-core/tesseract-core-simd-lstm.wasm.js",
-    "ocr/core/tesseract-core-relaxedsimd-lstm.wasm.js": "tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js",
-    "ocr/lang/spa.traineddata.gz": "@tesseract.js-data/spa/4.0.0_best_int/spa.traineddata.gz",
-    "ocr/lang/eng.traineddata.gz": "@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
+    "ocr/worker.min.js": path.join(tesseract, "dist/worker.min.js"),
+    "ocr/core/tesseract-core-lstm.wasm.js": path.join(core, "tesseract-core-lstm.wasm.js"),
+    "ocr/core/tesseract-core-simd-lstm.wasm.js": path.join(core, "tesseract-core-simd-lstm.wasm.js"),
+    "ocr/core/tesseract-core-relaxedsimd-lstm.wasm.js": path.join(core, "tesseract-core-relaxedsimd-lstm.wasm.js"),
+    "ocr/lang/spa.traineddata.gz": path.join(pkgDir("@tesseract.js-data/spa"), "4.0.0_best_int/spa.traineddata.gz"),
+    "ocr/lang/eng.traineddata.gz": path.join(pkgDir("@tesseract.js-data/eng"), "4.0.0_best_int/eng.traineddata.gz"),
   };
-  const source = (file: string) => path.join(modules, assets[file]);
+  const source = (file: string) => assets[file];
   return {
     name: "gt-local-ocr",
     configureServer(server) {

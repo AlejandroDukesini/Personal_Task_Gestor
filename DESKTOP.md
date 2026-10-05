@@ -9,7 +9,7 @@ del ejecutable.
 |---|---|
 | Nombre | Plan Gestor Task |
 | Identificador | `com.alejandrodukesini.gestortareas` (**no cambiar nunca**, ver «Datos») |
-| Versión | la de `client/package.json` (hoy 1.2.1); `src-tauri/Cargo.toml` debe coincidir |
+| Versión | la de `client/package.json` (hoy 1.3.0); `src-tauri/Cargo.toml` debe coincidir |
 | Instalador | NSIS (`.exe`), por usuario (sin permisos de administrador), x64 |
 
 ## Requisitos para compilar (solo en el equipo de desarrollo)

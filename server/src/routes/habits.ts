@@ -2,28 +2,33 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
 import { asyncHandler } from "../lib/asyncHandler";
+import { MESSAGES, RuleError, dateOrNull, dayOf, merged, requiredText, rule, touches } from "../lib/rules";
 
 const router = Router();
 
-const dateOrNull = z
-  .union([z.string(), z.null()])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v === null || v === "" ? null : new Date(v)));
-
 const upsertSchema = z.object({
-  name: z.string().min(1),
+  name: requiredText("El nombre", 120),
   description: z.string().nullable().optional(),
   color: z.string().optional(),
   icon: z.string().nullable().optional(),
   frequency: z.enum(["daily", "weekly", "monthly", "custom"]).optional(),
-  daysOfWeek: z.string().nullable().optional(),
+  daysOfWeek: z
+    .string()
+    .regex(/^$|^[0-6](,[0-6])*$/, "Días de la semana no válidos (0 = domingo … 6 = sábado)")
+    .nullable()
+    .optional(),
   dailyTarget: z.number().int().min(1).optional(),
   weeklyTarget: z.number().int().min(1).nullable().optional(),
-  startDate: dateOrNull,
-  endDate: dateOrNull,
+  startDate: dateOrNull("Inicio"),
+  endDate: dateOrNull("Fin"),
   categoryId: z.string().nullable().optional(),
   archived: z.boolean().optional(),
 });
+
+function checkHabit(h: { frequency?: string; daysOfWeek?: string | null; startDate?: Date | null; endDate?: Date | null }) {
+  if (h.frequency === "custom") rule(Boolean(h.daysOfWeek), MESSAGES.habitDays);
+  if (h.startDate && h.endDate) rule(dayOf(h.endDate) >= dayOf(h.startDate), MESSAGES.habitDates);
+}
 
 router.get(
   "/",
@@ -42,6 +47,7 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const data = upsertSchema.parse(req.body);
+    checkHabit(data);
     const created = await prisma.habit.create({
       data: { ...data, startDate: data.startDate ?? new Date() },
       include: { category: true, logs: true },
@@ -54,9 +60,13 @@ router.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const data = upsertSchema.partial().parse(req.body);
+    const current = await prisma.habit.findUnique({ where: { id: req.params.id } });
+    if (!current) throw new RuleError(404, "Hábito no encontrado");
+    if (touches(data, ["frequency", "daysOfWeek", "startDate", "endDate"])) checkHabit(merged(current, data));
     const updated = await prisma.habit.update({
       where: { id: req.params.id },
-      data,
+      // La fecha de inicio es obligatoria en el esquema: null no la borra.
+      data: { ...data, startDate: data.startDate ?? undefined },
       include: { category: true, logs: { orderBy: { date: "desc" }, take: 60 } },
     });
     res.json(addStats(updated));

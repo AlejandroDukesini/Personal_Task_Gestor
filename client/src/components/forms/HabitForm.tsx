@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { ScheduleEditor, draftToInput, toDraft, validateDraft, type ScheduleDraft } from "@/components/habits/ScheduleEditor";
 import { api } from "@/services/api";
+import { habitDaysError } from "@/services/rules";
 import { loadPrefs } from "@/services/gcal/prefs";
 import { isDesktop } from "@/lib/desktop";
 import type { GcalLinkRow } from "@/services/localDb";
@@ -51,6 +52,7 @@ export function HabitForm({
   });
   const [schedules, setSchedules] = useState<ScheduleDraft[]>(() => (habit?.schedules ?? []).map(toDraft));
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; days?: string }>({});
   const gcal = loadPrefs();
 
   function toggleDay(day: number) {
@@ -62,6 +64,15 @@ export function HabitForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const fieldErrors = {
+      name: form.name.trim() ? undefined : "El nombre es obligatorio.",
+      days: habitDaysError(form) ?? undefined,
+    };
+    setErrors(fieldErrors);
+    if (fieldErrors.name || fieldErrors.days) {
+      toast.error(fieldErrors.name ?? fieldErrors.days!);
+      return;
+    }
     const invalid = schedules.map(validateDraft).find(Boolean);
     if (invalid) {
       toast.error(`Horario: ${invalid}`);
@@ -73,7 +84,7 @@ export function HabitForm({
     }
     setSaving(true);
     try {
-      const payload = { ...form, unit: form.unit.trim() || null, categoryId: form.categoryId || null };
+      const payload = { ...form, name: form.name.trim(), unit: form.unit.trim() || null, categoryId: form.categoryId || null };
       const saved = habit ? await api.put<Habit>(`/habits/${habit.id}`, payload) : await api.post<Habit>(`/habits`, payload);
 
       // Horarios quitados que tenían evento en Google: se pregunta qué hacer.
@@ -104,7 +115,7 @@ export function HabitForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Field label="Nombre">
+      <Field label="Nombre" error={errors.name}>
         <Input autoFocus required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       </Field>
       <Field label="Descripción (opcional)">
@@ -158,7 +169,7 @@ export function HabitForm({
       )}
 
       {form.frequency === "custom" && (
-        <Field label="Días de la semana">
+        <Field label="Días de la semana" error={errors.days}>
           <div className="flex gap-2">
             {DAYS.map((d, idx) => {
               const active = form.daysOfWeek?.split(",").includes(String(idx));

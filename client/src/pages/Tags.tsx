@@ -21,9 +21,12 @@ export function Tags() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name) return;
+    if (!form.name?.trim()) {
+      toast.error("El nombre es obligatorio.");
+      return;
+    }
     try {
-      await api.post(`/tags`, form);
+      await api.post(`/tags`, { ...form, name: form.name.trim() });
       toast.success("Etiqueta creada");
       setOpen(false);
       setForm({ color: "#6366f1" });

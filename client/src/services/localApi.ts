@@ -43,23 +43,59 @@ import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
 import { todayKey } from "./finance/dates";
 import { applyLogChange, deleteSchedule, habitRoutes, logChangeSchema, serializeHabit } from "./habits/routes";
 import { logTarget, logsByDay } from "./habits/progress";
+import {
+  MESSAGES,
+  eventRangeError,
+  goalDatesError,
+  habitDatesError,
+  habitDaysError,
+  isoDate,
+  isoDateOrNull,
+  localToday,
+  dayOf,
+  requiredText,
+  taskCompletionError,
+  taskDatesError,
+  timeOrNull,
+} from "./rules";
 
-const dateOrNull = z
-  .union([z.string(), z.null()])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v === null || v === "" ? null : new Date(v).toISOString()));
+/** Rechaza la operación si la regla devuelve un mensaje: nada se guarda. */
+function check(error: string | null, status = 400): void {
+  if (error) throw new ApiError(status, error);
+}
 
-const toIso = (s: string) => new Date(s).toISOString();
+/** ¿La petición trae alguno de estos campos? Solo entonces se revalida su regla. */
+const touches = (data: object, keys: string[]) => keys.some((k) => (data as Record<string, unknown>)[k] !== undefined);
 
 // ---------------------------------------------------------------- categorías
 
 const categorySchema = z.object({
-  name: z.string().min(1),
+  name: requiredText("El nombre", 80),
   color: z.string().optional(),
   icon: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   parentId: z.string().optional().nullable(),
 });
+
+/**
+ * Jerarquía de un solo nivel (es lo que ofrece el formulario): el padre debe
+ * existir, ser una categoría principal y no ser la propia categoría; y una
+ * categoría que ya tiene subcategorías no puede pasar a ser subcategoría.
+ */
+function checkCategoryParent(db: Db, parentId: string | null | undefined, selfId?: string): void {
+  if (!parentId) return;
+  if (parentId === selfId) throw new ApiError(400, "Una categoría no puede ser su propia categoría padre");
+  const parent = find(db.categories, parentId, "Categoría padre");
+  if (parent.parentId) throw new ApiError(400, "Solo hay un nivel de subcategorías: elige una categoría principal como padre");
+  if (selfId && db.categories.some((c) => c.parentId === selfId)) {
+    throw new ApiError(409, "Esta categoría tiene subcategorías: no puede convertirse en subcategoría");
+  }
+}
+
+/** Una referencia opcional a categoría debe apuntar a una que exista. */
+function checkCategoryRef(db: Db, categoryId: string | null | undefined): void {
+  if (categoryId) find(db.categories, categoryId, "Categoría");
+}
 
 function withCategoryCounts(db: Db, c: CategoryRow) {
   return {
@@ -72,17 +108,26 @@ function withCategoryCounts(db: Db, c: CategoryRow) {
   };
 }
 
+const tagSchema = z.object({
+  name: requiredText("El nombre", 60),
+  color: z.string().optional(),
+  icon: z.string().nullable().optional(),
+});
+
+/** "Trabajo" y " trabajo " son la misma etiqueta: el filtro no las distinguiría. */
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 // -------------------------------------------------------------------- tareas
 
 const taskSchema = z.object({
-  title: z.string().min(1),
+  title: requiredText("El título", 200),
   description: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).optional(),
   status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
   progress: z.number().min(0).max(100).optional(),
-  startDate: dateOrNull,
-  dueDate: dateOrNull,
-  dueTime: z.string().nullable().optional(),
+  startDate: isoDateOrNull("Inicio"),
+  dueDate: isoDateOrNull("Vencimiento"),
+  dueTime: timeOrNull,
   notes: z.string().nullable().optional(),
   position: z.number().optional(),
   categoryId: z.string().nullable().optional(),
@@ -211,6 +256,7 @@ function spawnNextOccurrence(db: Db, task: TaskRow): TaskRow | null {
 /** Cambia el estado de una tarea manteniendo `completedAt` y las series. */
 function applyStatus(db: Db, row: TaskRow, status: string): void {
   if (status === row.status) return; // re-guardar no reescribe la fecha de cierre
+  if (status === "completed") check(taskCompletionError(subtasksOf(db, row.id)), 409);
   const wasCompleted = row.status === "completed";
   row.status = status;
   if (status === "completed") {
@@ -222,7 +268,7 @@ function applyStatus(db: Db, row: TaskRow, status: string): void {
 }
 
 const subtaskSchema = z.object({
-  title: z.string().min(1).max(200),
+  title: requiredText("El sub-paso", 200),
   done: z.boolean().optional(),
   position: z.number().int().optional(),
 });
@@ -259,6 +305,18 @@ function syncTaskProgress(db: Db, taskId: string): void {
   task.updatedAt = nowIso();
 }
 
+/** Referencias de una tarea: deben existir antes de guardarse. */
+function checkTaskRefs(db: Db, data: { categoryId?: string | null; goalId?: string | null; tagIds?: string[] }): void {
+  checkCategoryRef(db, data.categoryId);
+  if (data.goalId) find(db.goals, data.goalId, "Objetivo");
+  for (const tagId of data.tagIds ?? []) find(db.tags, tagId, "Etiqueta");
+}
+
+/** Fila con los cambios aplicados, para validar el resultado antes de guardarlo. */
+function merged<T extends object>(row: T, data: object): T {
+  return { ...row, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) };
+}
+
 function serializeTask(db: Db, t: TaskRow) {
   const tagIds = db.taskTags.filter((tt) => tt.taskId === t.id).map((tt) => tt.tagId);
   const subtasks = subtasksOf(db, t.id);
@@ -276,16 +334,20 @@ function serializeTask(db: Db, t: TaskRow) {
 // ------------------------------------------------------------------ hábitos
 
 const habitSchema = z.object({
-  name: z.string().min(1),
+  name: requiredText("El nombre", 120),
   description: z.string().nullable().optional(),
   color: z.string().optional(),
   icon: z.string().nullable().optional(),
   frequency: z.enum(["daily", "weekly", "monthly", "custom"]).optional(),
-  daysOfWeek: z.string().nullable().optional(),
+  daysOfWeek: z
+    .string()
+    .regex(/^$|^[0-6](,[0-6])*$/, "Días de la semana no válidos (0 = domingo … 6 = sábado)")
+    .nullable()
+    .optional(),
   dailyTarget: z.number().int().min(1).optional(),
   weeklyTarget: z.number().int().min(1).nullable().optional(),
-  startDate: dateOrNull,
-  endDate: dateOrNull,
+  startDate: isoDateOrNull("Inicio"),
+  endDate: isoDateOrNull("Fin"),
   categoryId: z.string().nullable().optional(),
   archived: z.boolean().optional(),
   unit: z.string().max(24).nullable().optional(),
@@ -299,10 +361,10 @@ const addStats = serializeHabit;
 // ------------------------------------------------------------------- eventos
 
 const eventSchema = z.object({
-  title: z.string().min(1),
+  title: requiredText("El título", 200),
   description: z.string().nullable().optional(),
-  start: z.string().transform(toIso),
-  end: z.string().transform(toIso),
+  start: isoDate("Inicio"),
+  end: isoDate("Fin"),
   allDay: z.boolean().optional(),
   color: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
@@ -318,7 +380,7 @@ const withCategory = <T extends { categoryId: string | null }>(db: Db, row: T) =
 
 const reminderSchema = z
   .object({
-    triggerAt: z.string().transform(toIso),
+    triggerAt: isoDate("Aviso"),
     minutesBefore: z.number().int().nullable().optional(),
     type: z.enum(["in_app", "banner", "sound"]).optional(),
     taskId: z.string().nullable().optional(),
@@ -341,14 +403,15 @@ function expandReminder(db: Db, r: ReminderRow) {
 // -------------------------------------------------------------------- metas
 
 const goalSchema = z.object({
-  title: z.string().min(1),
+  title: requiredText("El título", 200),
   description: z.string().nullable().optional(),
   type: z.enum(["daily", "weekly", "monthly", "yearly"]).optional(),
-  targetValue: z.number().optional(),
-  currentValue: z.number().optional(),
+  // El progreso es actual/meta: una meta 0 o negativa no tiene sentido (y divide por cero).
+  targetValue: z.number().finite().positive(MESSAGES.goalTarget).optional(),
+  currentValue: z.number().finite().optional(),
   unit: z.string().nullable().optional(),
-  startDate: z.string().transform(toIso).optional(),
-  endDate: z.string().transform(toIso),
+  startDate: isoDate("Inicio").optional(),
+  endDate: isoDate("Fecha límite"),
   categoryId: z.string().nullable().optional(),
   completed: z.boolean().optional(),
   source: z.enum(["manual", "tasks", "finance"]).optional(),
@@ -530,6 +593,7 @@ const routes: Route[] = [
     const data = parse(categorySchema, body);
     return created(
       mutate((db) => {
+        checkCategoryParent(db, data.parentId);
         const ts = nowIso();
         const row: CategoryRow = {
           id: newId(),
@@ -551,6 +615,7 @@ const routes: Route[] = [
     return ok(
       mutate((db) => {
         const row = find(db.categories, params.id);
+        checkCategoryParent(db, data.parentId, row.id);
         assign(row, data as Partial<CategoryRow>);
         row.updatedAt = nowIso();
         return row;
@@ -575,10 +640,10 @@ const routes: Route[] = [
   // Etiquetas
   ["GET", "/tags", () => ok([...loadDb().tags].sort((a, b) => a.name.localeCompare(b.name)))],
   ["POST", "/tags", ({ body }) => {
-    const data = parse(z.object({ name: z.string().min(1), color: z.string().optional(), icon: z.string().nullable().optional() }), body);
+    const data = parse(tagSchema, body);
     return created(
       mutate((db) => {
-        if (db.tags.some((t) => t.name === data.name)) {
+        if (db.tags.some((t) => sameName(t.name, data.name))) {
           throw new ApiError(409, "Ya existe una etiqueta con ese nombre");
         }
         const row: TagRow = {
@@ -593,11 +658,11 @@ const routes: Route[] = [
     );
   }],
   ["PUT", "/tags/:id", ({ params, body }) => {
-    const data = parse(z.object({ name: z.string().min(1), color: z.string().optional(), icon: z.string().nullable().optional() }).partial(), body);
+    const data = parse(tagSchema.partial(), body);
     return ok(
       mutate((db) => {
         const row = find(db.tags, params.id);
-        if (data.name && db.tags.some((t) => t.name === data.name && t.id !== params.id)) {
+        if (data.name && db.tags.some((t) => sameName(t.name, data.name!) && t.id !== params.id)) {
           throw new ApiError(409, "Ya existe una etiqueta con ese nombre");
         }
         return assign(row, data as Partial<TagRow>);
@@ -666,7 +731,9 @@ const routes: Route[] = [
     const { tagIds, reminderMinutes, ...data } = parse(taskSchema, body);
     return created(
       mutate((db) => {
-        if (data.goalId) find(db.goals, data.goalId, "Objetivo");
+        checkTaskRefs(db, { ...data, tagIds });
+        check(taskDatesError(data));
+        if (reminderMinutes != null && !data.dueDate) check(MESSAGES.taskReminderWithoutDate);
         const ts = nowIso();
         const row: TaskRow = {
           id: newId(),
@@ -702,8 +769,14 @@ const routes: Route[] = [
     return ok(
       mutate((db) => {
         const row = find(db.tasks, params.id, "Tarea");
-        if (data.goalId) find(db.goals, data.goalId, "Objetivo");
+        checkTaskRefs(db, { ...data, tagIds });
         const dueChanged = data.dueDate !== undefined || data.dueTime !== undefined;
+        // Se valida la tarea RESULTANTE: un PUT parcial con solo el inicio no
+        // puede dejarla empezando después de vencer. Solo se revisan las reglas
+        // de los campos enviados, para no bloquear ediciones de filas antiguas.
+        const next = merged(row, data);
+        if (touches(data, ["startDate", "dueDate", "dueTime"])) check(taskDatesError(next));
+        if (reminderMinutes != null && !next.dueDate) check(MESSAGES.taskReminderWithoutDate);
         assign(row, data as Partial<TaskRow>);
         // Solo un CAMBIO de estado toca `completedAt`: antes, volver a guardar
         // una tarea completada reescribía su fecha de cierre y falseaba el historial.
@@ -819,6 +892,9 @@ const routes: Route[] = [
     const data = parse(habitSchema, body);
     return created(
       mutate((db) => {
+        checkCategoryRef(db, data.categoryId);
+        check(habitDaysError(data));
+        check(habitDatesError(data));
         const ts = nowIso();
         const row: HabitRow = {
           id: newId(),
@@ -850,6 +926,10 @@ const routes: Route[] = [
     return ok(
       mutate((db) => {
         const row = find(db.habits, params.id);
+        checkCategoryRef(db, data.categoryId);
+        const next = merged(row, data);
+        if (touches(data, ["frequency", "daysOfWeek"])) check(habitDaysError(next));
+        if (touches(data, ["startDate", "endDate"])) check(habitDatesError(next));
         // Cambiar la meta solo afecta a hoy y a los días futuros: cada registro
         // pasado conserva la meta con la que se registró.
         if (data.dailyTarget !== undefined && data.dailyTarget !== row.dailyTarget) {
@@ -945,8 +1025,11 @@ const routes: Route[] = [
     const { date, count, delta, note, source } = parse(logChangeSchema, body);
     if (Number.isNaN(new Date(date).getTime())) throw new ApiError(400, "Fecha no válida");
     const dayStart = startOfDay(new Date(date)).toISOString();
+    // Se compara por día local: hoy cuenta, mañana todavía no.
+    if (startOfDay(new Date(date)).getTime() > startOfDay(new Date()).getTime()) check(MESSAGES.habitFutureLog);
     return mutate((db) => {
       const habit = find(db.habits, params.id, "Hábito");
+      if (habit.archived) check(MESSAGES.habitArchived, 409);
       const existed = db.habitLogs.some((l) => l.habitId === habit.id && l.date === dayStart);
       const row = applyLogChange(db, habit, date, { count, delta, note }, source ?? "manual");
       if (!row) return ok({ habitId: habit.id, date: dayStart, count: 0, target: habit.dailyTarget });
@@ -979,6 +1062,8 @@ const routes: Route[] = [
     const data = parse(eventSchema, body);
     return created(
       mutate((db) => {
+        checkCategoryRef(db, data.categoryId);
+        check(eventRangeError(data));
         const ts = nowIso();
         const row: EventRow = {
           id: newId(),
@@ -1003,6 +1088,9 @@ const routes: Route[] = [
     return ok(
       mutate((db) => {
         const row = find(db.events, params.id);
+        checkCategoryRef(db, data.categoryId);
+        // Mover solo el inicio no puede dejar el fin por delante de él.
+        if (touches(data, ["start", "end"])) check(eventRangeError(merged(row, data)));
         assign(row, data as Partial<EventRow>);
         row.updatedAt = nowIso();
         return withCategory(db, row);
@@ -1044,6 +1132,10 @@ const routes: Route[] = [
     const data = parse(reminderSchema, body);
     return created(
       mutate((db) => {
+        // Un aviso huérfano nunca se podría mostrar con su contexto.
+        if (data.taskId) find(db.tasks, data.taskId, "Tarea");
+        if (data.habitId) find(db.habits, data.habitId, "Hábito");
+        if (data.eventId) find(db.events, data.eventId, "Evento");
         const row: ReminderRow = {
           id: newId(),
           triggerAt: data.triggerAt,
@@ -1092,6 +1184,13 @@ const routes: Route[] = [
     const data = parse(goalSchema, body);
     return created(
       mutate((db) => {
+        checkCategoryRef(db, data.categoryId);
+        if (data.source === "finance" && !data.finGoalId) check(MESSAGES.goalFinance);
+        // Sin inicio explícito empieza hoy (día local, como el resto de fechas sin hora).
+        const startDate = data.startDate ?? new Date(localToday()).toISOString();
+        check(goalDatesError({ startDate, endDate: data.endDate }));
+        // Crear un objetivo ya vencido no tiene sentido; editar uno antiguo sí se permite.
+        if (dayOf(data.endDate) < localToday()) check(MESSAGES.goalPastDeadline);
         const ts = nowIso();
         const row: GoalRow = {
           id: newId(),
@@ -1101,7 +1200,7 @@ const routes: Route[] = [
           targetValue: data.targetValue ?? 100,
           currentValue: data.currentValue ?? 0,
           unit: data.unit ?? null,
-          startDate: data.startDate ?? ts,
+          startDate,
           endDate: data.endDate,
           categoryId: data.categoryId ?? null,
           completed: data.completed ?? false,
@@ -1121,6 +1220,10 @@ const routes: Route[] = [
     return ok(
       mutate((db) => {
         const row = find(db.goals, params.id);
+        checkCategoryRef(db, data.categoryId);
+        const next = merged(row, data);
+        if (touches(data, ["startDate", "endDate"])) check(goalDatesError(next));
+        if (next.source === "finance" && !next.finGoalId) check(MESSAGES.goalFinance);
         assign(row, data as Partial<GoalRow>);
         if (row.source !== "finance") row.finGoalId = null;
         if (row.finGoalId) find(db.finGoals, row.finGoalId, "Meta de ahorro");

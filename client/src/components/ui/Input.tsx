@@ -39,25 +39,43 @@ export function Field({
   label,
   children,
   hint,
+  error,
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
+  /** Regla incumplida: se muestra bajo el control y lo marca como inválido. */
+  error?: string | null;
 }) {
   // La etiqueta se asocia al control (lectores de pantalla y clic en la etiqueta).
   const auto = useId();
-  const child = isValidElement(children) ? (children as ReactElement<{ id?: string; "aria-describedby"?: string }>) : null;
+  const child = isValidElement(children)
+    ? (children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean }>)
+    : null;
   const id = child?.props.id ?? auto;
   const hintId = hint ? `${id}-hint` : undefined;
-  const control = child ? cloneElement(child, { id, "aria-describedby": child.props["aria-describedby"] ?? hintId }) : children;
+  const errorId = error ? `${id}-error` : undefined;
+  const control = child
+    ? cloneElement(child, {
+        id,
+        "aria-describedby": child.props["aria-describedby"] ?? errorId ?? hintId,
+        ...(error ? { "aria-invalid": true } : {}),
+      })
+    : children;
   return (
     <div className="space-y-1.5">
       <Label htmlFor={child ? id : undefined}>{label}</Label>
       {control}
-      {hint && (
-        <p id={hintId} className="text-xs text-subtle">
-          {hint}
+      {error ? (
+        <p id={errorId} role="alert" className="text-xs text-danger">
+          {error}
         </p>
+      ) : (
+        hint && (
+          <p id={hintId} className="text-xs text-subtle">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );

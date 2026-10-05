@@ -750,6 +750,20 @@ export const financeRoutes: Route[] = [
       if (!data.toAccountId) {
         throw new ApiError(400, "Elige la cuenta donde guardas el ahorro de esta meta");
       }
+      // Aportar solo a metas activas (pausada = sin aportes; completada o
+      // archivada = cerrada). Retirar se permite salvo archivada: es historial.
+      if (!data.withdraw && goal.status !== "active") {
+        throw new ApiError(409, `La meta «${goal.name}» no está activa: reactívala para aportar`);
+      }
+      if (data.withdraw) {
+        if (goal.status === "archived") {
+          throw new ApiError(409, `La meta «${goal.name}» está archivada: no admite retiradas`);
+        }
+        const saved = goalProgress(db, goal, todayKey()).saved;
+        if (data.amount > saved) {
+          throw new ApiError(409, "No puedes retirar más de lo ahorrado en esta meta");
+        }
+      }
       const [from, to] = data.withdraw
         ? [data.toAccountId, data.fromAccountId]
         : [data.fromAccountId, data.toAccountId];

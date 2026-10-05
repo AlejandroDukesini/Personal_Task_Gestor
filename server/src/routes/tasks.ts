@@ -2,28 +2,32 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
 import { asyncHandler } from "../lib/asyncHandler";
+import { MESSAGES, RuleError, dateOrNull, dayOf, merged, requiredText, rule, touches } from "../lib/rules";
 
 const router = Router();
 
-const dateOrNull = z
-  .union([z.string(), z.null()])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v === null || v === "" ? null : new Date(v)));
-
 const upsertSchema = z.object({
-  title: z.string().min(1),
+  title: requiredText("El título", 200),
   description: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).optional(),
   status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
   progress: z.number().min(0).max(100).optional(),
-  startDate: dateOrNull,
-  dueDate: dateOrNull,
-  dueTime: z.string().nullable().optional(),
+  startDate: dateOrNull("Inicio"),
+  dueDate: dateOrNull("Vencimiento"),
+  dueTime: z
+    .string()
+    .regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "Hora no válida (HH:mm)")
+    .nullable()
+    .optional(),
   notes: z.string().nullable().optional(),
   position: z.number().optional(),
   categoryId: z.string().nullable().optional(),
   tagIds: z.array(z.string()).optional(),
 });
+
+function checkDates(t: { startDate?: Date | null; dueDate?: Date | null }) {
+  if (t.startDate && t.dueDate) rule(dayOf(t.startDate) <= dayOf(t.dueDate), MESSAGES.taskDates);
+}
 
 const include = {
   category: true,
@@ -63,6 +67,7 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const { tagIds, ...data } = upsertSchema.parse(req.body);
+    checkDates(data);
     const created = await prisma.task.create({
       data: {
         ...data,
@@ -81,6 +86,9 @@ router.put(
   asyncHandler(async (req, res) => {
     const parsed = upsertSchema.partial().parse(req.body);
     const { tagIds, ...data } = parsed;
+    const current = await prisma.task.findUnique({ where: { id: req.params.id } });
+    if (!current) throw new RuleError(404, "Tarea no encontrada");
+    if (touches(data, ["startDate", "dueDate"])) checkDates(merged(current, data));
     const completedAt = data.status === "completed" ? new Date() : data.status ? null : undefined;
 
     if (tagIds) {

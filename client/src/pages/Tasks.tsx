@@ -36,6 +36,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { TaskForm } from "@/components/forms/TaskForm";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services/api";
+import { taskCompletionError } from "@/services/rules";
 import type { Category, Goal, Tag, Task, TaskStatus } from "@/types";
 import {
   cn,
@@ -162,8 +163,17 @@ export function Tasks() {
 
   async function toggleStatus(task: Task) {
     const newStatus: TaskStatus = task.status === "completed" ? "pending" : "completed";
-    await api.put(`/tasks/${task.id}`, { status: newStatus });
-    if (newStatus === "completed" && task.recurrence) toast.success("Hecho. Se programó la siguiente repetición.");
+    const pending = newStatus === "completed" ? taskCompletionError(task.subtasks ?? []) : null;
+    if (pending) {
+      toast.error(pending);
+      return;
+    }
+    try {
+      await api.put(`/tasks/${task.id}`, { status: newStatus });
+      if (newStatus === "completed" && task.recurrence) toast.success("Hecho. Se programó la siguiente repetición.");
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo cambiar el estado");
+    }
     tasks.reload();
     goals.reload();
   }
@@ -174,9 +184,20 @@ export function Tasks() {
     const column = byStatus[newStatus].filter((t) => t.id !== result.draggableId);
     const moved = (tasks.data ?? []).find((t) => t.id === result.draggableId);
     if (!moved) return;
+    if (newStatus === "completed" && moved.status !== "completed") {
+      const pending = taskCompletionError(moved.subtasks ?? []);
+      if (pending) {
+        toast.error(pending);
+        return;
+      }
+    }
     column.splice(result.destination.index, 0, moved);
     // Se persiste el orden de la columna completa (antes se perdía al soltar).
-    await api.patch("/tasks/reorder", column.map((t, i) => ({ id: t.id, position: i, status: t.id === moved.id ? newStatus : undefined })));
+    try {
+      await api.patch("/tasks/reorder", column.map((t, i) => ({ id: t.id, position: i, status: t.id === moved.id ? newStatus : undefined })));
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo mover la tarea");
+    }
     tasks.reload();
   }
 

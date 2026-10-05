@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Progress } from "@/components/ui/Progress";
 import { api } from "@/services/api";
+import { MESSAGES } from "@/services/rules";
 import type { HabitDayProgress } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +64,12 @@ export function HabitCounter({
   }
 
   const label = `${progress.count}/${progress.target} ${unitLabel(unit, progress.target)}`;
+
+  // Un día que aún no llega no admite registros (la API también lo rechaza).
+  const startOfDay = (v: string | Date) => new Date(v).setHours(0, 0, 0, 0);
+  if (startOfDay(day) > startOfDay(new Date())) {
+    return <p className="text-sm text-subtle">{MESSAGES.habitFutureLog}</p>;
+  }
 
   if (binary && !editing) {
     return (

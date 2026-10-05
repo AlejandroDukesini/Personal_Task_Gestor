@@ -14,6 +14,21 @@ import { useResource } from "@/hooks/useResource";
 import { api } from "@/services/api";
 import type { Category, Goal, GoalType } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { MESSAGES, goalDatesError, localToday } from "@/services/rules";
+
+type GoalErrors = Partial<Record<"title" | "targetValue" | "endDate" | "finGoalId", string>>;
+
+/** Mismas reglas que la API local: aquí solo se avisa antes de enviar. */
+function validateGoal(g: Partial<Goal>, isNew: boolean): GoalErrors {
+  const errors: GoalErrors = {};
+  if (!g.title?.trim()) errors.title = "El título es obligatorio.";
+  if ((g.source ?? "manual") !== "finance" && !(Number(g.targetValue) > 0)) errors.targetValue = MESSAGES.goalTarget;
+  if (!g.endDate) errors.endDate = "Indica la fecha límite.";
+  else if (isNew && String(g.endDate).slice(0, 10) < localToday()) errors.endDate = MESSAGES.goalPastDeadline;
+  else errors.endDate = goalDatesError({ startDate: g.startDate ?? localToday(), endDate: g.endDate }) ?? undefined;
+  if (g.source === "finance" && !g.finGoalId) errors.finGoalId = MESSAGES.goalFinance;
+  return Object.fromEntries(Object.entries(errors).filter(([, v]) => v)) as GoalErrors;
+}
 
 const TYPE_LABEL: Record<GoalType, string> = {
   daily: "Diario",
@@ -28,29 +43,30 @@ export function Goals() {
   const finGoals = useResource(() => api.get<{ goals: { id: string; name: string; status: string }[] }>("/finance/state"));
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Goal> | null>(null);
+  const [errors, setErrors] = useState<GoalErrors>({});
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing?.title || !editing.endDate) return;
+    if (!editing) return;
+    const found = validateGoal(editing, !editing.id);
+    setErrors(found);
+    if (Object.keys(found).length) return;
     try {
       const payload = {
-        title: editing.title,
+        title: editing.title!.trim(),
         description: editing.description ?? null,
         type: editing.type ?? "monthly",
         targetValue: Number(editing.targetValue ?? 100),
         currentValue: Number(editing.currentValue ?? 0),
         unit: editing.unit ?? null,
-        startDate: editing.startDate ?? new Date().toISOString(),
-        endDate: editing.endDate,
+        // Día local de hoy: con la hora UTC, de noche en América ya sería mañana.
+        startDate: editing.startDate ?? localToday(),
+        endDate: editing.endDate!,
         categoryId: editing.categoryId || null,
         completed: editing.completed ?? false,
         source: editing.source ?? "manual",
         finGoalId: editing.source === "finance" ? editing.finGoalId || null : null,
       };
-      if (payload.source === "finance" && !payload.finGoalId) {
-        toast.error("Elige la meta de ahorro a seguir");
-        return;
-      }
       if (editing.id) {
         await api.put(`/goals/${editing.id}`, payload);
         toast.success("Objetivo actualizado");
@@ -85,8 +101,9 @@ export function Goals() {
                 type: "monthly",
                 targetValue: 100,
                 currentValue: 0,
-                endDate: end.toISOString().slice(0, 10),
+                endDate: localToday(end),
               });
+              setErrors({});
               setOpen(true);
             }}
           >
@@ -106,7 +123,8 @@ export function Goals() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {(goals.data ?? []).map((g) => {
-            const pct = Math.min(100, (g.currentValue / g.targetValue) * 100);
+            // Objetivos antiguos con meta 0: sin división por cero (NaN en la barra).
+            const pct = g.targetValue > 0 ? Math.min(100, (g.currentValue / g.targetValue) * 100) : 0;
             const days = Math.max(
               0,
               Math.ceil((new Date(g.endDate).getTime() - Date.now()) / 86400000)
@@ -148,8 +166,11 @@ export function Goals() {
                           setEditing({
                             ...g,
                             endDate: g.endDate.slice(0, 10),
-                            startDate: g.startDate.slice(0, 10),
+                            // Objetivos antiguos guardaban el instante de creación:
+                            // se toma su día local, no el día UTC.
+                            startDate: /T00:00:00(\.000)?Z$/.test(g.startDate) ? g.startDate.slice(0, 10) : localToday(new Date(g.startDate)),
                           });
+                          setErrors({});
                           setOpen(true);
                         }}
                         className="text-subtle hover:text-text p-1.5 rounded-md hover:bg-muted"
@@ -193,7 +214,7 @@ export function Goals() {
         title={editing?.id ? "Editar objetivo" : "Nuevo objetivo"}
       >
         <form onSubmit={save} className="space-y-3">
-          <Field label="Título">
+          <Field label="Título" error={errors.title}>
             <Input
               autoFocus
               required
@@ -218,7 +239,7 @@ export function Goals() {
             </Select>
           </Field>
           {editing?.source === "finance" && (
-            <Field label="Meta de ahorro">
+            <Field label="Meta de ahorro" error={errors.finGoalId}>
               <Select value={editing?.finGoalId ?? ""} onChange={(e) => setEditing({ ...editing, finGoalId: e.target.value })}>
                 <option value="">Elige una meta</option>
                 {(finGoals.data?.goals ?? []).map((fg) => (
@@ -246,9 +267,11 @@ export function Goals() {
                 <option value="yearly">Anual</option>
               </Select>
             </Field>
-            <Field label="Meta">
+            <Field label="Meta" error={errors.targetValue}>
               <Input
                 type="number"
+                min={0}
+                step="any"
                 disabled={editing?.source === "finance"}
                 value={editing?.targetValue ?? 100}
                 onChange={(e) =>
@@ -276,10 +299,11 @@ export function Goals() {
                 onChange={(e) => setEditing({ ...editing, unit: e.target.value })}
               />
             </Field>
-            <Field label="Fecha límite">
+            <Field label="Fecha límite" error={errors.endDate}>
               <Input
                 type="date"
                 required
+                min={editing?.id ? editing.startDate?.slice(0, 10) : localToday()}
                 value={editing?.endDate ? String(editing.endDate).slice(0, 10) : ""}
                 onChange={(e) => setEditing({ ...editing, endDate: e.target.value })}
               />

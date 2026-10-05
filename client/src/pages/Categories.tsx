@@ -20,10 +20,13 @@ export function Categories() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing?.name) return;
+    if (!editing?.name?.trim()) {
+      toast.error("El nombre es obligatorio.");
+      return;
+    }
     try {
       const payload = {
-        name: editing.name,
+        name: editing.name.trim(),
         color: editing.color ?? "#6366f1",
         icon: editing.icon ?? null,
         description: editing.description ?? null,

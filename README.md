@@ -1,70 +1,197 @@
-![Imagen del menú del proyecto](site-web.png)
-# 🚀 Sistema de Productividad Personal (Local-First by Vibecoding) 1.0.0v
+<p align="center">
+  <img width="1919" alt="Captura del panel principal de Plan Gestor Task" src="https://github.com/user-attachments/assets/55da33d2-d56b-4b5d-ac0d-56b07cc35a46" />
+</p>
 
-Una plataforma modular de productividad personal al estilo **Notion + Todoist + Google Calendar + Habit Tracker**, diseñada bajo el concepto **Local-First** para garantizar total privacidad, rapidez y control de tus datos sin depender de servidores en la nube.
-
-/server funcionaría en producción
-Actualmente en servicios gratuitos se muestra archivos estáticos.
+<h1 align="center">🚀 Plan Gestor Task — Sistema de Productividad Personal</h1>
 
 <p align="center">
+  <b>Tareas · Hábitos · Calendario · Objetivos · Finanzas · Notas</b><br>
+  Local-First: tus datos viven en tu dispositivo, funcionan sin conexión y se sincronizan solo cuando tú lo decides.
+</p>
+
+<p align="center">
+  <a href="https://task-gestor.netlify.app/"><img alt="Demo en vivo" src="https://img.shields.io/badge/Demo-en_vivo-6366f1?logo=netlify&logoColor=white"></a>
+  <img alt="Versión 1.3.0" src="https://img.shields.io/badge/versión-1.3.0-blue">
   <img alt="Lighthouse SEO 100" src="https://img.shields.io/badge/Lighthouse_SEO-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Best Practices 100" src="https://img.shields.io/badge/Best_Practices-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Accessibility 100" src="https://img.shields.io/badge/Accessibility-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Performance 92" src="https://img.shields.io/badge/Performance-92-brightgreen?logo=lighthouse&logoColor=white">
-  <a href="https://task-gestor.netlify.app/"><img alt="Demo en vivo" src="https://img.shields.io/badge/Demo-en_vivo-6366f1?logo=netlify&logoColor=white"></a>
   <br>
-  <img alt="React" src="https://img.shields.io/badge/React_18-20232A?logo=react&logoColor=61DAFB">
+  <img alt="React 18" src="https://img.shields.io/badge/React_18-20232A?logo=react&logoColor=61DAFB">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
   <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white">
-  <img alt="Prisma" src="https://img.shields.io/badge/Prisma-2D3748?logo=prisma&logoColor=white">
-  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white">
-  <img alt="Express" src="https://img.shields.io/badge/Express-000000?logo=express&logoColor=white">
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white">
+  <img alt="IndexedDB" src="https://img.shields.io/badge/IndexedDB-local--first-orange">
+  <img alt="PWA" src="https://img.shields.io/badge/PWA-offline-5A0FC8?logo=pwa&logoColor=white">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri_2-Windows-24C8DB?logo=tauri&logoColor=white">
 </p>
+
+Una plataforma modular de productividad personal al estilo **Notion + Todoist + Google Calendar + Habit Tracker**, con gestión financiera y notas integradas. Está diseñada bajo el concepto **Local-First**: no hay cuentas, ni servidores en la nube, ni telemetría. Toda la información se guarda en el navegador (IndexedDB) o en la app de escritorio, lo que garantiza privacidad, rapidez y funcionamiento completo sin conexión.
+
+**Disponible como:**
+
+| Plataforma | Cómo usarla |
+| :--- | :--- |
+| 🌐 **Web** | [task-gestor.netlify.app](https://task-gestor.netlify.app/) (sitio estático en Netlify) |
+| 📱 **iPhone / Android** | PWA instalable desde el navegador («Añadir a pantalla de inicio») |
+| 🖥️ **Windows** | App de escritorio nativa con Tauri 2 — ver [`DESKTOP.md`](DESKTOP.md) |
+| 💻 **PC en red local** | `npm run pc` sirve la app y el relé de sincronización — ver [`sync/README.md`](sync/README.md) |
 
 ---
 
 ## 📋 Índice
-1. [Características Principales](#-características-principales)
-2. [Rendimiento y Escalabilidad](#-rendimiento-y-escalabilidad-métricas-reales)
-3. [Tecnologías Utilizadas](#%EF%B8%8F-tecnologías-utilizadas)
-4. [Arquitectura y Estructura del Proyecto](#-arquitectura-y-estructura-del-proyecto)
-5. [¿Cómo Funciona? (Flujo de la Aplicación)](#-cómo-funciona-flujo-de-la-aplicación)
-6. [Base de Datos y Modelos](#-base-de-datos-y-modelos)
-7. [Instalación y Configuración](#-instalación-y-configuración)
-8. [Scripts Disponibles](#-scripts-disponibles)
-9. [Referencia de la API REST](#-referencia-de-la-api-rest)
-10. [Seguridad y Respaldos](#-seguridad-y-respaldos)
+
+1. [Características principales](#-características-principales)
+2. [Inicio rápido](#-inicio-rápido)
+3. [Arquitectura](#-arquitectura)
+4. [Estructura del proyecto](#-estructura-del-proyecto)
+5. [Tecnologías](#️-tecnologías)
+6. [Rendimiento y escalabilidad](#-rendimiento-y-escalabilidad-métricas-reales)
+7. [Módulo de Finanzas](#-módulo-de-finanzas)
+8. [Módulo de Notas](#-módulo-de-notas)
+9. [Hábitos: metas, horarios, Google Calendar y capturas](#-hábitos-metas-horarios-google-calendar-y-capturas)
+10. [iPhone, almacenamiento y actualizaciones](#-iphone-almacenamiento-y-actualizaciones)
+11. [Pruebas](#-pruebas)
+12. [Scripts disponibles](#️-scripts-disponibles)
+13. [Referencia de la API](#-referencia-de-la-api)
+14. [Seguridad y respaldos](#️-seguridad-y-respaldos)
+15. [Documentación adicional](#-documentación-adicional)
 
 ---
 
-## ✨ Características Principales
+## ✨ Características principales
 
-El sistema se compone de varios módulos integrados que interactúan de forma fluida:
+| Módulo | Qué ofrece |
+| :--- | :--- |
+| 📊 **Dashboard** | Widgets con las tareas prioritarias de hoy, seguimiento rápido de hábitos, próximos eventos y progreso de objetivos del mes. |
+| 📋 **Tareas** | Vistas de **lista**, **Kanban** (arrastrar y soltar), **calendario** e **historial** (completadas por día, marcando si se cerraron a tiempo). Vistas rápidas (Hoy, Próximas, Vencidas, Sin fecha), filtros y ordenación. **Recurrentes** (diaria, laborables, semanal, mensual, anual) con id determinista, sin duplicados entre dispositivos. **Recordatorios relativos** que se recalculan al mover la fecha. Vínculo con objetivos. |
+| 🔁 **Hábitos** | Frecuencia diaria o por días concretos, **metas cuantificables** (8 vasos, 30 min…), rachas, horarios con zona horaria, sincronización opcional con **Google Calendar** e importación desde **capturas de calendario** con OCR local. |
+| 📅 **Calendario** | Vistas de mes, semana, día y agenda (*FullCalendar*) que unifican eventos, tareas con fecha y horarios de hábitos. |
+| 🎯 **Objetivos** | Metas diarias, semanales, mensuales o anuales con progreso manual, **calculado desde tareas vinculadas** o **desde una meta de ahorro** (se calcula al leer; nunca se copia). |
+| 💰 **Finanzas** | Cuentas, movimientos, transferencias, presupuestos, metas de ahorro, recurrentes, análisis e **importación universal** (CSV, Excel, JSON, SQL, SQLite, Cashew). |
+| 📝 **Notas** | Editor de texto enriquecido, categorías, adjuntos, papelera, autoguardado con recuperación y **cálculos automáticos** (`200+200=` → `400`). |
+| 📈 **Estadísticas** | Gráficos (*Recharts*) de tareas por prioridad, hábitos completados en el tiempo e índices de productividad. |
+| 🗂️ **Categorías y etiquetas** | Carpetas jerárquicas con color e icono, y etiquetas globales para organización cruzada. |
+| 🔄 **Sincronización** | Manual iPhone ↔ PC por Wi‑Fi (cifrada de extremo a extremo) o con archivos cifrados. Motor a tres bandas con revisión de conflictos (los financieros siempre los decides tú). |
+| ⚙️ **Configuración** | Tema claro/oscuro/sistema, color de acento, escala de fuente, **bloqueo por PIN**, copias de seguridad automáticas y cifradas, y paleta de comandos (`Ctrl+K`). |
 
-*   📊 **Dashboard de Control**: Una vista centralizada con widgets dinámicos para ver tareas prioritarias hoy, seguimiento rápido de hábitos, eventos próximos en el calendario y progreso de objetivos del mes.
-*   📋 **Gestor de Tareas**: Soporta flujo completo de tareas con campos para descripción, fecha límite, hora, notas y progreso numérico. Ofrece vistas en:
-    *   **Lista Tradicional**: Organizada por prioridad y estado.
-    *   **Tablero Kanban**: Permite arrastrar y soltar (*drag and drop*) para cambiar de estado rápidamente.
-    *   **Calendario**: Integración visual de tareas con fechas límite.
-    *   **Historial**: completadas agrupadas por día, marcando si se cerraron a tiempo.
-    *   **Vistas rápidas** (Hoy, Próximas, Vencidas, Sin fecha), filtros por estado/etiqueta y ordenación.
-    *   **Tareas recurrentes** (diaria, laborables, semanal, mensual, anual): al completarla se crea la siguiente con id determinista (sin duplicados entre dispositivos).
-    *   **Recordatorios relativos** al vencimiento (a la hora, 10 min, 1 h, 1 día…) que se recalculan al mover la fecha.
-    *   **Vínculo con objetivos**: una tarea puede contribuir a un objetivo cuyo progreso se calcula desde las tareas completadas.
-*   🔁 **Seguimiento de Hábitos**: Configuración de hábitos con frecuencia diaria o personalizada (ej. Lunes, Miércoles y Viernes). Incluye registro diario de progreso y cálculo automático de rachas (*streaks*).
-*   📅 **Calendario Unificado**: Calendario interactivo (mes, semana, día y agenda) potenciado por *FullCalendar* que unifica eventos creados manualmente y tareas con fecha límite.
-*   🎯 **Objetivos y Metas**: Creación de metas temporales (diarias, semanales, mensuales o anuales). El progreso puede ser manual, **calculado desde tareas vinculadas** o **desde una meta de ahorro** de Finanzas (se calcula al leer; nunca se copia).
-*   💰 **Finanzas**: gestión financiera personal completa (ver [sección Finanzas](#-módulo-de-finanzas)).
-*   📱 **App para iPhone (PWA)**: instalable desde Safari, a pantalla completa con zonas seguras, barra de pestañas inferior, formularios como hojas, sin zoom al escribir y **funcionamiento completo sin conexión**.
-*   🔄 **Sincronización manual iPhone ↔ PC**, solo cuando tú la inicias: por Wi‑Fi (cifrada de extremo a extremo) o con **archivos cifrados**. Motor a tres bandas con revisión de conflictos (los financieros siempre los decides tú). Ver [`sync/README.md`](sync/README.md).
-*   📈 **Módulo de Estadísticas**: Gráficos analíticos dinámicos basados en *Recharts* que muestran la distribución de tareas por prioridad, hábitos completados a lo largo del tiempo e índices de productividad general.
-*   🗂️ **Categorías y Etiquetas**: Sistema jerárquico de carpetas con colores e iconos personalizables para clasificar todas tus actividades (ej. "Trabajo", "Personal", "Salud"). Además de etiquetas globales para organización cruzada.
-*   ⚙️ **Configuración y Apariencia**: Personalización completa que incluye:
-    *   **Temas**: Claro, Oscuro o Sincronizado con el Sistema.
-    *   **Color de Acento**: Selección dinámica del color primario de la aplicación.
-    *   **Escala de Fuente**: Modificación del tamaño del texto base.
-    *   **Seguridad**: Bloqueo opcional por PIN local guardado como hash en base de datos.
-    *   **Backup**: Exportación completa a JSON/CSV e importación directa desde la UI.
+---
+
+## 🏁 Inicio rápido
+
+### Requisitos
+*   **Node.js 20+** (la versión con la que compila Netlify) y `npm`.
+*   Solo para la app de escritorio: Rust y Visual Studio Build Tools (ver [`DESKTOP.md`](DESKTOP.md)).
+
+### Pasos
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/AlejandroDukesini/Personal_Task_Gestor.git
+cd Personal_Task_Gestor
+
+# 2. Instalar dependencias (npm workspaces: client, server y sync)
+npm install
+
+# 3. Arrancar la app en modo desarrollo
+npm run dev
+```
+
+Abre `http://localhost:5173`. No hace falta base de datos ni backend: los datos se crean en el almacenamiento del navegador la primera vez que abres la app.
+
+### Otras formas de ejecutarla
+
+```bash
+npm run build && npm run preview   # build de producción servido localmente
+npm run pc                         # build + relé de sincronización en http://localhost:4181
+npm run desktop:dev                # app de escritorio (Tauri) con recarga en caliente
+```
+
+### Variables de entorno (opcionales)
+
+| Variable | Dónde | Para qué |
+| :--- | :--- | :--- |
+| `VITE_GOOGLE_CLIENT_ID` | `client/.env` (ver `client/.env.example`) o Netlify | Habilitar la integración con Google Calendar. También se puede pegar en Configuración › Integraciones. |
+
+---
+
+## 🧭 Arquitectura
+
+La app es **100 % estática**: el build de Vite (`client/dist`) contiene todo lo necesario y se despliega en Netlify sin servidor.
+
+```mermaid
+graph TD
+    UI[Páginas React] -->|api.get / api.post …| API[services/api.ts]
+    API -->|copia previa en operaciones destructivas| BK[Copias de seguridad]
+    API -->|handleRequest método + ruta| LAPI[services/localApi.ts<br/>rutas tipo REST en el navegador]
+    LAPI --> DB[(localDb · IndexedDB<br/>+ espejo en localStorage)]
+    DB <-->|manual y cifrada| SYNC[Relé sync/ · archivos cifrados]
+    DB <-->|opcional| GCAL[Google Calendar API]
+```
+
+*   **Misma interfaz, sin red**: [`client/src/services/api.ts`](client/src/services/api.ts) conserva la forma de un cliente HTTP (`get`, `post`, `put`, `patch`, `delete`), pero cada petición se resuelve en [`localApi.ts`](client/src/services/localApi.ts) contra la base local. Las páginas no necesitan saber si hay servidor.
+*   **Persistencia robusta**: IndexedDB con migraciones versionadas, copia espejo en `localStorage`, fusión fila a fila entre pestañas y copia verificada antes de cualquier operación destructiva.
+*   **Reglas de negocio centralizadas** en [`rules.ts`](client/src/services/rules.ts) (fechas coherentes, campos obligatorios, precondiciones), documentadas en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
+*   **Backend de referencia**: la carpeta [`server/`](server) contiene la implementación original con **Express + Prisma + SQLite**. No se despliega, pero se mantiene como referencia de la API y para los benchmarks de base de datos (`npm run db:setup` y luego `npm run dev:server`, en el puerto 4000).
+
+---
+
+## 📁 Estructura del proyecto
+
+Monorepo administrado con **npm workspaces**:
+
+```
+Gestion_tareas/
+├── client/                     # App React + Vite (web, PWA y escritorio)
+│   ├── public/                 # Iconos, manifest, robots.txt, sitemap.xml
+│   ├── scripts/                # Generación de migraciones SQL de finanzas
+│   ├── src/
+│   │   ├── components/         # Componentes UI reutilizables (incl. paleta de comandos)
+│   │   ├── hooks/              # Hooks personalizados
+│   │   ├── layouts/            # Layout principal (barra lateral / pestañas móviles)
+│   │   ├── lib/                # Utilidades (dinero en céntimos, i18n, escritorio)
+│   │   ├── pages/              # Dashboard, Tasks, Habits, Calendar, Goals, Finance, Notes, Stats…
+│   │   ├── services/           # Capa de datos local-first
+│   │   │   ├── api.ts          # Cliente con interfaz HTTP que resuelve en local
+│   │   │   ├── localApi.ts     # Rutas tipo REST sobre la base local
+│   │   │   ├── localDb.ts      # Base local versionada y migraciones
+│   │   │   ├── rules.ts        # Reglas de negocio
+│   │   │   ├── backup/         # Copias de seguridad y restauración
+│   │   │   ├── finance/        # Finanzas e importación universal
+│   │   │   ├── notes/          # Notas, cálculos y adjuntos
+│   │   │   ├── habits/         # Metas y horarios de hábitos
+│   │   │   ├── gcal/           # Integración con Google Calendar
+│   │   │   ├── screenshot/     # OCR de capturas de calendario
+│   │   │   ├── manualsync/     # Motor de sincronización manual
+│   │   │   └── persistence/    # IndexedDB, espejo y recuperación
+│   │   ├── store/              # Estado global con Zustand
+│   │   ├── themes/             # Temas y color de acento
+│   │   └── types/              # Tipos TypeScript compartidos
+│   ├── src-tauri/              # Envoltorio nativo de escritorio (Tauri 2)
+│   └── vite.config.ts
+├── server/                     # Backend de referencia (Express + Prisma + SQLite)
+│   ├── prisma/schema.prisma
+│   └── src/routes/             # tasks, habits, goals, events, stats, backup…
+├── sync/                       # Relé de sincronización PC ↔ móvil
+├── DESKTOP.md                  # Guía de la versión de escritorio
+├── REGLAS_DE_NEGOCIO.md        # Reglas de negocio y códigos de error
+├── netlify.toml                # Build y cabeceras de seguridad del despliegue
+└── package.json                # Workspaces y scripts globales
+```
+
+---
+
+## 🛠️ Tecnologías
+
+| Capa | Tecnologías |
+| :--- | :--- |
+| **Interfaz** | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Lucide React |
+| **Estado y datos** | Zustand, IndexedDB, Web Crypto (AES-256-GCM, PBKDF2, SHA-256) |
+| **Vistas especializadas** | FullCalendar (calendario), Recharts (estadísticas), @hello-pangea/dnd (Kanban), TipTap / ProseMirror (notas), Tesseract.js (OCR local) |
+| **Escritorio** | Tauri 2 (WebView2, instalador NSIS) |
+| **Pruebas** | Vitest (cliente), `node:test` (relé de sincronización) |
+| **Backend de referencia** | Node.js, Express, Prisma ORM, SQLite, Zod |
+| **Despliegue** | Netlify (sitio estático con CSP y cabeceras de seguridad) |
 
 ---
 
@@ -126,10 +253,10 @@ El `index.html` no se sirve "pelado": implementa una capa de SEO técnico de niv
 | **`lang="es"` + semántica** | Idioma declarado, jerarquía de encabezados | Accesibilidad 100 |
 
 > **Resultado:** el sitio pasa de un SEO de 82 a **100/100**, entrega una tarjeta social profesional al compartirse y es indexable, instalable como PWA y accesible. Es la diferencia entre "un proyecto que funciona" y "un proyecto listo para producción".
->
-> ℹ️ Las URLs absolutas (`og:url`, `canonical`, `sitemap`) usan un dominio de ejemplo — sustitúyelo por tu dominio real de Netlify en `client/index.html`, `robots.txt` y `sitemap.xml` tras el despliegue.
 
-### 🗄️ Backend — Latencia de la API
+### 🗄️ Backend de referencia (`server/`) — Latencia de la API
+
+> El backend Express no forma parte del despliegue actual (la app web es 100 % estática), pero se conserva como implementación de referencia de la API y estas cifras siguen siendo reproducibles con `npm run dev:server`.
 
 Benchmark de latencia sobre HTTP (500 peticiones por endpoint, tras *warm-up*) contra el stack completo `Express → Prisma → SQLite`. El endpoint más pesado, `GET /stats/summary`, resuelve **6 agregaciones en paralelo** (`Promise.all`) más el cálculo de series temporales de 30 días en memoria:
 
@@ -152,131 +279,7 @@ Escenario de escala controlado: se sembró una copia desechable de la base de da
 
 $$\text{Mejora} = \frac{7.56 - 0.596}{7.56} \times 100 = \mathbf{92.1\%}$$
 
-> El índice pasó de un *full table scan* a un **covering index** (SQLite resuelve la consulta leyendo solo el índice, sin tocar la tabla). El índice está aplicado en [`schema.prisma`](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/server/prisma/schema.prisma) y respaldado por los patrones de consulta reales de `stats.ts` y `tasks.ts`.
-
----
-
-## 🛠️ Tecnologías Utilizadas
-
-La aplicación está construida sobre un entorno moderno y robusto con JavaScript / TypeScript:
-
-### Frontend (Cliente)
-*   **React 18** (Vite como empaquetador)
-*   **TypeScript** para tipado estático seguro.
-*   **Tailwind CSS** para un diseño adaptativo y estilizado mediante variables CSS dinámicas.
-*   **Zustand** para la gestión ágil del estado de la UI (con persistencia local del tema).
-*   **FullCalendar** para el renderizado interactivo del calendario mensual/semanal.
-*   **Recharts** para los gráficos de la sección de estadísticas.
-*   **Framer Motion** para animaciones fluidas y microinteracciones.
-*   **Lucide React** para la iconografía de la aplicación.
-
-### Backend (Servidor)
-*   **Node.js** + **Express** como framework para la API REST.
-*   **TypeScript** (compilado a JS con `tsc` y ejecutado en desarrollo mediante `tsx`).
-*   **Prisma ORM** para la gestión, migración y consultas a la base de datos de forma tipada.
-*   **Zod** para la validación estricta de las cargas de datos (payloads) en los endpoints de la API.
-
-### Base de Datos
-*   **SQLite**: Base de datos relacional integrada en un archivo local (`dev.db`), ideal para aplicaciones de escritorio locales o auto-hospedadas.
-
----
-
-## 📁 Arquitectura y Estructura del Proyecto
-
-El proyecto está organizado en un monorepo administrado a través de **npm Workspaces**, lo que permite instalar dependencias globales y ejecutar comandos para ambos proyectos simultáneamente desde la raíz.
-
-```
-Gestion_tareas/
-├── client/                     # Frontend de la aplicación (React + Vite)
-│   ├── public/                 # Recursos públicos estáticos (iconos, etc.)
-│   ├── src/                    # Código fuente del cliente
-│   │   ├── components/         # Componentes UI reutilizables y modulares (shadcn-like)
-│   │   ├── hooks/              # Hooks personalizados de React
-│   │   ├── layouts/            # Estructura y layout principal de la app (AppLayout.tsx)
-│   │   ├── lib/                # Utilidades comunes (conversión de colores, formateo de fechas)
-│   │   ├── pages/              # Vistas principales de la aplicación por módulo
-│   │   ├── services/           # Cliente HTTP personalizado (Fetch API centralizado)
-│   │   ├── store/              # Almacenamiento de estado global con Zustand (theme.ts)
-│   │   ├── types/              # Definición de interfaces TypeScript compartidas
-│   │   ├── App.tsx             # Componente raíz y enrutador del cliente
-│   │   └── main.tsx            # Punto de entrada de React
-│   ├── package.json            # Dependencias y scripts del frontend
-│   └── vite.config.ts          # Configuración del servidor de desarrollo Vite + Proxy REST
-├── server/                     # Backend de la aplicación (Node.js + Express)
-│   ├── prisma/                 # Archivos de base de datos y ORM
-│   │   ├── dev.db              # Base de datos local SQLite (generada al instalar)
-│   │   └── schema.prisma       # Definición del esquema y relaciones de base de datos
-│   ├── src/                    # Código fuente del backend
-│   │   ├── lib/                # Utilidades de backend (manejador asíncrono)
-│   │   ├── middleware/         # Middleware de Express (controlador de errores globales)
-│   │   ├── routes/             # Endpoints modulares de Express agrupados por entidad
-│   │   ├── db.ts               # Instanciación y exportación del cliente Prisma
-│   │   ├── index.ts            # Inicialización del servidor Express y configuración inicial
-│   │   └── seed.ts             # Script de datos iniciales (semilla de ejemplo)
-│   ├── package.json            # Dependencias y scripts del backend
-│   └── tsconfig.json           # Configuración del compilador TypeScript para backend
-├── package.json                # Configuración del Monorepo y scripts globales
-└── README.md                   # Documentación del proyecto
-```
-
----
-
-## ⚙️ ¿Cómo Funciona? (Flujo de la Aplicación)
-
-### 1. Concepto Local-First y Almacenamiento
-A diferencia de las arquitecturas SaaS tradicionales, en este sistema tus datos no viajan a una nube externa administrada por terceros:
-*   **Persistencia de Datos**: Toda la información de tus tareas, hábitos, metas, eventos y categorías se almacena en el archivo de base de datos SQLite ubicado en `server/prisma/dev.db`.
-*   **Persistencia de Interfaz**: Configuración de apariencia (si prefieres tema oscuro o claro, o qué color primario te gusta) se almacena en el navegador mediante `localStorage` a través del middleware de Zustand en el frontend. El backend también guarda una copia en la tabla `Settings` para configuraciones generales como idioma y formato de fechas.
-
-### 2. Comunicación Cliente-Servidor en Desarrollo
-```mermaid
-graph TD
-    Client[Cliente React - Puerto 5173] -->|Llamadas HTTP a /api/*| ViteProxy[Vite Dev Server Proxy]
-    ViteProxy -->|Redirección interna| Server[Servidor Express - Puerto 4000]
-    Server -->|Uso de Prisma Client| DB[(Base de Datos SQLite dev.db)]
-```
-*   **Proxy de Desarrollo**: Para evitar problemas de CORS y simular un entorno de producción unificado, [vite.config.ts](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/client/vite.config.ts) incluye un proxy que redirige automáticamente todas las llamadas con prefijo `/api` hechas en el cliente hacia el servidor backend en `http://localhost:4000`.
-*   **Consumo de API**: El archivo [api.ts](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/client/services/api.ts) expone un cliente HTTP sencillo que utiliza `fetch` nativo para comunicarse de forma limpia con los endpoints del backend.
-
-### 3. Carga Inicial y Configuración
-Al iniciar el servidor en [index.ts](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/server/src/index.ts), se asegura de que exista al menos una fila en la tabla de configuración (`Settings` con ID 1). Si no existe, realiza un *upsert* para crearla con los valores por defecto.
-
----
-
-## 🗄️ Base de Datos y Modelos
-
-El modelo de datos relacional está definido en el archivo [schema.prisma](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/server/prisma/schema.prisma). Las relaciones clave son:
-
-*   **Category**: Es recursiva (una categoría puede tener subcategorías, `parentId`). Tareas, Hábitos, Eventos y Objetivos pueden opcionalmente enlazarse a una Categoría. Si la categoría se elimina, la relación se vuelve `SET NULL` en cascada.
-*   **Task - Tag**: Relación muchos a muchos implementada explícitamente mediante la tabla intermedia `TaskTag`.
-*   **Habit - HabitLog**: Relación de uno a muchos. Cada registro diario (`HabitLog`) contiene la fecha exacta de ejecución y el recuento de completado. Para evitar duplicaciones del mismo hábito en el mismo día, la tabla tiene una llave única combinada `[habitId, date]`.
-*   **Reminder**: Tabla polimórfica que permite asociar un recordatorio programado a una tarea, un hábito o un evento mediante llaves foráneas opcionales (`taskId`, `habitId`, `eventId`).
-
----
-
-## 🛠️ Instalación y Configuración
-
-Sigue estos pasos para arrancar el entorno de desarrollo local:
-
-### Requisitos Previos
-*   Tener instalado **Node.js** (versión 18 o superior recomendada).
-*   Un gestor de paquetes como `npm` (incluido con Node.js).
-
-### Pasos
-1.  **Clonar el repositorio** a tu máquina local.
-2.  **Instalar dependencias**: Ejecuta el siguiente comando en la raíz del proyecto:
-    ```bash
-    npm install
-    ```
-    > [!NOTE]
-    > Al terminar la instalación, el script de ciclo de vida `postinstall` configurado en [package.json](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/package.json) ejecutará automáticamente la inicialización de la base de datos: generará el cliente Prisma, creará la estructura SQLite local (`server/prisma/dev.db`) si no existe, y poblará la base de datos con datos semilla de ejemplo definidos en [seed.ts](file:///c:/Users/USUARIO%20LENOVO/Desktop/Codigo/WSP/FRONT/Portafolio/Gestion_tareas/server/src/seed.ts).
-
-3.  **Iniciar la aplicación**: Levanta tanto el backend como el frontend en paralelo usando:
-    ```bash
-    npm run dev
-    ```
-    *   El frontend estará disponible en: `http://localhost:5173`
-    *   El backend escuchará en: `http://localhost:4000`
+> El índice pasó de un *full table scan* a un **covering index** (SQLite resuelve la consulta leyendo solo el índice, sin tocar la tabla). El índice está aplicado en [`schema.prisma`](server/prisma/schema.prisma) y respaldado por los patrones de consulta reales de `stats.ts` y `tasks.ts`.
 
 ---
 
@@ -464,76 +467,86 @@ Al escribir `200+200=` aparece `400` justo después del `=`. Admite `+ - * /` (t
 ## 🧪 Pruebas
 
 ```bash
-npm test                 # cliente (vitest) + relé de sincronización (node:test)
-npm run test -w client   # 475 pruebas: reglas de negocio (fechas, obligatorios, precondiciones), restauración entre dispositivos y detección de cifrado, persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, sincronización manual (incl. por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas
+npm test                 # cliente (Vitest) + relé de sincronización (node:test)
+npm run test -w client   # solo el cliente
 ```
 
-Las reglas de negocio que hace cumplir la API (fechas coherentes, campos obligatorios, precondiciones y códigos de error) están documentadas en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
+La batería del cliente (475 pruebas) cubre reglas de negocio (fechas, obligatorios, precondiciones), restauración entre dispositivos y detección de cifrado, persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, sincronización manual (incluida por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas.
+
+Las reglas de negocio (fechas coherentes, campos obligatorios, precondiciones y códigos de error) están documentadas en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
 
 ---
 
-## ⌨️ Scripts Disponibles
+## ⌨️ Scripts disponibles
 
-Todos estos comandos se pueden ejecutar directamente desde la **raíz del proyecto**:
+Todos se ejecutan desde la **raíz del proyecto**:
 
 | Comando | Descripción |
 | :--- | :--- |
-| `npm run dev` | Inicia el servidor de Express y el de Vite de forma paralela (usando `concurrently`). |
-| `npm run build` | Compila el backend (a JavaScript en `server/dist`) y compila/empaqueta el frontend listo para producción. |
-| `npm run start` | Arranca el backend compilado en producción (`server/dist/index.js`). |
-| `npm run db:studio` | Abre **Prisma Studio** en el navegador (`localhost:5555`), una interfaz visual interactiva para ver y editar tu base de datos SQLite. |
-| `npm run db:seed` | Vuelve a correr el script de semillas en la base de datos local para crear registros de prueba. |
-| `npm test` | Ejecuta las pruebas del cliente y del relé de sincronización. |
-| `npm run sync` | Arranca el relé de sincronización PC ↔ móvil por la red local (https). |
+| `npm run dev` | Servidor de desarrollo de Vite en `http://localhost:5173`. |
+| `npm run build` | Compila y empaqueta el cliente para producción (`client/dist`). |
+| `npm run preview` | Sirve localmente el build de producción. |
+| `npm test` | Pruebas del cliente y del relé de sincronización. |
+| `npm run pc` | Compila la app y la sirve junto al relé de sincronización en `http://localhost:4181`. |
+| `npm run sync` | Arranca solo el relé de sincronización PC ↔ móvil. |
+| `npm run desktop:dev` | App de escritorio (Tauri) con recarga en caliente. |
+| `npm run desktop:build` | Build de escritorio + instalador NSIS para Windows. |
 | `npm run sql:gen` | Regenera las migraciones SQL versionadas de finanzas. |
-| `npm run db:reset` | **Cuidado**: Elimina todos los datos de la base de datos local SQLite, recrea la base de datos y ejecuta el script de semillas. |
+| `npm run dev:server` | *(Backend de referencia)* Arranca Express en `http://localhost:4000`. |
+| `npm run build:server` / `npm run start:server` | *(Backend de referencia)* Compila a `server/dist` / ejecuta el build. |
+| `npm run db:setup` | *(Backend de referencia)* Genera el cliente Prisma, crea `server/prisma/dev.db` y carga datos de ejemplo. |
+| `npm run db:studio` | *(Backend de referencia)* Abre Prisma Studio (`localhost:5555`). |
+| `npm run db:seed` | *(Backend de referencia)* Vuelve a cargar los datos de ejemplo. |
+| `npm run db:reset` | ⚠️ *(Backend de referencia)* Borra todos los datos de SQLite, recrea el esquema y carga la semilla. |
 
 ---
 
-## 📡 Referencia de la API REST
+## 📡 Referencia de la API
 
-Los principales endpoints que expone el backend Express para el consumo del frontend son:
+La capa de datos expone rutas con forma REST. En la app se resuelven **en el navegador** mediante `localApi.ts`; el backend de referencia (`server/src/routes/`) implementa el núcleo de estas rutas bajo el prefijo `/api`.
 
-### Tareas (`/api/tasks`)
-*   `GET /api/tasks` - Obtiene todas las tareas (incluyendo categorías y etiquetas asociadas).
-*   `POST /api/tasks` - Crea una nueva tarea (valida prioridad, título y estados con Zod).
-*   `PUT /api/tasks/:id` - Actualiza campos de una tarea (p. ej., marcar como completada).
-*   `DELETE /api/tasks/:id` - Elimina una tarea.
+| Recurso | Rutas principales |
+| :--- | :--- |
+| **Tareas** `/tasks` | `GET` lista (con categoría, etiquetas y recordatorios) · `GET /:id` · `POST` crear · `PUT /:id` actualizar · `DELETE /:id` eliminar · `PATCH /reorder` ordenar · `/:id/subtasks` subtareas |
+| **Hábitos** `/habits` | `GET` lista con registros · `POST` crear · `PUT /:id` · `DELETE /:id` · `POST` / `DELETE /:id/logs` registrar o deshacer el día · `GET /:id/heatmap` · `GET /calendar` ocurrencias de horarios |
+| **Objetivos** `/goals` | `GET` metas con progreso calculado · `POST` crear · `PUT /:id` actualizar · `DELETE /:id` |
+| **Eventos** `/events` | `GET` por rango de fechas · `POST` crear · `PUT /:id` · `DELETE /:id` |
+| **Estadísticas** `/stats/summary` | Agregados del dashboard y series temporales de 30 días |
+| **Respaldo** `/backup` | `GET /export` copia completa en JSON · `POST /import` restauración |
+| **Configuración** `/settings` | `GET` / `PUT` preferencias · `POST` / `DELETE /settings/pin` y `POST /settings/pin/verify` para el bloqueo por PIN |
 
-### Hábitos (`/api/habits`)
-*   `GET /api/habits` - Obtiene la lista de hábitos vigentes con su respectivo historial de registros (`logs`).
-*   `POST /api/habits` - Crea un hábito con su objetivo diario/semanal y frecuencia.
-*   `POST /api/habits/:id/log` - Registra/actualiza un día de cumplimiento para el hábito (añade un `HabitLog`).
-*   `DELETE /api/habits/:id` - Elimina o archiva un hábito.
-
-### Objetivos/Metas (`/api/goals`)
-*   `GET /api/goals` - Lista de metas activas con cálculo dinámico de progreso.
-*   `POST /api/goals` - Crea un nuevo objetivo indicando el rango de fechas y unidad de medida.
-*   `PATCH /api/goals/:id` - Actualiza el progreso de cumplimiento (p. ej., aumentar el contador).
-
-### Calendario/Eventos (`/api/events`)
-*   `GET /api/events` - Retorna los eventos en un rango de fechas.
-*   `POST /api/events` - Añade un nuevo evento.
-*   `DELETE /api/events/:id` - Remueve un evento del calendario.
-
-### Respaldo (`/api/backup`)
-*   `GET /api/backup/export` - Compila todas las tablas del esquema local en un archivo JSON único para descarga.
-*   `POST /api/backup/import` - Recibe un payload JSON para restaurar/reemplazar la base de datos local.
+Las validaciones y los códigos de error de cada ruta están en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
 
 ---
 
-## 🛡️ Seguridad y Respaldos
+## 🛡️ Seguridad y respaldos
 
-### Copias de seguridad manuales
-Dado que toda la información se guarda localmente en SQLite, puedes realizar una copia de seguridad rápida copiando el archivo físico de la base de datos.
-En sistemas Linux/Mac:
+### Copias de seguridad
+*   **Automáticas y verificadas** (suma de comprobación) cada cierto tiempo de uso y **antes de cualquier acción destructiva**.
+*   **Descarga manual** en JSON desde Configuración (acceso rápido con `Ctrl+K`), con **cifrado AES-256-GCM** opcional y adjuntos opcionales.
+*   **Restauración** con validación, vista previa, copia previa obligatoria y modo *reemplazar* o *combinar sin borrar*.
+*   Recomendación: instala la app (PWA o escritorio) y descarga copias externas con regularidad; ningún navegador garantiza conservar sus datos para siempre.
+
+### Bloqueo por PIN
+El PIN se guarda solo como hash **PBKDF2** con sal (los PIN antiguos en SHA-256 se vuelven a sellar con PBKDF2 tras el siguiente acierto). Al ser una app 100 % estática, el PIN es un **bloqueo de la interfaz** frente a miradas indiscretas, no un cifrado de los datos: para proteger la información, usa las copias cifradas y el bloqueo del propio dispositivo.
+
+### Despliegue
+`netlify.toml` aplica cabeceras de seguridad a todo el sitio (Content Security Policy estricta, entre otras), que en una SPA estática son la principal capa de defensa.
+
+### Backend de referencia
+Si usas `server/`, puedes respaldar la base SQLite copiando el archivo:
+
 ```bash
-cp server/prisma/dev.db backup-$(date +%F).db
-```
-En Windows (PowerShell):
-```powershell
-Copy-Item "server/prisma/dev.db" -Destination "backup-$(Get-Date -Format 'yyyy-MM-dd').db"
+cp server/prisma/dev.db backup-$(date +%F).db                                         # Linux / macOS
+Copy-Item "server/prisma/dev.db" -Destination "backup-$(Get-Date -Format 'yyyy-MM-dd').db"   # PowerShell
 ```
 
-### Seguridad por PIN
-El backend ofrece endpoints para configurar y verificar un PIN de seguridad en `/settings/pin` e incluso validar un inicio de sesión local mediante `/settings/pin/verify`. El PIN es encriptado en el servidor usando un hash **SHA-256** unidireccional y se almacena en la columna `pinHash` de la tabla `Settings`.
+---
+
+## 📚 Documentación adicional
+
+| Documento | Contenido |
+| :--- | :--- |
+| [`DESKTOP.md`](DESKTOP.md) | Compilación e instalación de la app de escritorio para Windows (Tauri 2). |
+| [`sync/README.md`](sync/README.md) | Instalación en PC, emparejamiento y sincronización manual con el iPhone. |
+| [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md) | Reglas de negocio, validaciones y códigos de error. |

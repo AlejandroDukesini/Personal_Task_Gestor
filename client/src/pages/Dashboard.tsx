@@ -34,7 +34,7 @@ import { startOfToday } from "@/components/habits/HabitCounter";
 import { useConfig, hourInTimezone } from "@/store/config";
 import { useT, localeFor } from "@/lib/i18n";
 import { FinanceWidget } from "@/components/finance/FinanceWidget";
-import { isOverdue } from "@/lib/utils";
+import { asLocalDay, isOverdue } from "@/lib/utils";
 
 export function Dashboard() {
   const stats = useResource(() => api.get<Stats>("/stats/summary"));
@@ -150,7 +150,7 @@ export function Dashboard() {
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "rgb(var(--subtle))" }}
                   tickFormatter={(d) =>
-                    new Date(d).toLocaleDateString(localeFor(language), { weekday: "short" }).slice(0, 2)
+                    asLocalDay(d).toLocaleDateString(localeFor(language), { weekday: "short" }).slice(0, 2)
                   }
                 />
                 <YAxis hide />

@@ -51,6 +51,7 @@ import {
   habitDaysError,
   isoDate,
   isoDateOrNull,
+  isValidDay,
   localToday,
   dayOf,
   requiredText,
@@ -1292,13 +1293,19 @@ const routes: Route[] = [
   }],
 
   // Estadísticas
-  ["GET", "/stats/summary", () => {
+  ["GET", "/stats/summary", ({ query }) => {
     const db = loadDb();
     const today = startOfDay(new Date());
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 6);
     const monthAgo = new Date(today);
     monthAgo.setDate(monthAgo.getDate() - 29);
+
+    // Rango de la serie diaria en días locales AAAA-MM-DD (por defecto, 30 días).
+    const dayParam = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && isValidDay(v) ? v : null);
+    const to = dayParam(query.get("to")) ?? localToday(today);
+    const from = dayParam(query.get("from")) ?? localToday(monthAgo);
+    check(to < from ? MESSAGES.statsRange : null);
 
     const completedAt = (t: TaskRow) => (t.completedAt ? new Date(t.completedAt) : null);
     const habits = db.habits.filter((h) => !h.archived);
@@ -1309,25 +1316,25 @@ const routes: Route[] = [
       )
     );
 
-    const dailyCompletion = Array.from({ length: 30 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (29 - i));
-      const next = new Date(d);
-      next.setDate(next.getDate() + 1);
-      return {
-        date: d.toISOString().slice(0, 10),
-        count: db.tasks.filter((t) => {
-          const c = completedAt(t);
-          return t.status === "completed" && c && c >= monthAgo && c >= d && c < next;
-        }).length,
-      };
-    });
+    const completedPerDay = new Map<string, number>();
+    for (const t of db.tasks) {
+      const c = completedAt(t);
+      if (t.status !== "completed" || !c) continue;
+      const key = localToday(c);
+      completedPerDay.set(key, (completedPerDay.get(key) ?? 0) + 1);
+    }
+    const dailyCompletion: { date: string; count: number }[] = [];
+    const [fy, fm, fd] = from.split("-").map(Number);
+    for (let d = new Date(fy, fm - 1, fd); localToday(d) <= to && dailyCompletion.length < 1100; d.setDate(d.getDate() + 1)) {
+      const key = localToday(d);
+      dailyCompletion.push({ date: key, count: completedPerDay.get(key) ?? 0 });
+    }
 
     const habitDaily = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(today);
       d.setDate(d.getDate() - (6 - i));
       return {
-        date: d.toISOString().slice(0, 10),
+        date: localToday(d),
         count: habitLogsWeek.filter((l) => startOfDay(new Date(l.date)).getTime() === d.getTime()).length,
         total: habits.length,
       };

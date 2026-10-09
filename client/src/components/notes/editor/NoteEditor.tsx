@@ -148,158 +148,161 @@ function Toolbar({ editor, math, onMathChange }: { editor: Editor; math: MathOpt
   }
 
   return (
-    <div
-      role="toolbar"
-      aria-label="Formato del texto"
-      className="sticky top-0 z-10 -mx-1 px-1 py-1 bg-surface/95 backdrop-blur border-b border-border flex items-center gap-0.5 overflow-x-auto sm:flex-wrap"
-    >
-      <ToolButton label="Deshacer (Ctrl+Z)" disabled={!s.canUndo} onClick={() => c().undo().run()}>
-        <Undo2 size={16} />
-      </ToolButton>
-      <ToolButton label="Rehacer (Ctrl+Y)" disabled={!s.canRedo} onClick={() => c().redo().run()}>
-        <Redo2 size={16} />
-      </ToolButton>
-      <Sep />
-      <select aria-label="Estilo de párrafo" value={s.block} onChange={(e) => setBlock(e.target.value)} className="gt-field h-9 text-sm px-2 shrink-0 w-[7.5rem]">
-        <option value="p">Cuerpo</option>
-        <option value="h1">Título</option>
-        <option value="h2">Subtítulo</option>
-        <option value="h3">Sección</option>
-      </select>
-      <select
-        aria-label="Tipografía"
-        value={s.font}
-        onChange={(e) => (e.target.value ? c().setFontFamily(e.target.value).run() : c().unsetFontFamily().run())}
-        className="gt-field h-9 text-sm px-2 shrink-0 w-[10rem]"
+    // Pegada bajo la barra superior de la app (h-14 + borde + zona segura), no
+    // bajo el borde de la ventana, donde esa barra la tapaba. La paleta de color
+    // cuelga del contenedor exterior: dentro de la fila con scroll quedaba recortada.
+    <div className="sticky top-[calc(3.5rem+1px+env(safe-area-inset-top))] z-10 -mx-1">
+      <div
+        role="toolbar"
+        aria-label="Formato del texto"
+        className="px-1 py-1 bg-surface/95 backdrop-blur border-b border-border flex items-center gap-0.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible"
       >
-        {FONT_FAMILIES.map((f) => (
-          <option key={f.label} value={f.value ?? ""} style={f.value ? { fontFamily: f.value } : undefined}>
-            {f.label}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="Tamaño del texto"
-        value={s.size}
-        onChange={(e) => (e.target.value ? c().setFontSize(e.target.value).run() : c().unsetFontSize().run())}
-        className="gt-field h-9 text-sm px-2 shrink-0 w-[6.75rem]"
-      >
-        <option value="">Tamaño</option>
-        {FONT_SIZES.map((z) => (
-          <option key={z} value={z}>
-            {z.replace("px", "")}
-          </option>
-        ))}
-      </select>
-      <Sep />
-      <ToolButton label="Negrita (Ctrl+B)" active={s.bold} onClick={() => c().toggleBold().run()}>
-        <Bold size={16} />
-      </ToolButton>
-      <ToolButton label="Cursiva (Ctrl+I)" active={s.italic} onClick={() => c().toggleItalic().run()}>
-        <Italic size={16} />
-      </ToolButton>
-      <ToolButton label="Subrayado (Ctrl+U)" active={s.underline} onClick={() => c().toggleUnderline().run()}>
-        <Underline size={16} />
-      </ToolButton>
-      <ToolButton label="Tachado" active={s.strike} onClick={() => c().toggleStrike().run()}>
-        <Strikethrough size={16} />
-      </ToolButton>
-      <div className="relative shrink-0">
+        <ToolButton label="Deshacer (Ctrl+Z)" disabled={!s.canUndo} onClick={() => c().undo().run()}>
+          <Undo2 size={16} />
+        </ToolButton>
+        <ToolButton label="Rehacer (Ctrl+Y)" disabled={!s.canRedo} onClick={() => c().redo().run()}>
+          <Redo2 size={16} />
+        </ToolButton>
+        <Sep />
+        <select aria-label="Estilo de párrafo" value={s.block} onChange={(e) => setBlock(e.target.value)} className="gt-field h-9 text-sm px-2 shrink-0 w-[7.5rem]">
+          <option value="p">Cuerpo</option>
+          <option value="h1">Título</option>
+          <option value="h2">Subtítulo</option>
+          <option value="h3">Sección</option>
+        </select>
+        <select
+          aria-label="Tipografía"
+          value={s.font}
+          onChange={(e) => (e.target.value ? c().setFontFamily(e.target.value).run() : c().unsetFontFamily().run())}
+          className="gt-field h-9 text-sm px-2 shrink-0 w-[10rem]"
+        >
+          {FONT_FAMILIES.map((f) => (
+            <option key={f.label} value={f.value ?? ""} style={f.value ? { fontFamily: f.value } : undefined}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Tamaño del texto"
+          value={s.size}
+          onChange={(e) => (e.target.value ? c().setFontSize(e.target.value).run() : c().unsetFontSize().run())}
+          className="gt-field h-9 text-sm px-2 shrink-0 w-[6.75rem]"
+        >
+          <option value="">Tamaño</option>
+          {FONT_SIZES.map((z) => (
+            <option key={z} value={z}>
+              {z.replace("px", "")}
+            </option>
+          ))}
+        </select>
+        <Sep />
+        <ToolButton label="Negrita (Ctrl+B)" active={s.bold} onClick={() => c().toggleBold().run()}>
+          <Bold size={16} />
+        </ToolButton>
+        <ToolButton label="Cursiva (Ctrl+I)" active={s.italic} onClick={() => c().toggleItalic().run()}>
+          <Italic size={16} />
+        </ToolButton>
+        <ToolButton label="Subrayado (Ctrl+U)" active={s.underline} onClick={() => c().toggleUnderline().run()}>
+          <Underline size={16} />
+        </ToolButton>
+        <ToolButton label="Tachado" active={s.strike} onClick={() => c().toggleStrike().run()}>
+          <Strikethrough size={16} />
+        </ToolButton>
         <ToolButton label="Color del texto" active={!!s.color} onClick={() => setPalette((v) => !v)}>
           <Palette size={16} style={s.color ? { color: s.color } : undefined} />
         </ToolButton>
-        {palette && (
-          <div className="absolute left-0 top-10 z-20 gt-surface-pop p-2 w-52 space-y-2" onMouseDown={(e) => e.preventDefault()}>
-            <div className="grid grid-cols-5 gap-1.5">
-              {TEXT_COLORS.map((col) => (
-                <button
-                  key={col}
-                  type="button"
-                  aria-label={`Color ${col}`}
-                  className={cn("h-7 w-7 rounded-md border border-border", s.color === col && "ring-2 ring-primary ring-offset-1")}
-                  style={{ background: col }}
-                  onClick={() => {
-                    c().setColor(col).run();
-                    setPalette(false);
-                  }}
-                />
+        <Sep />
+        <ToolButton label="Lista con viñetas" active={s.bullet} onClick={() => c().toggleBulletList().run()}>
+          <List size={16} />
+        </ToolButton>
+        <ToolButton label="Lista numerada" active={s.ordered} onClick={() => c().toggleOrderedList().run()}>
+          <ListOrdered size={16} />
+        </ToolButton>
+        <Sep />
+        {(
+          [
+            ["left", AlignLeft, "Alinear a la izquierda"],
+            ["center", AlignCenter, "Centrar"],
+            ["right", AlignRight, "Alinear a la derecha"],
+            ["justify", AlignJustify, "Justificar"],
+          ] as const
+        ).map(([a, Icon, label]) => (
+          <ToolButton key={a} label={label} active={s.align === a} onClick={() => c().setTextAlign(a).run()}>
+            <Icon size={16} />
+          </ToolButton>
+        ))}
+        <Sep />
+        <ToolButton label={s.link ? "Editar enlace" : "Insertar enlace"} active={s.link} onClick={editLink}>
+          <Link2 size={16} />
+        </ToolButton>
+        {s.link && (
+          <ToolButton label="Quitar enlace" onClick={() => c().extendMarkRange("link").unsetLink().run()}>
+            <Link2Off size={16} />
+          </ToolButton>
+        )}
+        <Sep />
+        <ToolButton label={math.enabled ? "Desactivar cálculos automáticos" : "Activar cálculos automáticos"} active={math.enabled} onClick={() => onMathChange?.({ ...math, enabled: !math.enabled })}>
+          <Calculator size={16} />
+        </ToolButton>
+        {math.enabled && (
+          <>
+            <select
+              aria-label="Decimales de los resultados"
+              value={math.decimals ?? ""}
+              onChange={(e) => onMathChange?.({ ...math, decimals: e.target.value === "" ? null : Number(e.target.value) })}
+              className="gt-field h-9 text-sm px-2 shrink-0 w-[9.5rem]"
+            >
+              <option value="">Decimales: auto</option>
+              {[0, 1, 2, 3, 4, 6, 8].map((d) => (
+                <option key={d} value={d}>
+                  {d} decimales
+                </option>
               ))}
-            </div>
-            <label className="flex items-center gap-2 text-xs">
-              Personalizado
-              <input type="color" className="h-7 w-10 p-0 border border-border rounded" value={s.color || "#111827"} onChange={(e) => c().setColor(e.target.value).run()} />
-            </label>
-            <button
-              type="button"
-              className="text-xs text-subtle hover:text-text"
+            </select>
+            <ToolButton
+              label="Fijar los resultados como texto (Ctrl+Mayús+Intro fija el del cursor)"
               onClick={() => {
-                c().unsetColor().run();
-                setPalette(false);
+                const n = fixResults(editor);
+                toast.success(n ? `${n} resultado(s) fijados como texto` : "No hay resultados automáticos que fijar");
               }}
             >
-              Color predeterminado
-            </button>
-          </div>
+              <CheckCheck size={16} />
+            </ToolButton>
+          </>
         )}
       </div>
-      <Sep />
-      <ToolButton label="Lista con viñetas" active={s.bullet} onClick={() => c().toggleBulletList().run()}>
-        <List size={16} />
-      </ToolButton>
-      <ToolButton label="Lista numerada" active={s.ordered} onClick={() => c().toggleOrderedList().run()}>
-        <ListOrdered size={16} />
-      </ToolButton>
-      <Sep />
-      {(
-        [
-          ["left", AlignLeft, "Alinear a la izquierda"],
-          ["center", AlignCenter, "Centrar"],
-          ["right", AlignRight, "Alinear a la derecha"],
-          ["justify", AlignJustify, "Justificar"],
-        ] as const
-      ).map(([a, Icon, label]) => (
-        <ToolButton key={a} label={label} active={s.align === a} onClick={() => c().setTextAlign(a).run()}>
-          <Icon size={16} />
-        </ToolButton>
-      ))}
-      <Sep />
-      <ToolButton label={s.link ? "Editar enlace" : "Insertar enlace"} active={s.link} onClick={editLink}>
-        <Link2 size={16} />
-      </ToolButton>
-      {s.link && (
-        <ToolButton label="Quitar enlace" onClick={() => c().extendMarkRange("link").unsetLink().run()}>
-          <Link2Off size={16} />
-        </ToolButton>
-      )}
-      <Sep />
-      <ToolButton label={math.enabled ? "Desactivar cálculos automáticos" : "Activar cálculos automáticos"} active={math.enabled} onClick={() => onMathChange?.({ ...math, enabled: !math.enabled })}>
-        <Calculator size={16} />
-      </ToolButton>
-      {math.enabled && (
-        <>
-          <select
-            aria-label="Decimales de los resultados"
-            value={math.decimals ?? ""}
-            onChange={(e) => onMathChange?.({ ...math, decimals: e.target.value === "" ? null : Number(e.target.value) })}
-            className="gt-field h-9 text-sm px-2 shrink-0 w-[9.5rem]"
-          >
-            <option value="">Decimales: auto</option>
-            {[0, 1, 2, 3, 4, 6, 8].map((d) => (
-              <option key={d} value={d}>
-                {d} decimales
-              </option>
+      {palette && (
+        <div className="absolute left-1 top-full mt-1 z-20 gt-surface-pop p-2 w-52 space-y-2" onMouseDown={(e) => e.preventDefault()}>
+          <div className="grid grid-cols-5 gap-1.5">
+            {TEXT_COLORS.map((col) => (
+              <button
+                key={col}
+                type="button"
+                aria-label={`Color ${col}`}
+                className={cn("h-7 w-7 rounded-md border border-border", s.color === col && "ring-2 ring-primary ring-offset-1")}
+                style={{ background: col }}
+                onClick={() => {
+                  c().setColor(col).run();
+                  setPalette(false);
+                }}
+              />
             ))}
-          </select>
-          <ToolButton
-            label="Fijar los resultados como texto (Ctrl+Mayús+Intro fija el del cursor)"
+          </div>
+          <label className="flex items-center gap-2 text-xs">
+            Personalizado
+            <input type="color" className="h-7 w-10 p-0 border border-border rounded" value={s.color || "#111827"} onChange={(e) => c().setColor(e.target.value).run()} />
+          </label>
+          <button
+            type="button"
+            className="text-xs text-subtle hover:text-text"
             onClick={() => {
-              const n = fixResults(editor);
-              toast.success(n ? `${n} resultado(s) fijados como texto` : "No hay resultados automáticos que fijar");
+              c().unsetColor().run();
+              setPalette(false);
             }}
           >
-            <CheckCheck size={16} />
-          </ToolButton>
-        </>
+            Color predeterminado
+          </button>
+        </div>
       )}
     </div>
   );

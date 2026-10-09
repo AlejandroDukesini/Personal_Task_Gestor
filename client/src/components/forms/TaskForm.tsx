@@ -217,6 +217,7 @@ export function TaskForm({
           <Field label="Inicio">
             <Input
               type="date"
+              max={form.dueDate || undefined}
               value={form.startDate}
               onChange={(e) => setForm({ ...form, startDate: e.target.value })}
             />

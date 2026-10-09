@@ -4,7 +4,7 @@
 // rechazo verifica además que la base quedó intacta.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadDb } from "@/services/localDb";
+import { loadDb, mutate } from "@/services/localDb";
 import { call, expectStatus, makeAccount } from "@/test/helpers";
 import { fromLocalInput, toLocalInput } from "@/lib/utils";
 import { MESSAGES, eventRangeError, goalDatesError, habitDaysError, taskCompletionError, taskDatesError } from "./rules";
@@ -403,5 +403,22 @@ describe("formulario de eventos: hora local (TZ de pruebas = America/Bogota)", (
   it("vaciar el campo no lanza: queda vacío y el formulario lo marca como obligatorio", () => {
     expect(fromLocalInput("")).toBe("");
     expect(toLocalInput("")).toBe("");
+  });
+});
+
+describe("estadísticas por período", () => {
+  it("cuenta por día local con ambos límites incluidos y rechaza un rango invertido", async () => {
+    const at = [new Date(2026, 8, 30, 23, 55), new Date(2026, 9, 1, 0, 5), new Date(2026, 9, 3, 23, 55)];
+    for (const [i, d] of at.entries()) {
+      const t = await call("POST", "/tasks", { title: `T${i}` });
+      mutate((db) => Object.assign(db.tasks.find((x) => x.id === t.id)!, { status: "completed", completedAt: d.toISOString() }));
+    }
+    const s = await call("GET", "/stats/summary?from=2026-10-01&to=2026-10-03");
+    expect(s.dailyCompletion).toEqual([
+      { date: "2026-10-01", count: 1 },
+      { date: "2026-10-02", count: 0 },
+      { date: "2026-10-03", count: 1 },
+    ]);
+    await expectStatus(400, call("GET", "/stats/summary?from=2026-10-03&to=2026-10-01"));
   });
 });

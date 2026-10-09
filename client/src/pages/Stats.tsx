@@ -13,16 +13,48 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Field, Input, Select } from "@/components/ui/Input";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services/api";
+import { MESSAGES, dayOf, localToday } from "@/services/rules";
 import type { Habit, Stats as StatsType, Task } from "@/types";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#0ea5e9", "#8b5cf6"];
 
+const PERIODS = [
+  { value: "today", label: "Hoy" },
+  { value: "7d", label: "Últimos 7 días" },
+  { value: "30d", label: "Últimos 30 días" },
+  { value: "month", label: "Este mes" },
+  { value: "custom", label: "Personalizado" },
+] as const;
+type Period = (typeof PERIODS)[number]["value"];
+
+/** Rango de días locales AAAA-MM-DD, ambos extremos incluidos. */
+function periodRange(period: Exclude<Period, "custom">): { from: string; to: string } {
+  const now = new Date();
+  const to = localToday(now);
+  if (period === "month") return { from: `${to.slice(0, 7)}-01`, to };
+  const back = { today: 0, "7d": 6, "30d": 29 }[period];
+  return { from: localToday(new Date(now.getFullYear(), now.getMonth(), now.getDate() - back)), to };
+}
+
 export function Stats() {
-  const stats = useResource(() => api.get<StatsType>("/stats/summary"));
+  const [period, setPeriod] = useState<Period>("30d");
+  const [custom, setCustom] = useState(() => periodRange("30d"));
+  const rangeError = period === "custom" && custom.from && custom.to && custom.to < custom.from ? MESSAGES.statsRange : null;
+  // Mientras el rango personalizado esté incompleto o sea inválido se mantiene el último válido.
+  const [range, setRange] = useState(() => periodRange("30d"));
+  const wanted = period === "custom" ? custom : periodRange(period);
+  if (!rangeError && wanted.from && wanted.to && (wanted.from !== range.from || wanted.to !== range.to)) setRange(wanted);
+
+  const stats = useResource(
+    () => api.get<StatsType>(`/stats/summary?from=${range.from}&to=${range.to}`),
+    [range.from, range.to]
+  );
   const tasks = useResource(() => api.get<Task[]>("/tasks"));
   const habits = useResource(() => api.get<Habit[]>("/habits"));
 
@@ -36,10 +68,21 @@ export function Stats() {
   // Productividad: se calcula sobre las tareas reales, sin estimaciones.
   const productivity = (() => {
     const list = tasks.data ?? [];
-    const done = list.filter((t) => t.status === "completed" && t.completedAt);
-    const relevant = list.filter((t) => t.status !== "cancelled");
+    const doneDay = (t: Task) => localToday(new Date(t.completedAt!));
+    const done = list.filter((t) => {
+      if (t.status !== "completed" || !t.completedAt) return false;
+      const day = doneDay(t);
+      return day >= range.from && day <= range.to;
+    });
+    // Tareas vivas durante el período: creadas antes de su fin y no cerradas antes de su inicio.
+    const relevant = list.filter(
+      (t) =>
+        t.status !== "cancelled" &&
+        localToday(new Date(t.createdAt)) <= range.to &&
+        !(t.status === "completed" && t.completedAt && doneDay(t) < range.from)
+    );
     const withDue = done.filter((t) => t.dueDate);
-    const onTime = withDue.filter((t) => t.completedAt!.slice(0, 10) <= t.dueDate!.slice(0, 10));
+    const onTime = withDue.filter((t) => doneDay(t) <= dayOf(t.dueDate!));
     const days = done.map((t) => (Date.parse(t.completedAt!) - Date.parse(t.createdAt)) / 86400000).filter((d) => d >= 0);
     const weekday = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map((name) => ({ name, value: 0 }));
     for (const t of done) weekday[new Date(t.completedAt!).getDay()].value++;
@@ -64,6 +107,38 @@ export function Stats() {
   return (
     <>
       <PageHeader title="Estadísticas" description="Visualiza tu productividad." />
+
+      <div className="flex flex-wrap items-start gap-3 mb-4">
+        <Field label="Período">
+          <Select value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
+            {PERIODS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {period === "custom" && (
+          <>
+            <Field label="Desde">
+              <Input
+                type="date"
+                max={custom.to || undefined}
+                value={custom.from}
+                onChange={(e) => setCustom({ ...custom, from: e.target.value })}
+              />
+            </Field>
+            <Field label="Hasta" error={rangeError ?? undefined}>
+              <Input
+                type="date"
+                min={custom.from || undefined}
+                value={custom.to}
+                onChange={(e) => setCustom({ ...custom, to: e.target.value })}
+              />
+            </Field>
+          </>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {[
@@ -122,7 +197,7 @@ export function Stats() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Tareas completadas (30 días)</CardTitle>
+            <CardTitle>Tareas completadas por día</CardTitle>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -131,7 +206,7 @@ export function Stats() {
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "rgb(var(--subtle))" }}
-                  tickFormatter={(d) => new Date(d).getDate().toString()}
+                  tickFormatter={(d: string) => String(Number(d.slice(8, 10)))}
                 />
                 <YAxis tick={{ fontSize: 11, fill: "rgb(var(--subtle))" }} />
                 <Tooltip
@@ -144,6 +219,8 @@ export function Stats() {
                 <Area
                   type="monotone"
                   dataKey="count"
+                  name="Completadas"
+                  dot={(stats.data?.dailyCompletion.length ?? 0) <= 31}
                   stroke="rgb(var(--primary))"
                   fill="rgb(var(--primary))"
                   fillOpacity={0.3}

@@ -44,6 +44,13 @@ export const timeOrNull = z
  */
 export const dayOf = (v: string) => new Date(v).toISOString().slice(0, 10);
 
+/** "AAAA-MM-DD" que existe en el calendario (rechaza 2026-02-30). */
+export function isValidDay(v: string): boolean {
+  const [y, m, d] = v.split("-").map(Number);
+  const x = new Date(y, m - 1, d);
+  return x.getFullYear() === y && x.getMonth() === m - 1 && x.getDate() === d;
+}
+
 /** Día de hoy en la zona del dispositivo, como AAAA-MM-DD. */
 export function localToday(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -61,6 +68,7 @@ export const MESSAGES = {
   habitDates: "La fecha de fin no puede ser anterior a la de inicio.",
   habitDays: "Elige al menos un día de la semana para la frecuencia personalizada.",
   habitFutureLog: "No puedes registrar un hábito en un día que aún no ha llegado.",
+  statsRange: "La fecha final no puede ser anterior a la inicial.",
   habitArchived: "El hábito está archivado: reactívalo para registrar avances.",
 } as const;
 

@@ -6,6 +6,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import esLocale from "@fullcalendar/core/locales/es";
+import type { EventInput } from "@fullcalendar/core";
 import toast from "react-hot-toast";
 import { ExternalLink, Plus, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -18,8 +19,9 @@ import { api } from "@/services/api";
 import { HabitCounter } from "@/components/habits/HabitCounter";
 import { STATUS_LABEL } from "@/services/habits/schedule";
 import { eventRangeError, localToday } from "@/services/rules";
-import { fromLocalInput, toLocalInput } from "@/lib/utils";
-import type { Category, Event, HabitDayProgress, HabitOccurrence, OccurrenceStatus, Task } from "@/types";
+import { expandEvent, describeRecurrence, FREQ_LABEL, recurrenceError } from "@/services/events/recurrence";
+import { cn, fromLocalInput, toLocalInput } from "@/lib/utils";
+import type { Category, Event, EventRecurrence, HabitDayProgress, HabitOccurrence, OccurrenceStatus, Task } from "@/types";
 
 /** Símbolo por estado: el color no es la única pista (accesibilidad). */
 const STATUS_ICON: Record<OccurrenceStatus, string> = {
@@ -30,6 +32,19 @@ const STATUS_ICON: Record<OccurrenceStatus, string> = {
   partial: "◐",
   missed: "✗",
 };
+
+const EVENT_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#64748b"];
+
+/** Lunes primero, como el calendario. */
+const WEEK_DAYS: [number, string, string][] = [
+  [1, "L", "Lunes"],
+  [2, "M", "Martes"],
+  [3, "X", "Miércoles"],
+  [4, "J", "Jueves"],
+  [5, "V", "Viernes"],
+  [6, "S", "Sábado"],
+  [0, "D", "Domingo"],
+];
 
 function localDayIso(key: string): string {
   const [y, m, d] = key.split("-").map(Number);
@@ -69,15 +84,29 @@ export function CalendarPage() {
   }
 
   const items = useMemo(() => {
-    const evs = (events.data ?? []).map((e) => ({
-      id: `e:${e.id}`,
-      title: e.title,
-      start: e.start,
-      end: e.end,
-      allDay: e.allDay,
-      backgroundColor: e.color ?? e.category?.color ?? "#6366f1",
-      extendedProps: { kind: "event", ref: e },
-    }));
+    // Los eventos repetidos se expanden solo para el rango visible.
+    const from = visible ? new Date(visible.from) : null;
+    const to = visible ? new Date(visible.to) : null;
+    const evs = (events.data ?? []).flatMap((e): EventInput[] => {
+      const color = e.color ?? e.category?.color ?? "#6366f1";
+      const base = {
+        allDay: e.allDay,
+        backgroundColor: color,
+        borderColor: color,
+        extendedProps: { kind: "event", ref: e },
+      };
+      if (!e.recurrence) return [{ ...base, id: `e:${e.id}`, title: e.title, start: e.start, end: e.end }];
+      if (!from || !to) return [];
+      // Arrastrar una ocurrencia movería toda la serie: se edita desde el formulario.
+      return expandEvent(e, from, to).map((o, i) => ({
+        ...base,
+        id: `e:${e.id}:${i}`,
+        title: `${e.title} ↻`,
+        start: o.start,
+        end: o.end,
+        editable: false,
+      }));
+    });
     const ts = (tasks.data ?? [])
       .filter((t) => t.dueDate)
       .map((t) => ({
@@ -106,9 +135,15 @@ export function CalendarPage() {
       };
     });
     return [...evs, ...ts, ...hs];
-  }, [events.data, tasks.data, occurrences.data]);
+  }, [events.data, tasks.data, occurrences.data, visible?.from, visible?.to]);
 
-  const [errors, setErrors] = useState<{ title?: string; start?: string; end?: string }>({});
+  const [errors, setErrors] = useState<{ title?: string; start?: string; end?: string; recurrence?: string }>({});
+  const rec = editing.recurrence ?? null;
+  const setRec = (patch: Partial<EventRecurrence> | null) =>
+    setEditing((cur) => ({
+      ...cur,
+      recurrence: patch === null ? null : { ...(cur.recurrence ?? { freq: "weekly", interval: 1 }), ...patch },
+    }));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -118,8 +153,9 @@ export function CalendarPage() {
       end: editing.end ? undefined : "Indica la fecha de fin.",
     };
     if (!next.start && !next.end) next.end = eventRangeError(editing) ?? undefined;
-    setErrors(next);
-    if (next.title || next.start || next.end) return;
+    const recurrence = recurrenceError(editing) ?? undefined;
+    setErrors({ ...next, recurrence });
+    if (next.title || next.start || next.end || recurrence) return;
     try {
       const payload = {
         title: editing.title!.trim(),
@@ -130,6 +166,7 @@ export function CalendarPage() {
         color: editing.color ?? null,
         location: editing.location ?? null,
         categoryId: editing.categoryId || null,
+        recurrence: editing.recurrence ?? null,
       };
       if (editing.id) {
         await api.put(`/events/${editing.id}`, payload);
@@ -355,6 +392,103 @@ export function CalendarPage() {
               ))}
             </Select>
           </Field>
+          <Field label="Color">
+            <div className="flex gap-2 flex-wrap items-center">
+              <button
+                type="button"
+                onClick={() => setEditing({ ...editing, color: null })}
+                className={cn("h-8 px-2.5 rounded-full border text-xs", !editing.color ? "border-text font-medium" : "border-border text-subtle")}
+                aria-pressed={!editing.color}
+                title="Usa el color de la categoría"
+              >
+                Auto
+              </button>
+              {EVENT_COLORS.map((c) => (
+                <button
+                  type="button"
+                  key={c}
+                  onClick={() => setEditing({ ...editing, color: c })}
+                  className={cn("h-8 w-8 rounded-full border-2 transition-transform", editing.color === c ? "border-text scale-110" : "border-transparent")}
+                  style={{ background: c }}
+                  aria-label={`Color ${c}`}
+                  aria-pressed={editing.color === c}
+                />
+              ))}
+              <Input
+                type="color"
+                aria-label="Color personalizado"
+                title="Color personalizado"
+                value={editing.color ?? "#6366f1"}
+                onChange={(e) => setEditing({ ...editing, color: e.target.value })}
+                className="w-12 h-8 p-1"
+              />
+            </div>
+          </Field>
+          <Field label="Repetición" error={errors.recurrence} hint={rec ? describeRecurrence(rec) : undefined}>
+            <Select
+              value={rec?.freq ?? ""}
+              onChange={(e) => {
+                const freq = e.target.value as EventRecurrence["freq"] | "";
+                if (!freq) return setRec(null);
+                // Días específicos parte del día de la semana del inicio.
+                const startDay = editing.start ? new Date(editing.start).getDay() : new Date().getDay();
+                setRec({ freq, daysOfWeek: freq === "days" ? (rec?.daysOfWeek?.length ? rec.daysOfWeek : [startDay]) : undefined });
+              }}
+            >
+              <option value="">No se repite</option>
+              {(Object.keys(FREQ_LABEL) as EventRecurrence["freq"][]).map((f) => (
+                <option key={f} value={f}>
+                  {FREQ_LABEL[f]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {rec && (
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              {rec.freq === "days" && (
+                <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Días de la semana">
+                  {WEEK_DAYS.map(([n, short, long]) => {
+                    const on = rec.daysOfWeek?.includes(n) ?? false;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        aria-pressed={on}
+                        aria-label={long}
+                        title={long}
+                        onClick={() => {
+                          const cur = rec.daysOfWeek ?? [];
+                          setRec({ daysOfWeek: on ? cur.filter((x) => x !== n) : [...cur, n].sort() });
+                        }}
+                        className={cn("h-9 w-9 rounded-lg border text-sm font-medium", on ? "bg-primary text-primary-fg border-primary" : "border-border hover:bg-muted")}
+                      >
+                        {short}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={rec.freq === "daily" ? "Cada (días)" : rec.freq === "monthly" ? "Cada (meses)" : "Cada (semanas)"}>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={rec.interval ?? 1}
+                    onChange={(e) => setRec({ interval: Math.max(1, Math.min(52, Math.floor(Number(e.target.value)) || 1)) })}
+                  />
+                </Field>
+                <Field label="Hasta (opcional)">
+                  <Input
+                    type="date"
+                    min={editing.start ? localToday(new Date(editing.start)) : undefined}
+                    value={rec.until ?? ""}
+                    onChange={(e) => setRec({ until: e.target.value || null })}
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
           <Field label="Descripción">
             <Textarea
               value={editing.description ?? ""}

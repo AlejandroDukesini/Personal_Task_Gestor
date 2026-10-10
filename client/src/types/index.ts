@@ -184,6 +184,19 @@ export interface Event {
   location?: string | null;
   categoryId?: string | null;
   category?: Category | null;
+  /** null = evento único. */
+  recurrence?: EventRecurrence | null;
+}
+
+/**
+ * Repetición de un evento. `days` = semanal en los días de `daysOfWeek`
+ * (0 = domingo). `until` es el último día incluido (YYYY-MM-DD local).
+ */
+export interface EventRecurrence {
+  freq: "daily" | "weekly" | "monthly" | "days";
+  interval?: number;
+  daysOfWeek?: number[];
+  until?: string | null;
 }
 
 export interface Reminder {

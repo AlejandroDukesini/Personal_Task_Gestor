@@ -3,6 +3,7 @@
 // igual que las serializaba Express) para que la capa de rutas no cambie.
 
 import { __resetStorageForTests, configureStorage, createRestorePoint, openStorage, persistDb, type StorageInfo } from "./storage";
+import type { EventRecurrence } from "@/types";
 
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
@@ -250,6 +251,8 @@ export interface EventRow {
   color: string | null;
   location: string | null;
   categoryId: string | null;
+  /** Opcional: los guardados anteriores no lo tienen (= no se repite). */
+  recurrence?: EventRecurrence | null;
   createdAt: string;
   updatedAt: string;
 }

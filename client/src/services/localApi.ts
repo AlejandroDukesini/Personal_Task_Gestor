@@ -36,6 +36,7 @@ import {
   type Route,
 } from "./routeKit";
 import { financeRoutes } from "./finance/routes";
+import { recurrenceError, recurrenceSchema } from "./events/recurrence";
 import { notesRoutes } from "./notes/routes";
 import { NOTE_ROW_SCHEMAS } from "./notes/schemas";
 import { goalProgress } from "./finance/calc";
@@ -370,6 +371,7 @@ const eventSchema = z.object({
   color: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
   categoryId: z.string().nullable().optional(),
+  recurrence: recurrenceSchema.nullable().optional(),
 });
 
 const withCategory = <T extends { categoryId: string | null }>(db: Db, row: T) => ({
@@ -1065,6 +1067,7 @@ const routes: Route[] = [
       mutate((db) => {
         checkCategoryRef(db, data.categoryId);
         check(eventRangeError(data));
+        check(recurrenceError(data));
         const ts = nowIso();
         const row: EventRow = {
           id: newId(),
@@ -1076,6 +1079,7 @@ const routes: Route[] = [
           color: data.color ?? null,
           location: data.location ?? null,
           categoryId: data.categoryId ?? null,
+          recurrence: data.recurrence ?? null,
           createdAt: ts,
           updatedAt: ts,
         };
@@ -1092,6 +1096,7 @@ const routes: Route[] = [
         checkCategoryRef(db, data.categoryId);
         // Mover solo el inicio no puede dejar el fin por delante de él.
         if (touches(data, ["start", "end"])) check(eventRangeError(merged(row, data)));
+        if (touches(data, ["start", "recurrence"])) check(recurrenceError(merged(row, data)));
         assign(row, data as Partial<EventRow>);
         row.updatedAt = nowIso();
         return withCategory(db, row);

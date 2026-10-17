@@ -32,6 +32,7 @@ import {
   FINANCE_ROW_SCHEMAS,
 } from "@/services/finance/schemas";
 import { NOTE_ROW_SCHEMAS } from "@/services/notes/schemas";
+import { PROJECT_ROW_SCHEMAS } from "@/services/projects/schemas";
 import {
   SYNCED_COLLECTIONS,
   ensureOwnerTags,
@@ -235,6 +236,8 @@ function validateEntry(w: WireEntry): string | null {
   // Notas: el contenido enriquecido debe llegar ya saneado (nada de HTML ni estilos peligrosos).
   const noteSchema = (NOTE_ROW_SCHEMAS as Record<string, { safeParse: (v: unknown) => { success: boolean } }>)[collection];
   if (noteSchema && !noteSchema.safeParse(w.row).success) return `${w.key}: nota no válida`;
+  const projectSchema = (PROJECT_ROW_SCHEMAS as Record<string, { safeParse: (v: unknown) => { success: boolean } }>)[collection];
+  if (projectSchema && !projectSchema.safeParse(w.row).success) return `${w.key}: proyecto no válido`;
   return null;
 }
 

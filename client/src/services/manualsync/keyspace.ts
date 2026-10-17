@@ -262,6 +262,7 @@ export const COLLECTION_LABEL: Record<string, string> = {
   finTags: "Etiqueta financiera",
   noteCategories: "Categoría de notas",
   notes: "Nota",
+  projects: "Proyecto",
   taskTags: "Etiquetas de tarea",
   settings: "Ajustes",
 };

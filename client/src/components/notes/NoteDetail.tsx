@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import type { Editor } from "@tiptap/react";
-import { Archive, ArchiveRestore, ArrowLeft, Check, CloudOff, Copy, Download, Eye, Loader2, Pencil, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Copy, Download, Eye, Loader2, Pencil, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -14,6 +14,7 @@ import { clearDraft, draftIsNewer, readDraft, writeDraft, type NoteDraft } from 
 import { flushStorage } from "@/services/storage";
 import { errorMessage } from "@/components/finance/shared";
 import { cn } from "@/lib/utils";
+import { SaveStatus, type SaveState as Status } from "@/components/ui/SaveStatus";
 import { NoteEditor } from "./editor/NoteEditor";
 import { AttachmentsPanel } from "./AttachmentsPanel";
 import { ColorPicker, IconPicker } from "./pickers";
@@ -21,7 +22,6 @@ import { NoteIcon } from "./NoteIcon";
 import type { NoteCategory } from "./CategoryManager";
 
 type Meta = Pick<NoteRow, "title" | "description" | "categoryId" | "subcategoryId" | "color" | "icon" | "mathEnabled" | "mathDecimals">;
-type Status = "saved" | "pending" | "saving" | "error";
 
 const SAVE_DELAY = 900;
 const DRAFT_DELAY = 300;
@@ -473,25 +473,6 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
 
       <AttachmentsPanel attachments={note.attachments} editable={canEdit} onChange={saveAttachments} />
     </article>
-  );
-}
-
-function SaveStatus({ status, onRetry }: { status: Status; onRetry: () => void }) {
-  const map = {
-    saved: { icon: <Check size={14} />, text: "Guardado", cls: "text-success" },
-    pending: { icon: <Pencil size={14} />, text: "Cambios sin guardar…", cls: "text-subtle" },
-    saving: { icon: <Loader2 size={14} className="animate-spin" />, text: "Guardando…", cls: "text-subtle" },
-    error: { icon: <CloudOff size={14} />, text: "No guardado", cls: "text-danger" },
-  }[status];
-  return (
-    <span role="status" aria-live="polite" className={cn("inline-flex items-center gap-1 text-xs", map.cls)}>
-      {map.icon} {map.text}
-      {status === "error" && (
-        <button className="underline ml-1" onClick={onRetry}>
-          Reintentar
-        </button>
-      )}
-    </span>
   );
 }
 

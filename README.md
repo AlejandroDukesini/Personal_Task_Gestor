@@ -5,13 +5,13 @@
 <h1 align="center">🚀 Plan Gestor Task — Sistema de Productividad Personal</h1>
 
 <p align="center">
-  <b>Tareas · Hábitos · Calendario · Objetivos · Finanzas · Notas</b><br>
+  <b>Tareas · Hábitos · Calendario · Objetivos · Finanzas · Notas · Proyectos</b><br>
   Local-First: tus datos viven en tu dispositivo, funcionan sin conexión y se sincronizan solo cuando tú lo decides.
 </p>
 
 <p align="center">
   <a href="https://task-gestor.netlify.app/"><img alt="Demo en vivo" src="https://img.shields.io/badge/Demo-en_vivo-6366f1?logo=netlify&logoColor=white"></a>
-  <img alt="Versión 1.3.0" src="https://img.shields.io/badge/versión-1.3.0-blue">
+  <img alt="Versión 1.4.0" src="https://img.shields.io/badge/versión-1.4.0-blue">
   <img alt="Lighthouse SEO 100" src="https://img.shields.io/badge/Lighthouse_SEO-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Best Practices 100" src="https://img.shields.io/badge/Best_Practices-100-brightgreen?logo=lighthouse&logoColor=white">
   <img alt="Lighthouse Accessibility 100" src="https://img.shields.io/badge/Accessibility-100-brightgreen?logo=lighthouse&logoColor=white">
@@ -26,7 +26,7 @@
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri_2-Windows-24C8DB?logo=tauri&logoColor=white">
 </p>
 
-Una plataforma modular de productividad personal al estilo **Notion + Todoist + Google Calendar + Habit Tracker**, con gestión financiera y notas integradas. Está diseñada bajo el concepto **Local-First**: no hay cuentas, ni servidores en la nube, ni telemetría. Toda la información se guarda en el navegador (IndexedDB) o en la app de escritorio, lo que garantiza privacidad, rapidez y funcionamiento completo sin conexión.
+Una plataforma modular de productividad personal al estilo **Notion + Todoist + Google Calendar + Habit Tracker**, con gestión financiera, notas y seguimiento de proyectos integrados. Está diseñada bajo el concepto **Local-First**: no hay cuentas, ni servidores en la nube, ni telemetría. Toda la información se guarda en el navegador (IndexedDB) o en la app de escritorio, lo que garantiza privacidad, rapidez y funcionamiento completo sin conexión.
 
 **Disponible como:**
 
@@ -49,13 +49,14 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 6. [Rendimiento y escalabilidad](#-rendimiento-y-escalabilidad-métricas-reales)
 7. [Módulo de Finanzas](#-módulo-de-finanzas)
 8. [Módulo de Notas](#-módulo-de-notas)
-9. [Hábitos: metas, horarios, Google Calendar y capturas](#-hábitos-metas-horarios-google-calendar-y-capturas)
-10. [iPhone, almacenamiento y actualizaciones](#-iphone-almacenamiento-y-actualizaciones)
-11. [Pruebas](#-pruebas)
-12. [Scripts disponibles](#️-scripts-disponibles)
-13. [Referencia de la API](#-referencia-de-la-api)
-14. [Seguridad y respaldos](#️-seguridad-y-respaldos)
-15. [Documentación adicional](#-documentación-adicional)
+9. [Módulo de Proyectos](#-módulo-de-proyectos)
+10. [Hábitos: metas, horarios, Google Calendar y capturas](#-hábitos-metas-horarios-google-calendar-y-capturas)
+11. [iPhone, almacenamiento y actualizaciones](#-iphone-almacenamiento-y-actualizaciones)
+12. [Pruebas](#-pruebas)
+13. [Scripts disponibles](#️-scripts-disponibles)
+14. [Referencia de la API](#-referencia-de-la-api)
+15. [Seguridad y respaldos](#️-seguridad-y-respaldos)
+16. [Documentación adicional](#-documentación-adicional)
 
 ---
 
@@ -70,6 +71,7 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 | 🎯 **Objetivos** | Metas diarias, semanales, mensuales o anuales con progreso manual, **calculado desde tareas vinculadas** o **desde una meta de ahorro** (se calcula al leer; nunca se copia). |
 | 💰 **Finanzas** | Cuentas, movimientos, transferencias, presupuestos, metas de ahorro, recurrentes, análisis e **importación universal** (CSV, Excel, JSON, SQL, SQLite, Cashew). |
 | 📝 **Notas** | Editor de texto enriquecido, categorías, adjuntos, papelera, autoguardado con recuperación y **cálculos automáticos** (`200+200=` → `400`). |
+| 🗂️ **Proyectos** | Proyectos con icono, color, etiqueta, fechas, objetivos y **etapas** con porcentaje manual. El **progreso general se calcula solo** (media de las etapas), con estados Activo / Inactivo / Finalizado, avisos de plazo y papelera. |
 | 📈 **Estadísticas** | Gráficos (*Recharts*) de tareas por prioridad, hábitos completados en el tiempo e índices de productividad. |
 | 🗂️ **Categorías y etiquetas** | Carpetas jerárquicas con color e icono, y etiquetas globales para organización cruzada. |
 | 🔄 **Sincronización** | Manual iPhone ↔ PC por Wi‑Fi (cifrada de extremo a extremo) o con archivos cifrados. Motor a tres bandas con revisión de conflictos (los financieros siempre los decides tú). |
@@ -131,7 +133,7 @@ graph TD
 
 *   **Misma interfaz, sin red**: [`client/src/services/api.ts`](client/src/services/api.ts) conserva la forma de un cliente HTTP (`get`, `post`, `put`, `patch`, `delete`), pero cada petición se resuelve en [`localApi.ts`](client/src/services/localApi.ts) contra la base local. Las páginas no necesitan saber si hay servidor.
 *   **Persistencia robusta**: IndexedDB con migraciones versionadas, copia espejo en `localStorage`, fusión fila a fila entre pestañas y copia verificada antes de cualquier operación destructiva.
-*   **Reglas de negocio centralizadas** en [`rules.ts`](client/src/services/rules.ts) (fechas coherentes, campos obligatorios, precondiciones), documentadas en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
+*   **Reglas de negocio centralizadas** en [`rules.ts`](client/src/services/rules.ts) (fechas coherentes, campos obligatorios, precondiciones).
 *   **Backend de referencia**: la carpeta [`server/`](server) contiene la implementación original con **Express + Prisma + SQLite**. No se despliega, pero se mantiene como referencia de la API y para los benchmarks de base de datos (`npm run db:setup` y luego `npm run dev:server`, en el puerto 4000).
 
 ---
@@ -159,6 +161,7 @@ Gestion_tareas/
 │   │   │   ├── backup/         # Copias de seguridad y restauración
 │   │   │   ├── finance/        # Finanzas e importación universal
 │   │   │   ├── notes/          # Notas, cálculos y adjuntos
+│   │   │   ├── projects/       # Proyectos, etapas y cálculo del progreso
 │   │   │   ├── habits/         # Metas y horarios de hábitos
 │   │   │   ├── gcal/           # Integración con Google Calendar
 │   │   │   ├── screenshot/     # OCR de capturas de calendario
@@ -174,7 +177,6 @@ Gestion_tareas/
 │   └── src/routes/             # tasks, habits, goals, events, stats, backup…
 ├── sync/                       # Relé de sincronización PC ↔ móvil
 ├── DESKTOP.md                  # Guía de la versión de escritorio
-├── REGLAS_DE_NEGOCIO.md        # Reglas de negocio y códigos de error
 ├── netlify.toml                # Build y cabeceras de seguridad del despliegue
 └── package.json                # Workspaces y scripts globales
 ```
@@ -367,7 +369,7 @@ Las preferencias (columnas, formato de fecha y decimales, zona horaria, cuentas/
 
 **Migraciones**
 
-*   Base local versionada (`localDb.MIGRATIONS`, versión actual 4: crea de forma determinista la etiqueta de cada presupuesto y meta existentes). Antes de migrar se guarda una copia íntegra del JSON previo (`gestion-tareas:db:backup-v<N>`).
+*   Base local versionada (`localDb.MIGRATIONS`, versión actual 7; la v4 crea de forma determinista la etiqueta de cada presupuesto y meta existentes y la v7 añade los proyectos). Antes de migrar se guarda una copia íntegra del JSON previo (`gestion-tareas:db:backup-v<N>`).
 *   SQL versionado para el servidor: `server/prisma/migrations/finance/V1__finance.sql` (tablas `fin_*`, CHECKs de signo, claves foráneas e índices) y `V2__finance_tags.sql` (`fin_tags`, `fin_allocations` y trigger de tope), generado desde `client/src/services/finance/sql.ts` con `npm run sql:gen`. Un test comprueba que el fichero y el código coinciden y ejecuta esquema + volcado en SQLite real. Los modelos Prisma equivalentes están en `schema.prisma`. Para aplicar las restricciones CHECK en una base del servidor: `sqlite3 server/prisma/dev.db < server/prisma/migrations/finance/V1__finance.sql`.
 
 ---
@@ -409,6 +411,44 @@ Al escribir `200+200=` aparece `400` justo después del `=`. Admite `+ - * /` (t
 *   El PDF se abre en el visor del navegador (pestaña nueva); los documentos de Office se descargan (no hay visor integrado). La exportación a PDF se hace imprimiendo el HTML exportado.
 *   La sincronización resuelve conflictos por nota completa: si la misma nota se edita a la vez en dos dispositivos, se elige una versión (no se fusionan párrafos).
 *   Separador de miles no admitido en los cálculos: `1.500` se lee como 1,5 (se recomienda escribir `1500`).
+
+---
+
+## 🗂️ Módulo de Proyectos
+
+Sección **Proyectos** (`/proyectos`, también en la paleta de comandos: «Nuevo proyecto»). Sigue el patrón de Notas: listado, selección y detalle.
+
+| Funcionalidad | Detalle |
+| :--- | :--- |
+| **CRUD** | Crear (título obligatorio; icono, color, etiqueta, fechas de inicio y fin prevista, descripción en Markdown, estado inicial, objetivos y etapas iniciales opcionales), consultar, editar sin perder ids ni etapas, y **papelera** (borrado lógico con confirmación, restaurar, eliminar definitivamente, vaciar). Cancelar el formulario no escribe nada. |
+| **Listado** | Tarjetas compactas con icono, color, estado, etiqueta, progreso redondeado, etapas completadas/totales, fechas y última modificación. Pestañas Todos / Activos / Inactivos / Finalizados / Papelera, búsqueda sin tildes (título, descripción, etiqueta y objetivos), filtro por etiqueta y orden por modificación, título, fechas o progreso. Avisos «Vence pronto» (≤ 7 días) y «Vencido» que **no cambian el estado**. |
+| **Estados** | Activo, Inactivo y Finalizado, elegidos por el usuario. Llegar al 100 % no finaliza el proyecto: solo lo sugiere. |
+| **Detalle** | Escritorio: panel de **etapas** a la izquierda (arrastrar para reordenar, añadir, seleccionar) e **información** del proyecto a la derecha (estado, fechas, resumen de etapas, objetivos marcables, descripción). Móvil: pestañas «Información» / «Etapas» y cada etapa en su propia vista, con «atrás» sin perder cambios. |
+| **Etapas** | Título, descripción en Markdown y **porcentaje manual** (deslizador + campo numérico, entero de 0 a 100; los valores fuera de rango se ajustan con aviso y el texto se rechaza). Completar la pone al 100 %; reabrir recupera el avance anterior conservando la descripción. Subir/bajar y eliminar con confirmación. Autoguardado agrupado (0,6 s) con indicador de estado. |
+| **Objetivos** | Lista de qué se pretende conseguir (texto, cumplido, orden). No cuentan para el progreso. |
+
+### Progreso automático
+
+El progreso general **no se guarda nunca**: se deriva de las etapas en una única función (`services/projects/progress.ts#projectProgress`):
+
+```
+P = Σ (pᵢ · wᵢ) / Σ wᵢ      (hoy wᵢ = 1 → media de los porcentajes)
+```
+
+| Etapas | Progreso |
+| :--- | ---: |
+| 100 % y 50 % | 75 % |
+| 100 % y 25 % | 62,5 % (63 % en la lista) |
+| 100 %, 50 % y 0 % | 50 % |
+| Sin etapas | 0 % |
+
+Añadir o borrar etapas lo recalcula; editar descripciones o reordenar no lo cambia. La fórmula ya admite pesos opcionales por etapa (`weight`) para una ampliación futura.
+
+### Datos
+
+*   **Modelo** (`localDb.ts`, migración **v7**, solo añade la colección `projects` vacía, sin datos de ejemplo): cada proyecto guarda sus **etapas y objetivos dentro de la fila** (como los adjuntos de una nota), así que borrar un proyecto no deja etapas huérfanas y la sincronización nunca mezcla etapas de versiones distintas. El orden de las etapas es el del array.
+*   **Validación** (`services/projects/schemas.ts`): la misma para la API local, las copias de seguridad y la sincronización (porcentajes enteros 0-100, fechas `AAAA-MM-DD` coherentes, ids únicos).
+*   **Limitación**: la sincronización resuelve por proyecto completo; si dos dispositivos editan a la vez etapas distintas del mismo proyecto, se elige una versión.
 
 ---
 
@@ -471,9 +511,7 @@ npm test                 # cliente (Vitest) + relé de sincronización (node:tes
 npm run test -w client   # solo el cliente
 ```
 
-La batería del cliente (475 pruebas) cubre reglas de negocio (fechas, obligatorios, precondiciones), restauración entre dispositivos y detección de cifrado, persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, sincronización manual (incluida por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas.
-
-Las reglas de negocio (fechas coherentes, campos obligatorios, precondiciones y códigos de error) están documentadas en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
+La batería del cliente (510 pruebas) cubre reglas de negocio (fechas, obligatorios, precondiciones), restauración entre dispositivos y detección de cifrado, persistencia (pestañas, espejo, recuperación, cuota llena), copias de seguridad, dinero, finanzas, notas, proyectos (fórmula de progreso, CRUD de proyectos y etapas, persistencia), sincronización manual (incluida por red), IndexedDB, cifrado, tareas, migraciones, hábitos (metas, horarios, calendario), Google Calendar (API simulada) y OCR de capturas.
 
 ---
 
@@ -510,12 +548,11 @@ La capa de datos expone rutas con forma REST. En la app se resuelven **en el nav
 | **Tareas** `/tasks` | `GET` lista (con categoría, etiquetas y recordatorios) · `GET /:id` · `POST` crear · `PUT /:id` actualizar · `DELETE /:id` eliminar · `PATCH /reorder` ordenar · `/:id/subtasks` subtareas |
 | **Hábitos** `/habits` | `GET` lista con registros · `POST` crear · `PUT /:id` · `DELETE /:id` · `POST` / `DELETE /:id/logs` registrar o deshacer el día · `GET /:id/heatmap` · `GET /calendar` ocurrencias de horarios |
 | **Objetivos** `/goals` | `GET` metas con progreso calculado · `POST` crear · `PUT /:id` actualizar · `DELETE /:id` |
+| **Proyectos** `/projects` | `GET` lista con progreso derivado, contadores y etiquetas (`view`, `q`, `tag`, `sort`, `dir`) · `GET /:id` · `POST` crear · `PUT /:id` editar y cambiar estado · `DELETE /:id` papelera · `POST /:id/restore` · `DELETE /:id/purge` · `POST /trash/empty` · `/:id/stages` crear, `PUT`/`DELETE /:id/stages/:stageId`, `POST /:id/stages/reorder` |
 | **Eventos** `/events` | `GET` por rango de fechas · `POST` crear · `PUT /:id` · `DELETE /:id` |
 | **Estadísticas** `/stats/summary` | Agregados del dashboard y series temporales de 30 días |
 | **Respaldo** `/backup` | `GET /export` copia completa en JSON · `POST /import` restauración |
 | **Configuración** `/settings` | `GET` / `PUT` preferencias · `POST` / `DELETE /settings/pin` y `POST /settings/pin/verify` para el bloqueo por PIN |
-
-Las validaciones y los códigos de error de cada ruta están en [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md).
 
 ---
 
@@ -549,4 +586,3 @@ Copy-Item "server/prisma/dev.db" -Destination "backup-$(Get-Date -Format 'yyyy-M
 | :--- | :--- |
 | [`DESKTOP.md`](DESKTOP.md) | Compilación e instalación de la app de escritorio para Windows (Tauri 2). |
 | [`sync/README.md`](sync/README.md) | Instalación en PC, emparejamiento y sincronización manual con el iPhone. |
-| [`REGLAS_DE_NEGOCIO.md`](REGLAS_DE_NEGOCIO.md) | Reglas de negocio, validaciones y códigos de error. |

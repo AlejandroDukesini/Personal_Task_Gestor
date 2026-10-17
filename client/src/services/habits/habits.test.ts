@@ -170,7 +170,7 @@ describe("migración v6", () => {
     };
     const before = JSON.stringify({ h: v5.habits, l: v5.habitLogs });
     const db = migrate(structuredClone(v5));
-    expect(DB_VERSION).toBe(6);
+    expect(DB_VERSION).toBeGreaterThanOrEqual(6);
     expect(db.habitSchedules).toEqual([]);
     expect(db.gcalLinks).toEqual([]);
     expect(db.habitImports).toEqual([]);

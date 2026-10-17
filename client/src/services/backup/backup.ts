@@ -34,6 +34,7 @@ import {
 } from "@/services/storage";
 import { FINANCE_ROW_SCHEMAS } from "@/services/finance/schemas";
 import { NOTE_ROW_SCHEMAS } from "@/services/notes/schemas";
+import { PROJECT_ROW_SCHEMAS } from "@/services/projects/schemas";
 import { stripDangerousKeys } from "@/services/routeKit";
 import { ENVELOPE_FORMAT, fromB64, isEnvelope, open, seal, toB64 } from "@/services/manualsync/crypto";
 import { getFile, putFile, sha256Hex } from "@/services/notes/files";
@@ -202,6 +203,8 @@ const DESTRUCTIVE: [string, RegExp, string][] = [
   ["DELETE", /^\/finance\/(accounts|budgets|goals|categories|recurring)\/[^/]+$/, "eliminar datos de finanzas"],
   ["DELETE", /^\/notes\/[^/]+\/purge$/, "eliminar una nota definitivamente"],
   ["POST", /^\/notes\/trash\/empty$/, "vaciar la papelera de notas"],
+  ["DELETE", /^\/projects\/[^/]+\/purge$/, "eliminar un proyecto definitivamente"],
+  ["POST", /^\/projects\/trash\/empty$/, "vaciar la papelera de proyectos"],
   ["POST", /^\/backup\/import$/, "importar una copia"],
   ["POST", /^\/finance\/import$/, "importar datos financieros"],
 ];
@@ -255,6 +258,7 @@ const COUNT_LABELS: [keyof Db, string][] = [
   ["events", "Eventos"],
   ["goals", "Objetivos"],
   ["notes", "Notas"],
+  ["projects", "Proyectos"],
   ["categories", "Categorías"],
   ["finAccounts", "Cuentas"],
   ["finTransactions", "Movimientos"],
@@ -444,7 +448,7 @@ function validateDb(db: Record<string, unknown>): string | null {
     for (let i = 0; i < rows.length; i++) {
       const clean = stripDangerousKeys(rows[i]);
       if (!rowSchema.safeParse(clean).success) return `${c}[${i}] no tiene un identificador válido`;
-      const strict = (FINANCE_ROW_SCHEMAS as Record<string, z.ZodTypeAny>)[c] ?? (NOTE_ROW_SCHEMAS as Record<string, z.ZodTypeAny>)[c];
+      const strict = (FINANCE_ROW_SCHEMAS as Record<string, z.ZodTypeAny>)[c] ?? (NOTE_ROW_SCHEMAS as Record<string, z.ZodTypeAny>)[c] ?? (PROJECT_ROW_SCHEMAS as Record<string, z.ZodTypeAny>)[c];
       if (strict) {
         const r = strict.safeParse(clean);
         if (!r.success) return `${c}[${i}] ${r.error.issues[0]?.path.join(".")}: ${r.error.issues[0]?.message}`;

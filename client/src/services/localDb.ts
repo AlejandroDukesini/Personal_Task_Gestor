@@ -8,7 +8,7 @@ import type { EventRecurrence } from "@/types";
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 export interface SettingsRow {
   id: number;
@@ -549,6 +549,60 @@ export interface NoteRow {
   updatedAt: string;
 }
 
+/* -------------------------------------------------------------- proyectos */
+
+/**
+ * Etapa de un proyecto. Vive DENTRO de la fila del proyecto (como los adjuntos
+ * de una nota): borrar el proyecto no puede dejar etapas huérfanas y la
+ * sincronización nunca mezcla etapas de dos versiones distintas del proyecto.
+ * Su orden es el del array.
+ */
+export interface ProjectStage {
+  id: string;
+  title: string;
+  /** Markdown básico (se muestra con `components/Markdown`). */
+  description: string | null;
+  /** Avance manual, entero de 0 a 100. 100 = completada (estado derivado). */
+  progress: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Objetivo general: qué se pretende conseguir. NO cuenta para el progreso. */
+export interface ProjectObjective {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export type ProjectStatus = "active" | "inactive" | "finished";
+
+/**
+ * Proyecto. El progreso general NO se guarda: se deriva siempre de las etapas
+ * (ver `services/projects/progress.ts`), así que nunca queda desactualizado.
+ */
+export interface ProjectRow {
+  id: string;
+  title: string;
+  icon: string;
+  color: string;
+  /** Etiqueta o categoría libre ("Cliente X", "Personal"…). */
+  tag: string | null;
+  /** Fechas locales `YYYY-MM-DD`. */
+  startDate: string | null;
+  endDate: string | null;
+  description: string | null;
+  /** Lo decide el usuario: llegar al 100 % no lo finaliza solo. */
+  status: ProjectStatus;
+  finishedAt: string | null;
+  objectives: ProjectObjective[];
+  stages: ProjectStage[];
+  /** Papelera, igual que en notas: null = no está en la papelera. */
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Lápida de borrado. Sin ella, sincronizar dos dispositivos por "última
  * escritura gana" resucitaría cualquier fila borrada en A la próxima vez que B
@@ -585,6 +639,7 @@ export interface Db {
   finTags: FinTagRow[];
   noteCategories: NoteCategoryRow[];
   notes: NoteRow[];
+  projects: ProjectRow[];
   tombstones: TombstoneRow[];
 }
 
@@ -611,6 +666,7 @@ export const SYNCED_COLLECTIONS = [
   "finTags",
   "noteCategories",
   "notes",
+  "projects",
 ] as const;
 
 export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
@@ -756,6 +812,7 @@ function emptyDb(): Db {
     finTags: [],
     noteCategories: [],
     notes: [],
+    projects: [],
     tombstones: [],
   };
 }
@@ -836,6 +893,15 @@ export const MIGRATIONS: Migration[] = [
       db.habitSchedules ??= [];
       db.gcalLinks ??= [];
       db.habitImports ??= [];
+    },
+  },
+  {
+    version: 7,
+    description: "Módulo de proyectos: proyectos con etapas y objetivos",
+    up: (db) => {
+      // Solo una colección nueva y vacía: no se tocan datos existentes ni se
+      // siembran proyectos de ejemplo.
+      db.projects ??= [];
     },
   },
 ];

@@ -39,6 +39,8 @@ import { financeRoutes } from "./finance/routes";
 import { recurrenceError, recurrenceSchema } from "./events/recurrence";
 import { notesRoutes } from "./notes/routes";
 import { NOTE_ROW_SCHEMAS } from "./notes/schemas";
+import { projectRoutes } from "./projects/routes";
+import { PROJECT_ROW_SCHEMAS } from "./projects/schemas";
 import { goalProgress } from "./finance/calc";
 import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
 import { todayKey } from "./finance/dates";
@@ -578,9 +580,10 @@ function safeSettings(db: Db) {
 // -------------------------------------------------------------------- rutas
 
 const routes: Route[] = [
-  ["GET", "/health", () => ok({ ok: true, version: "1.3.0" })],
+  ["GET", "/health", () => ok({ ok: true, version: "1.4.0" })],
   ...financeRoutes,
   ...notesRoutes,
+  ...projectRoutes,
   ...habitRoutes,
 
   // Categorías
@@ -1392,6 +1395,7 @@ const routes: Route[] = [
         noteCategories: db.noteCategories,
         // Los binarios de los adjuntos no viajan en la copia (solo sus datos).
         notes: db.notes,
+        projects: db.projects,
         // Sin el hash del PIN: una copia no debe servir para atacarlo offline.
         settings: { ...db.settings, pinHash: null },
       },
@@ -1434,6 +1438,7 @@ const routes: Route[] = [
           finTags: rows,
           noteCategories: rows,
           notes: rows,
+          projects: rows,
           // `settings` viaja en el fichero por compatibilidad, pero nunca se
           // aplica: importar ajustes ajenos permitiría, por ejemplo, sustituir
           // el hash del PIN por uno conocido por el atacante.
@@ -1465,8 +1470,17 @@ const routes: Route[] = [
       });
     }
 
+    // Proyectos: porcentajes enteros 0-100 y etapas bien formadas.
+    (data.projects ?? []).forEach((r, i) => {
+      const res = PROJECT_ROW_SCHEMAS.projects.safeParse(stripDangerousKeys(r));
+      if (!res.success) {
+        throw new ApiError(400, `Copia no válida: projects[${i}] ${res.error.issues[0]?.path.join(".")}: ${res.error.issues[0]?.message}`);
+      }
+    });
+
     mutate((db) => {
       if (replace) {
+        db.projects = [];
         db.notes = [];
         db.noteCategories = [];
         db.categories = [];
@@ -1512,6 +1526,7 @@ const routes: Route[] = [
       for (const c of FINANCE_COLLECTIONS) upsert(db[c] as { id: string }[], data[c] ?? []);
       upsert(db.noteCategories, data.noteCategories ?? []);
       upsert(db.notes, data.notes ?? []);
+      upsert(db.projects, data.projects ?? []);
       // Filas de versiones anteriores: rellena los campos nuevos.
       for (const t of db.tasks) {
         t.recurrence ??= null;

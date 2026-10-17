@@ -33,6 +33,11 @@ const FIELD_LABEL: Record<string, string> = {
   count: "Veces",
   reason: "Motivo",
   deadline: "Fecha límite",
+  stages: "Etapas",
+  objectives: "Objetivos",
+  tag: "Etiqueta",
+  startDate: "Inicio",
+  endDate: "Fin previsto",
 };
 
 const KIND_TEXT: Record<ChangeItem["kind"], string> = { new: "nuevo", update: "modificado", delete: "eliminado" };
@@ -45,7 +50,7 @@ function show(field: string, v: unknown): string {
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
   if (Array.isArray(v)) {
     if (v.length && typeof v[0] === "object") {
-      return v.map((a: any) => (a?.amount ? `${a.flow === "use" ? "−" : ""}${formatMoney(a.amount, "COP", { compact: true })}` : "…")).join(", ");
+      return v.map((a: any) => (a?.amount ? `${a.flow === "use" ? "−" : ""}${formatMoney(a.amount, "COP", { compact: true })}` : a?.title ? `${a.title}${typeof a.progress === "number" ? ` (${a.progress} %)` : ""}` : (a?.text ?? "…"))).join(", ");
     }
     return v.length ? v.join(", ") : "—";
   }

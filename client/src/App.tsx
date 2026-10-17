@@ -18,6 +18,7 @@ const CalendarPage = lazy(() => import("./pages/Calendar").then((m) => ({ defaul
 const Categories = lazy(() => import("./pages/Categories").then((m) => ({ default: m.Categories })));
 const Tags = lazy(() => import("./pages/Tags").then((m) => ({ default: m.Tags })));
 const Notes = lazy(() => import("./pages/Notes").then((m) => ({ default: m.Notes })));
+const Projects = lazy(() => import("./pages/Projects").then((m) => ({ default: m.Projects })));
 const Finance = lazy(() => import("./pages/Finance").then((m) => ({ default: m.Finance })));
 const Goals = lazy(() => import("./pages/Goals").then((m) => ({ default: m.Goals })));
 const Stats = lazy(() => import("./pages/Stats").then((m) => ({ default: m.Stats })));
@@ -60,6 +61,8 @@ export default function App() {
             <Route path="/objetivos" element={<Goals />} />
             <Route path="/notas" element={<Notes />} />
             <Route path="/notas/:id" element={<Notes />} />
+            <Route path="/proyectos" element={<Projects />} />
+            <Route path="/proyectos/:id" element={<Projects />} />
             <Route path="/finanzas" element={<Finance />} />
             <Route path="/estadisticas" element={<Stats />} />
             <Route path="/sincronizacion" element={<SyncCenter />} />

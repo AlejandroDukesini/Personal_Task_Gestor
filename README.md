@@ -34,29 +34,50 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 | :--- | :--- |
 | 🌐 **Web** | [task-gestor.netlify.app](https://task-gestor.netlify.app/) (sitio estático en Netlify) |
 | 📱 **iPhone / Android** | PWA instalable desde el navegador («Añadir a pantalla de inicio») |
-| 🖥️ **Windows** | App de escritorio nativa con Tauri 2 — ver [`DESKTOP.md`](DESKTOP.md) |
+| 🖥️ **Windows** | App de escritorio (Tauri 2): instalador en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest) — ver [Descargar e instalar](#-descargar-e-instalar) |
 | 💻 **PC en red local** | `npm run pc` sirve la app y el relé de sincronización — ver [`sync/README.md`](sync/README.md) |
+
+---
+
+## 📥 Descargar e instalar
+
+| Quiero… | Qué hacer |
+| :--- | :--- |
+| **Solo usar la aplicación** (Windows 10/11, 64 bits) | Descarga **`PlanGestorTask_<versión>_x64-setup.exe`** de [Releases › última versión](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest) y ejecútalo. **No instales Node.js ni Rust.** |
+| **Instalarla sin Internet** | Descarga `PlanGestorTask_<versión>_x64-offline-setup.exe` (≈220 MB, incluye WebView2). |
+| Usarla en macOS, Linux o el móvil | Usa la [versión web](https://task-gestor.netlify.app/); se puede instalar como app desde el navegador. |
+| **Desarrollar o compilar** | Ver [Inicio rápido](#-inicio-rápido) y [`DESKTOP.md`](DESKTOP.md). |
+
+Los instaladores aún no están firmados: si Windows muestra **«Windows protegió su PC»**, pulsa **Más información › Ejecutar de todas formas**. Requisitos, desinstalación, verificación de la descarga y solución de problemas: **[`INSTALL.md`](INSTALL.md)**.
+
+| Opción | Para | Requisitos reales |
+| :--- | :--- | :--- |
+| Instalador online `.exe` | Usuarios de Windows | Windows 10/11 x64; Internet solo si falta WebView2 |
+| Instalador offline `.exe` | Equipos sin conexión | Windows 10/11 x64 |
+| Web / PWA | Cualquier sistema | Un navegador actual |
+| Compilar desde el código | Desarrolladores | Node.js 24 LTS; para escritorio, además Rust y Visual Studio Build Tools |
 
 ---
 
 ## 📋 Índice
 
-1. [Características principales](#-características-principales)
-2. [Inicio rápido](#-inicio-rápido)
-3. [Arquitectura](#-arquitectura)
-4. [Estructura del proyecto](#-estructura-del-proyecto)
-5. [Tecnologías](#️-tecnologías)
-6. [Rendimiento y escalabilidad](#-rendimiento-y-escalabilidad-métricas-reales)
-7. [Módulo de Finanzas](#-módulo-de-finanzas)
-8. [Módulo de Notas](#-módulo-de-notas)
-9. [Módulo de Proyectos](#-módulo-de-proyectos)
-10. [Hábitos: metas, horarios, Google Calendar y capturas](#-hábitos-metas-horarios-google-calendar-y-capturas)
-11. [iPhone, almacenamiento y actualizaciones](#-iphone-almacenamiento-y-actualizaciones)
-12. [Pruebas](#-pruebas)
-13. [Scripts disponibles](#️-scripts-disponibles)
-14. [Referencia de la API](#-referencia-de-la-api)
-15. [Seguridad y respaldos](#️-seguridad-y-respaldos)
-16. [Documentación adicional](#-documentación-adicional)
+1. [Descargar e instalar](#-descargar-e-instalar)
+2. [Características principales](#-características-principales)
+3. [Inicio rápido](#-inicio-rápido)
+4. [Arquitectura](#-arquitectura)
+5. [Estructura del proyecto](#-estructura-del-proyecto)
+6. [Tecnologías](#️-tecnologías)
+7. [Rendimiento y escalabilidad](#-rendimiento-y-escalabilidad-métricas-reales)
+8. [Módulo de Finanzas](#-módulo-de-finanzas)
+9. [Módulo de Notas](#-módulo-de-notas)
+10. [Módulo de Proyectos](#-módulo-de-proyectos)
+11. [Hábitos: metas, horarios, Google Calendar y capturas](#-hábitos-metas-horarios-google-calendar-y-capturas)
+12. [iPhone, almacenamiento y actualizaciones](#-iphone-almacenamiento-y-actualizaciones)
+13. [Pruebas](#-pruebas)
+14. [Scripts disponibles](#️-scripts-disponibles)
+15. [Referencia de la API](#-referencia-de-la-api)
+16. [Seguridad y respaldos](#️-seguridad-y-respaldos)
+17. [Documentación adicional](#-documentación-adicional)
 
 ---
 
@@ -82,7 +103,7 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 ## 🏁 Inicio rápido
 
 ### Requisitos
-*   **Node.js 20+** (la versión con la que compila Netlify) y `npm`.
+*   **Node.js 24 LTS** (fijada en `.nvmrc`; la misma que usan GitHub Actions y Netlify) y `npm`.
 *   Solo para la app de escritorio: Rust y Visual Studio Build Tools (ver [`DESKTOP.md`](DESKTOP.md)).
 
 ### Pasos
@@ -92,8 +113,8 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 git clone https://github.com/AlejandroDukesini/Personal_Task_Gestor.git
 cd Personal_Task_Gestor
 
-# 2. Instalar dependencias (npm workspaces: client, server y sync)
-npm install
+# 2. Instalar dependencias exactas del package-lock (npm workspaces: client, server y sync)
+npm ci
 
 # 3. Arrancar la app en modo desarrollo
 npm run dev
@@ -176,7 +197,10 @@ Gestion_tareas/
 │   ├── prisma/schema.prisma
 │   └── src/routes/             # tasks, habits, goals, events, stats, backup…
 ├── sync/                       # Relé de sincronización PC ↔ móvil
-├── DESKTOP.md                  # Guía de la versión de escritorio
+├── .github/workflows/          # CI (pruebas + instalador de prueba) y releases por tag
+├── scripts/version.mjs         # Comprobar / fijar la versión en todos los archivos
+├── DESKTOP.md                  # Escritorio: compilar, CI y publicar versiones
+├── INSTALL.md                  # Guía de instalación para usuarios
 ├── netlify.toml                # Build y cabeceras de seguridad del despliegue
 └── package.json                # Workspaces y scripts globales
 ```
@@ -528,7 +552,9 @@ Todos se ejecutan desde la **raíz del proyecto**:
 | `npm run pc` | Compila la app y la sirve junto al relé de sincronización en `http://localhost:4181`. |
 | `npm run sync` | Arranca solo el relé de sincronización PC ↔ móvil. |
 | `npm run desktop:dev` | App de escritorio (Tauri) con recarga en caliente. |
-| `npm run desktop:build` | Build de escritorio + instalador NSIS para Windows. |
+| `npm run desktop:build` | Build de escritorio + instalador NSIS (online) para Windows. |
+| `npm run desktop:build:offline` | Ídem, con WebView2 incluido (instalador offline). |
+| `npm run version:check` / `npm run version:set -- X.Y.Z` | Comprueba / fija la versión en todos los archivos (ver [`DESKTOP.md`](DESKTOP.md#publicar-una-versión)). |
 | `npm run sql:gen` | Regenera las migraciones SQL versionadas de finanzas. |
 | `npm run dev:server` | *(Backend de referencia)* Arranca Express en `http://localhost:4000`. |
 | `npm run build:server` / `npm run start:server` | *(Backend de referencia)* Compila a `server/dist` / ejecuta el build. |
@@ -584,5 +610,6 @@ Copy-Item "server/prisma/dev.db" -Destination "backup-$(Get-Date -Format 'yyyy-M
 
 | Documento | Contenido |
 | :--- | :--- |
-| [`DESKTOP.md`](DESKTOP.md) | Compilación e instalación de la app de escritorio para Windows (Tauri 2). |
+| [`INSTALL.md`](INSTALL.md) | Instalación para usuarios: qué archivo descargar, advertencias de Windows, desinstalación y problemas habituales. |
+| [`DESKTOP.md`](DESKTOP.md) | Compilación de la app de escritorio (Tauri 2), CI y cómo publicar una versión con tags. |
 | [`sync/README.md`](sync/README.md) | Instalación en PC, emparejamiento y sincronización manual con el iPhone. |

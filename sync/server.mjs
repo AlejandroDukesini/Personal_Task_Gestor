@@ -35,13 +35,13 @@ import { createServer as createHttpsServer } from "node:https";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { hostname, networkInterfaces } from "node:os";
-import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { X509Certificate, createHash, createPrivateKey, randomInt, timingSafeEqual, webcrypto } from "node:crypto";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { WebSocketServer } from "ws";
 import QRCode from "qrcode";
-import forge from "node-forge";
+import * as x509 from "@peculiar/x509";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(HERE, "..", "client", "dist");
@@ -107,10 +107,28 @@ const HOSTNAME = hostname();
 
 /* ------------------------------------------------ certificados (CA local) */
 
-function fingerprint(certPem) {
-  const der = forge.asn1.toDer(forge.pki.certificateToAsn1(forge.pki.certificateFromPem(certPem))).getBytes();
-  return createHash("sha256").update(Buffer.from(der, "binary")).digest("hex").toUpperCase().match(/.{2}/g).join(":");
+// Certificados X.509 con @peculiar/x509 sobre la WebCrypto de Node (antes
+// node-forge, que tiene vulnerabilidades sin corregir). La lectura usa el
+// X509Certificate nativo de Node.
+x509.cryptoProvider.set(webcrypto);
+const RSA = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256", publicExponent: new Uint8Array([1, 0, 1]), modulusLength: 2048 };
+const DAY = 86400000;
+
+const fingerprint = (certPem) => new X509Certificate(certPem).fingerprint256;
+
+// Admite las claves PKCS#1 («RSA PRIVATE KEY») que escribía node-forge: así
+// se conserva la CA ya instalada en los dispositivos emparejados.
+function importPrivateKey(pem) {
+  const der = createPrivateKey(pem).export({ type: "pkcs8", format: "der" });
+  return webcrypto.subtle.importKey("pkcs8", der, RSA, true, ["sign"]);
 }
+
+async function exportPrivateKey(key) {
+  const der = Buffer.from(await webcrypto.subtle.exportKey("pkcs8", key));
+  return x509.PemConverter.encode(der, "PRIVATE KEY");
+}
+
+const generateKeys = () => webcrypto.subtle.generateKey(RSA, true, ["sign", "verify"]);
 
 /**
  * CA local (10 años) + certificado del servidor firmado por ella (825 días,
@@ -125,31 +143,33 @@ async function ensureCertificates() {
   let caCert;
   let caKey;
   if (existsSync(caCertFile) && existsSync(caKeyFile)) {
-    caCert = forge.pki.certificateFromPem(await readFile(caCertFile, "utf8"));
-    caKey = forge.pki.privateKeyFromPem(await readFile(caKeyFile, "utf8"));
+    caCert = new x509.X509Certificate(await readFile(caCertFile, "utf8"));
+    caKey = await importPrivateKey(await readFile(caKeyFile, "utf8"));
   } else {
-    const keys = forge.pki.rsa.generateKeyPair(2048);
-    caCert = forge.pki.createCertificate();
-    caCert.publicKey = keys.publicKey;
-    caCert.serialNumber = randomSerial();
-    caCert.validity.notBefore = new Date(Date.now() - 86400000);
-    caCert.validity.notAfter = new Date(Date.now() + 10 * 365 * 86400000);
-    const attrs = [
-      // Solo ASCII: forge codifica los nombres como PrintableString.
-      { name: "commonName", value: `Plan Gestor Task - CA local de ${HOSTNAME.replace(/[^ -~]/g, "")}` },
-      { name: "organizationName", value: "Plan Gestor Task (uso personal)" },
-    ];
-    caCert.setSubject(attrs);
-    caCert.setIssuer(attrs);
-    caCert.setExtensions([
-      { name: "basicConstraints", cA: true, critical: true },
-      { name: "keyUsage", keyCertSign: true, cRLSign: true, critical: true },
-      { name: "subjectKeyIdentifier" },
+    const keys = await generateKeys();
+    // Solo ASCII en los nombres (como con la versión anterior).
+    const name = new x509.Name([
+      { CN: [`Plan Gestor Task - CA local de ${HOSTNAME.replace(/[^ -~]/g, "")}`] },
+      { O: ["Plan Gestor Task (uso personal)"] },
     ]);
-    caCert.sign(keys.privateKey, forge.md.sha256.create());
+    caCert = await x509.X509CertificateGenerator.create({
+      serialNumber: randomSerial(),
+      subject: name,
+      issuer: name,
+      notBefore: new Date(Date.now() - DAY),
+      notAfter: new Date(Date.now() + 10 * 365 * DAY),
+      publicKey: keys.publicKey,
+      signingKey: keys.privateKey,
+      signingAlgorithm: RSA,
+      extensions: [
+        new x509.BasicConstraintsExtension(true, undefined, true),
+        new x509.KeyUsagesExtension(x509.KeyUsageFlags.keyCertSign | x509.KeyUsageFlags.cRLSign, true),
+        await x509.SubjectKeyIdentifierExtension.create(keys.publicKey),
+      ],
+    });
     caKey = keys.privateKey;
-    await writeFile(caCertFile, forge.pki.certificateToPem(caCert));
-    await writeFile(caKeyFile, forge.pki.privateKeyToPem(caKey), { mode: 0o600 });
+    await writeFile(caCertFile, caCert.toString("pem"));
+    await writeFile(caKeyFile, await exportPrivateKey(caKey), { mode: 0o600 });
   }
 
   const leafFile = join(CERT_DIR, "server.pem");
@@ -160,46 +180,47 @@ async function ensureCertificates() {
   if (existsSync(leafFile) && existsSync(leafKeyFile) && existsSync(metaFile)) {
     try {
       const meta = JSON.parse(await readFile(metaFile, "utf8"));
-      reuse = JSON.stringify(meta.ips) === JSON.stringify(wanted) && Date.parse(meta.notAfter) > Date.now() + 30 * 86400000;
+      reuse = JSON.stringify(meta.ips) === JSON.stringify(wanted) && Date.parse(meta.notAfter) > Date.now() + 30 * DAY;
     } catch {
       reuse = false;
     }
   }
   if (!reuse) {
-    const keys = forge.pki.rsa.generateKeyPair(2048);
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = keys.publicKey;
-    cert.serialNumber = randomSerial();
-    cert.validity.notBefore = new Date(Date.now() - 86400000);
-    cert.validity.notAfter = new Date(Date.now() + 825 * 86400000);
-    cert.setSubject([{ name: "commonName", value: LAN[0] }]);
-    cert.setIssuer(caCert.subject.attributes);
-    cert.setExtensions([
-      { name: "basicConstraints", cA: false },
-      { name: "keyUsage", digitalSignature: true, keyEncipherment: true, critical: true },
-      { name: "extKeyUsage", serverAuth: true },
-      {
-        name: "subjectAltName",
-        altNames: [
-          ...wanted.map((ip) => ({ type: 7, ip })),
-          { type: 2, value: "localhost" },
-          { type: 2, value: HOSTNAME },
-          { type: 2, value: `${HOSTNAME}.local` },
-        ],
-      },
-    ]);
-    cert.sign(caKey, forge.md.sha256.create());
-    await writeFile(leafFile, forge.pki.certificateToPem(cert));
-    await writeFile(leafKeyFile, forge.pki.privateKeyToPem(keys.privateKey), { mode: 0o600 });
-    await writeFile(metaFile, JSON.stringify({ ips: wanted, notAfter: cert.validity.notAfter.toISOString() }));
+    const keys = await generateKeys();
+    const notAfter = new Date(Date.now() + 825 * DAY);
+    const cert = await x509.X509CertificateGenerator.create({
+      serialNumber: randomSerial(),
+      subject: new x509.Name([{ CN: [LAN[0]] }]),
+      // El emisor se copia byte a byte del sujeto de la CA para que la cadena encaje.
+      issuer: new x509.Name(caCert.subjectName.toArrayBuffer()),
+      notBefore: new Date(Date.now() - DAY),
+      notAfter,
+      publicKey: keys.publicKey,
+      signingKey: caKey,
+      signingAlgorithm: RSA,
+      extensions: [
+        new x509.BasicConstraintsExtension(false),
+        new x509.KeyUsagesExtension(x509.KeyUsageFlags.digitalSignature | x509.KeyUsageFlags.keyEncipherment, true),
+        new x509.ExtendedKeyUsageExtension([x509.ExtendedKeyUsage.serverAuth]),
+        new x509.SubjectAlternativeNameExtension([
+          ...wanted.map((ip) => ({ type: "ip", value: ip })),
+          { type: "dns", value: "localhost" },
+          { type: "dns", value: HOSTNAME },
+          { type: "dns", value: `${HOSTNAME}.local` },
+        ]),
+      ],
+    });
+    await writeFile(leafFile, cert.toString("pem"));
+    await writeFile(leafKeyFile, await exportPrivateKey(keys.privateKey), { mode: 0o600 });
+    await writeFile(metaFile, JSON.stringify({ ips: wanted, notAfter: notAfter.toISOString() }));
   }
 
-  const caPem = forge.pki.certificateToPem(caCert);
+  const caPem = caCert.toString("pem");
   return {
     key: await readFile(leafKeyFile, "utf8"),
-    cert: (await readFile(leafFile, "utf8")) + caPem,
+    cert: `${await readFile(leafFile, "utf8")}\n${caPem}`,
     caPem,
-    caDer: Buffer.from(forge.asn1.toDer(forge.pki.certificateToAsn1(caCert)).getBytes(), "binary"),
+    caDer: Buffer.from(caCert.rawData),
     caFingerprint: fingerprint(caPem),
   };
 }

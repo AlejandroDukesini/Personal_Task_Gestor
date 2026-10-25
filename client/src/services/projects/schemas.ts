@@ -13,7 +13,8 @@ const text = (max: number) => z.string().trim().max(max);
 // Los proyectos usan la misma biblioteca de iconos que las notas.
 const icon = z.string().max(40).refine(isNoteIcon, "Icono desconocido");
 /** Porcentaje manual: entero de 0 a 100. Nada de negativos ni de más de 100. */
-export const percent = z.number({ invalid_type_error: "El porcentaje debe ser un número" }).int("El porcentaje debe ser un número entero").min(0, "El porcentaje mínimo es 0 %").max(100, "El porcentaje máximo es 100 %");
+// El mensaje propio solo para un valor de otro tipo (como `invalid_type_error` en Zod 3).
+export const percent = z.number({ error: (iss) => (iss.input === undefined ? undefined : "El porcentaje debe ser un número") }).int("El porcentaje debe ser un número entero").min(0, "El porcentaje mínimo es 0 %").max(100, "El porcentaje máximo es 100 %");
 
 export const MAX_STAGES = 200;
 export const MAX_OBJECTIVES = 50;

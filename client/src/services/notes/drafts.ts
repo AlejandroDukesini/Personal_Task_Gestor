@@ -14,7 +14,7 @@ const PREFIX = "gestion-tareas:note-draft:";
 const draftSchema = z.object({
   savedAt: z.string(),
   baseUpdatedAt: z.string(),
-  patch: z.record(z.unknown()),
+  patch: z.record(z.string(), z.unknown()),
 });
 
 export type NoteDraft = z.infer<typeof draftSchema>;

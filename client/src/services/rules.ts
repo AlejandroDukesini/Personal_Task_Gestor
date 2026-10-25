@@ -8,7 +8,7 @@ import { z } from "zod";
 /** Texto obligatorio: sin espacios a los lados y nunca vacío. */
 export const requiredText = (label: string, max: number) =>
   z
-    .string({ required_error: `${label} es obligatorio`, invalid_type_error: `${label} es obligatorio` })
+    .string({ error: `${label} es obligatorio` })
     .trim()
     .min(1, `${label} es obligatorio`)
     .max(max, `${label} admite como máximo ${max} caracteres`);
@@ -18,7 +18,7 @@ const isValidDate = (v: string) => !Number.isNaN(new Date(v).getTime());
 /** Fecha/instante obligatorio en cualquier formato que entienda `Date`; sale en ISO. */
 export const isoDate = (label = "Fecha") =>
   z
-    .string({ required_error: `${label}: es obligatoria`, invalid_type_error: `${label}: es obligatoria` })
+    .string({ error: `${label}: es obligatoria` })
     .refine(isValidDate, `${label}: fecha no válida`)
     .transform((v) => new Date(v).toISOString());
 

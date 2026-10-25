@@ -1012,7 +1012,7 @@ const cellRecords = (max: number) =>
 const notes = z.array(z.string().max(500)).max(40).optional();
 /** Nombre normalizado de una cuenta/categoría del archivo -> decisión del usuario. */
 const entityMap = z
-  .record(z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/, "Decisión no válida"))
+  .record(z.string(), z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/, "Decisión no válida"))
   .refine((m) => Object.keys(m).length <= 5000, "Demasiadas asignaciones") as z.ZodType<Record<string, EntityChoice>>;
 
 const smartBody = z.object({
@@ -1056,10 +1056,10 @@ const smartBody = z.object({
     .partial()
     .optional(),
   edits: z
-    .record(z.object(Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, z.string().max(2000).optional()]))))
+    .record(z.string(), z.object(Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, z.string().max(2000).optional()]))))
     .refine((e) => Object.keys(e).length <= MAX_IMPORT_ROWS, "Demasiadas correcciones")
     .optional(),
-  decisions: z.record(z.enum(["include", "exclude"])).optional(),
+  decisions: z.record(z.string(), z.enum(["include", "exclude"])).optional(),
 });
 
 const importBody = z.object({

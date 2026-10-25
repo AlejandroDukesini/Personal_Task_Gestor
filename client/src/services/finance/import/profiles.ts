@@ -22,7 +22,7 @@ const profileSchema = z.object({
   name: z.string().trim().min(1).max(60),
   signature: z.string().max(5000),
   headers: z.array(z.string().max(200)).max(300),
-  columns: z.record(z.enum(IMPORT_FIELDS).nullable()),
+  columns: z.record(z.string(), z.enum(IMPORT_FIELDS).nullable()),
   options: z
     .object({
       dateOrder: z.enum(["auto", "dmy", "mdy", "ymd"]).optional(),
@@ -33,8 +33,8 @@ const profileSchema = z.object({
       defaultCurrency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
       createAccounts: z.boolean().optional(),
       createCategories: z.boolean().optional(),
-      accountMap: z.record(z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/)).optional(),
-      categoryMap: z.record(z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/)).optional(),
+      accountMap: z.record(z.string(), z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/)).optional(),
+      categoryMap: z.record(z.string(), z.string().regex(/^(create|none|exclude|id:[\w:.-]{1,128})$/)).optional(),
       duplicateFields: z.array(z.enum(DUPLICATE_FIELDS)).optional(),
       confirmed: z.array(z.enum(["dateOrder", "decimal", "currency", "mapping"])).optional(),
     })

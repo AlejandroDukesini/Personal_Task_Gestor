@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Archive, ArchiveRestore, ArrowLeft, ClipboardList, Copy, FileStack, LayoutTemplate, Loader2, Pencil, Plus, Search, Trash2, User, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, ClipboardList, Copy, FileStack, FolderPlus, LayoutTemplate, Loader2, Pencil, Plus, Search, Trash2, User, Workflow } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -258,6 +258,7 @@ function SopDetail({ id }: { id: string }) {
                 </Button>
               )}
               <ActionMenu label="Más acciones">
+                {sop.kind === "template" && <MenuItem icon={<FolderPlus size={14} />} onClick={() => navigate(`/proyectos?new=1&plantilla=${sop.id}`)}>Usar en un proyecto profesional</MenuItem>}
                 <MenuItem icon={<Copy size={14} />} onClick={() => act(async () => navigate(`/sop/${(await api.post<SopRow>(`/sops/${sop.id}/duplicate`)).id}`), "Duplicado", () => undefined)}>Duplicar</MenuItem>
                 <MenuItem icon={<Archive size={14} />} onClick={() => act(() => api.post(`/sops/${sop.id}/archive`), "Archivado")}>Archivar</MenuItem>
                 <MenuItem icon={<Trash2 size={14} />} danger onClick={() => confirm(`¿Eliminar «${sop.name}» definitivamente? Se guardará antes una copia de seguridad automática.`) && act(() => api.delete(`/sops/${sop.id}`), "Eliminado definitivamente", () => navigate(back))}>Eliminar</MenuItem>

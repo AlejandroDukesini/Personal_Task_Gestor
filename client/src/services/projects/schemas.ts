@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { hexColor, idSchema } from "@/services/notes/schemas";
 import { isNoteIcon } from "@/services/notes/icons";
-import { stageExtraRow } from "@/services/workflow/schemas";
+import { stageExtraRow, WF_PRIORITIES } from "@/services/workflow/schemas";
 
 const iso = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Marca de tiempo inválida");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (AAAA-MM-DD)").refine((v) => !Number.isNaN(Date.parse(v)), "Fecha inválida");
@@ -53,6 +53,11 @@ export const projectRow = z.object({
   finishedAt: iso.nullable(),
   objectives: z.array(objectiveRow).max(MAX_OBJECTIVES).refine(uniqueIds, "Objetivo repetido"),
   stages: z.array(stageRow).max(MAX_STAGES).refine(uniqueIds, "Etapa repetida"),
+  client: text(150).nullable().optional(),
+  owner: text(120).nullable().optional(),
+  priority: z.enum(WF_PRIORITIES).nullable().optional(),
+  budget: z.number().min(0).max(1e15).nullable().optional(),
+  sourceTemplateId: idSchema.nullable().optional(),
   deletedAt: iso.nullable(),
   createdAt: iso,
   updatedAt: iso,
@@ -81,9 +86,21 @@ export const projectInput = z.object({
   objectives: z.array(objectiveInput).max(MAX_OBJECTIVES, `Máximo ${MAX_OBJECTIVES} objetivos`).optional(),
   /** Etapas iniciales opcionales (solo al crear): se crean al 0 %. */
   stages: z.array(z.object({ title: text(200).min(1, "La etapa necesita un título") })).max(MAX_STAGES).optional(),
+  client: text(150).nullable().optional(),
+  owner: text(120).nullable().optional(),
+  priority: z.enum(WF_PRIORITIES).nullable().optional(),
+  budget: z.number({ error: (iss) => (iss.input === undefined ? undefined : "El presupuesto debe ser un número") }).min(0, "El presupuesto no puede ser negativo").max(1e15).nullable().optional(),
+  /** Solo al crear: copiar la estructura de una plantilla/SOP o de otro proyecto. */
+  from: z.object({ type: z.enum(["sop", "project"]), id: idSchema }).optional(),
 });
 
-export const projectPatch = projectInput.omit({ id: true, stages: true }).partial();
+export const projectPatch = projectInput.omit({ id: true, stages: true, from: true }).partial();
+
+/** Aplicar una estructura a un proyecto existente: añadirla al final o sustituir la actual. */
+export const applyStructureInput = z.object({
+  from: z.object({ type: z.enum(["sop", "project"]), id: idSchema }),
+  mode: z.enum(["append", "replace"]),
+});
 
 export const stageInput = z.object({
   title: text(200).min(1, "La etapa necesita un título"),

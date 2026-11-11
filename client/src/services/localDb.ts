@@ -714,6 +714,16 @@ export interface ProjectRow {
   finishedAt: string | null;
   objectives: ProjectObjective[];
   stages: ProjectStage[];
+  /* Campos de la v12 (proyecto profesional). Opcionales: ausentes en filas antiguas. */
+  /** Cliente o entidad relacionada. */
+  client?: string | null;
+  /** Responsable del proyecto. */
+  owner?: string | null;
+  priority?: WfPriority | null;
+  /** Presupuesto opcional (en la moneda principal; solo informativo). */
+  budget?: number | null;
+  /** Plantilla de la que se copió la estructura al crearlo (informativo). */
+  sourceTemplateId?: string | null;
   /** Papelera, igual que en notas: null = no está en la papelera. */
   deletedAt: string | null;
   createdAt: string;

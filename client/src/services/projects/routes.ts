@@ -12,7 +12,11 @@ import { ApiError, localDateKey, loadDb, mutate, newId, nowIso, tombstone, type 
 import { created, find, noContent, ok, parse, type Route } from "@/services/routeKit";
 import { NOTE_COLORS } from "@/services/notes/icons";
 import { queryProjects, type ProjectQuery } from "./query";
-import { MAX_STAGES, projectInput, projectPatch, reorderInput, stageInput, stagePatch } from "./schemas";
+import { applyStructureInput, MAX_STAGES, projectInput, projectPatch, reorderInput, stageInput, stagePatch } from "./schemas";
+import { cloneStages } from "@/services/workflow/logic";
+import { applyOp } from "@/services/workflow/ops";
+import { structureOp } from "@/services/workflow/schemas";
+import { sourceStages } from "@/services/sops/routes";
 import type { z } from "zod";
 
 export const DEFAULT_PROJECT_ICON = "FolderKanban";
@@ -78,6 +82,8 @@ export const projectRoutes: Route[] = [
         }
         const ts = nowIso();
         const status = data.status ?? "active";
+        if (data.from && data.from.type === "project" && data.from.id === data.id) throw new ApiError(400, "Origen no válido");
+        const copied = data.from ? cloneStages(sourceStages(db, data.from), ts) : null;
         const row: ProjectRow = {
           id: data.id ?? newId(),
           title: data.title,
@@ -90,7 +96,12 @@ export const projectRoutes: Route[] = [
           status,
           finishedAt: status === "finished" ? ts : null,
           objectives: objectivesOf(data.objectives),
-          stages: (data.stages ?? []).map((s) => ({ id: newId(), title: s.title, description: null, progress: 0, createdAt: ts, updatedAt: ts })),
+          stages: copied ?? (data.stages ?? []).map((s) => ({ id: newId(), title: s.title, description: null, progress: 0, createdAt: ts, updatedAt: ts })),
+          client: data.client || null,
+          owner: data.owner || null,
+          priority: data.priority ?? null,
+          budget: data.budget ?? null,
+          sourceTemplateId: data.from?.type === "sop" ? data.from.id : null,
           deletedAt: null,
           createdAt: ts,
           updatedAt: ts,
@@ -115,6 +126,10 @@ export const projectRoutes: Route[] = [
         if (data.endDate !== undefined) p.endDate = data.endDate;
         if (data.description !== undefined) p.description = data.description || null;
         if (data.objectives !== undefined) p.objectives = objectivesOf(data.objectives);
+        if (data.client !== undefined) p.client = data.client || null;
+        if (data.owner !== undefined) p.owner = data.owner || null;
+        if (data.priority !== undefined) p.priority = data.priority;
+        if (data.budget !== undefined) p.budget = data.budget;
         if (data.status !== undefined && data.status !== p.status) {
           p.status = data.status;
           p.finishedAt = data.status === "finished" ? ts : null;
@@ -186,6 +201,9 @@ export const projectRoutes: Route[] = [
       mutate((db) => {
         const p = activeProject(db, params.id);
         const s = findStage(p, params.stageId);
+        if (data.progress !== undefined && data.progress !== s.progress && s.activities?.length) {
+          throw new ApiError(400, "El avance de esta etapa se calcula a partir de sus actividades");
+        }
         if (data.title !== undefined) s.title = data.title;
         if (data.description !== undefined) s.description = data.description || null;
         if (data.progress !== undefined) s.progress = data.progress;
@@ -222,4 +240,63 @@ export const projectRoutes: Route[] = [
       })
     );
   }],
+
+  /* ------------------------------------------- sistema de trabajo (v12) */
+  /** Operaciones sobre la estructura: etapas, procedimientos, actividades y listas. */
+  ["POST", "/projects/:id/ops", ({ params, body }) => {
+    const op = parse(structureOp, body);
+    return ok(
+      mutate((db) => {
+        const p = activeProject(db, params.id);
+        const ts = nowIso();
+        const r = applyOp(p.stages, op, ts);
+        p.stages = r.stages;
+        p.updatedAt = ts;
+        return { project: p, createdId: r.createdId ?? null };
+      })
+    );
+  }],
+  /**
+   * Aplicar una plantilla (o la estructura de otro proyecto): copia
+   * independiente con ids nuevos, al final o sustituyendo la actual.
+   */
+  ["POST", "/projects/:id/structure", ({ params, body }) => {
+    const { from, mode } = parse(applyStructureInput, body);
+    return ok(
+      mutate((db) => {
+        const p = activeProject(db, params.id);
+        if (from.type === "project" && from.id === p.id) throw new ApiError(400, "Elige otro proyecto como origen");
+        const ts = nowIso();
+        const copy = cloneStages(sourceStages(db, from), ts);
+        if (mode === "append" && p.stages.length + copy.length > MAX_STAGES) throw new ApiError(400, `Máximo ${MAX_STAGES} etapas por proyecto`);
+        p.stages = mode === "replace" ? copy : [...p.stages, ...copy];
+        if (from.type === "sop") p.sourceTemplateId = from.id;
+        p.updatedAt = ts;
+        return p;
+      })
+    );
+  }],
+  /** Duplicar un proyecto: mismos datos y estructura, empezando de cero. */
+  ["POST", "/projects/:id/duplicate", ({ params }) =>
+    created(
+      mutate((db) => {
+        const src = find(db.projects, params.id, "Proyecto");
+        const ts = nowIso();
+        const copy: ProjectRow = {
+          ...structuredClone(src),
+          id: newId(),
+          title: `${src.title} (copia)`.slice(0, 200),
+          status: "active",
+          finishedAt: null,
+          objectives: src.objectives.map((o) => ({ ...o, id: newId(), done: false })),
+          stages: cloneStages(src.stages, ts),
+          deletedAt: null,
+          createdAt: ts,
+          updatedAt: ts,
+        };
+        db.projects.push(copy);
+        return copy;
+      })
+    ),
+  ],
 ];

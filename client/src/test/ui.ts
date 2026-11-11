@@ -87,3 +87,10 @@ export async function type(target: string | HTMLElement, value: string) {
   });
   await settle(2);
 }
+
+/** Envía el formulario del campo (como pulsar Enter) y espera a que termine. */
+export async function submit(target: string | HTMLElement) {
+  const el = (typeof target === "string" ? field(target) : target) as HTMLInputElement;
+  await act(async () => el.form!.requestSubmit());
+  await settle();
+}

@@ -43,6 +43,7 @@ import { NOTE_ROW_SCHEMAS } from "./notes/schemas";
 import { projectRoutes } from "./projects/routes";
 import { PROJECT_ROW_SCHEMAS } from "./projects/schemas";
 import { academicRoutes } from "./academic/routes";
+import { sopRoutes } from "./sops/routes";
 import { MODULE_ROW_SCHEMAS } from "./moduleSchemas";
 import { goalProgress } from "./finance/calc";
 import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
@@ -588,6 +589,7 @@ const routes: Route[] = [
   ...notesRoutes,
   ...projectRoutes,
   ...academicRoutes,
+  ...sopRoutes,
   ...habitRoutes,
 
   // Categorías

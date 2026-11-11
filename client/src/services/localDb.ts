@@ -4,11 +4,12 @@
 
 import { __resetStorageForTests, configureStorage, createRestorePoint, openStorage, persistDb, type StorageInfo } from "./storage";
 import type { EventRecurrence } from "@/types";
+import { defaultSopTemplates } from "./sops/seeds";
 
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 
 export interface SettingsRow {
   id: number;
@@ -576,13 +577,110 @@ export interface NoteRow {
  * sincronización nunca mezcla etapas de dos versiones distintas del proyecto.
  * Su orden es el del array.
  */
-export interface ProjectStage {
+export interface ProjectStage extends WfStageExtra {
   id: string;
   title: string;
   /** Markdown básico (se muestra con `components/Markdown`). */
   description: string | null;
-  /** Avance manual, entero de 0 a 100. 100 = completada (estado derivado). */
+  /**
+   * Avance, entero de 0 a 100. 100 = completada. Manual mientras la etapa no
+   * tenga actividades; con actividades se recalcula a partir de ellas.
+   */
   progress: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------- estructura de trabajo
+ * Estructura compartida por los SOP, sus plantillas y los proyectos
+ * profesionales: etapas → procedimientos, actividades, lista de verificación y
+ * documentación. Vive DENTRO de la fila de su contenedor (como las etapas de
+ * siempre): no hay huérfanos y la sincronización no mezcla versiones.
+ * Los campos son opcionales en `ProjectStage` porque las etapas anteriores a
+ * la v10 no los tienen (se leen con valores por defecto, sin reescribirlas).
+ */
+
+export type WfPriority = "low" | "medium" | "high" | "critical";
+export type WfActivityStatus = "pending" | "in_progress" | "blocked" | "done";
+export type WfStageStatus = "pending" | "in_progress" | "on_hold" | "done";
+
+export interface WfCheckItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/** Procedimiento de una etapa: instrucciones paso a paso. */
+export interface WfProcedure {
+  id: string;
+  title: string;
+  /** Markdown básico. */
+  instructions: string | null;
+  observations: string | null;
+  checklist: WfCheckItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WfActivity {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  priority: WfPriority;
+  status: WfActivityStatus;
+  /** Avance opcional (null = no se mide en porcentaje: cuenta su estado). */
+  progress: number | null;
+  observations: string | null;
+  checklist: WfCheckItem[];
+  /** Actividades (del mismo contenedor) que deben terminarse antes. */
+  dependsOn: string[];
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WfStageExtra {
+  subtitle?: string | null;
+  objective?: string | null;
+  color?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  priority?: WfPriority | null;
+  /** Null = derivado del avance. */
+  status?: WfStageStatus | null;
+  procedures?: WfProcedure[];
+  activities?: WfActivity[];
+  checklist?: WfCheckItem[];
+  /** Documentación de la etapa: Markdown básico (enlaces, entregables…). */
+  documentation?: string | null;
+  observations?: string | null;
+}
+
+/** Etapa completa (los SOP y plantillas siempre la guardan así). */
+export type WfStage = ProjectStage & Required<WfStageExtra>;
+
+export type SopKind = "sop" | "template";
+export type SopStatus = "draft" | "active" | "archived";
+
+/**
+ * Procedimiento operativo estándar (SOP) o plantilla. Las plantillas son SOP
+ * reutilizables: aplicarlas a un SOP o a un proyecto copia su estructura con
+ * ids nuevos, así que los cambios posteriores nunca alteran el original.
+ */
+export interface SopRow {
+  id: string;
+  kind: SopKind;
+  name: string;
+  description: string | null;
+  objective: string | null;
+  category: string | null;
+  /** Versión libre ("1.0", "2026-03"…). */
+  version: string;
+  status: SopStatus;
+  owner: string | null;
+  color: string;
+  stages: WfStage[];
   createdAt: string;
   updatedAt: string;
 }
@@ -757,6 +855,7 @@ export interface Db {
   acadSubjects: AcadSubjectRow[];
   acadClasses: AcadClassRow[];
   acadActivities: AcadActivityRow[];
+  sops: SopRow[];
   tombstones: TombstoneRow[];
 }
 
@@ -788,6 +887,7 @@ export const SYNCED_COLLECTIONS = [
   "acadSubjects",
   "acadClasses",
   "acadActivities",
+  "sops",
 ] as const;
 
 export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
@@ -812,6 +912,7 @@ export const MODULE_COLLECTIONS = [
   "acadSubjects",
   "acadClasses",
   "acadActivities",
+  "sops",
 ] as const satisfies readonly SyncedCollection[];
 
 /** Error con código HTTP, para que la capa de rutas responda como lo hacía Express. */
@@ -950,6 +1051,7 @@ function emptyDb(): Db {
     acadSubjects: [],
     acadClasses: [],
     acadActivities: [],
+    sops: [],
     tombstones: [],
   };
 }
@@ -1064,6 +1166,20 @@ export const MIGRATIONS: Migration[] = [
       const gone = new Set((db.tombstones ?? []).filter((t: { collection: string }) => t.collection === "noteCategories").map((t: { id: string }) => t.id));
       for (const c of defaultFinanceNoteCategories()) {
         if (!gone.has(c.id) && !db.noteCategories.some((x: { id: string }) => x.id === c.id)) db.noteCategories.push(c);
+      }
+    },
+  },
+  {
+    version: 10,
+    description: "SOP: procedimientos operativos estándar y plantillas reutilizables",
+    up: (db) => {
+      // Colección nueva + plantillas de ejemplo con ids fijos (no se duplican
+      // entre dispositivos ni resucitan si se borraron). Las etapas de los
+      // proyectos NO se reescriben: sus campos nuevos se leen por defecto.
+      db.sops ??= [];
+      const gone = new Set((db.tombstones ?? []).filter((t: { collection: string }) => t.collection === "sops").map((t: { id: string }) => t.id));
+      for (const t of defaultSopTemplates()) {
+        if (!gone.has(t.id) && !db.sops.some((x: { id: string }) => x.id === t.id)) db.sops.push(t);
       }
     },
   },
@@ -1609,6 +1725,7 @@ function seed(db: Db): Db {
 
   db.finCategories = defaultFinCategories();
   db.noteCategories = [...defaultNoteCategories(), ...defaultFinanceNoteCategories()];
+  db.sops = defaultSopTemplates();
 
   return db;
 }

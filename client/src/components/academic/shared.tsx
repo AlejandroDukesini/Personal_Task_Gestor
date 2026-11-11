@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import toast from "react-hot-toast";
 import { AlertTriangle, CheckCircle2, Circle, CircleDot, Eye } from "lucide-react";
 import { api } from "@/services/api";
 import { errorMessage } from "@/components/finance/shared";
@@ -40,18 +39,7 @@ export function useAcademic(semesterId: string | null) {
   return { data, error, reload: load };
 }
 
-/** Ejecuta una acción, avisa con un mensaje discreto y recarga. */
-export async function run(fn: () => Promise<unknown>, message: string, reload: () => void): Promise<boolean> {
-  try {
-    await fn();
-    toast.success(message);
-    reload();
-    return true;
-  } catch (e) {
-    toast.error(errorMessage(e));
-    return false;
-  }
-}
+export { runAction as run } from "@/lib/runAction";
 
 const STATE_STYLE: Record<ActivityState, { cls: string; icon: typeof Circle }> = {
   pending: { cls: "text-subtle bg-muted", icon: Circle },

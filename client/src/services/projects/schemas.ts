@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { hexColor, idSchema } from "@/services/notes/schemas";
 import { isNoteIcon } from "@/services/notes/icons";
+import { stageExtraRow } from "@/services/workflow/schemas";
 
 const iso = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Marca de tiempo inválida");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (AAAA-MM-DD)").refine((v) => !Number.isNaN(Date.parse(v)), "Fecha inválida");
@@ -20,6 +21,7 @@ export const MAX_STAGES = 200;
 export const MAX_OBJECTIVES = 50;
 export const PROJECT_STATUSES = ["active", "inactive", "finished"] as const;
 
+/** Etapa: campos de siempre + los de la estructura de trabajo (v10, opcionales). */
 export const stageRow = z.object({
   id: idSchema,
   title: text(200).min(1),
@@ -27,6 +29,7 @@ export const stageRow = z.object({
   progress: percent,
   createdAt: iso,
   updatedAt: iso,
+  ...stageExtraRow,
 });
 
 export const objectiveRow = z.object({

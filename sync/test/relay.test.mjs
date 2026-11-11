@@ -5,13 +5,13 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import https from "node:https";
 import { WebSocket } from "ws";
-import forge from "node-forge";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CODE = "TEST-C0DE";
@@ -129,8 +129,9 @@ test("datos de emparejamiento solo desde loopback; CA descargable y válida", as
   assert.equal(pair.code, "TEST-C0DE");
   assert.match(pair.caFingerprint, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
   const der = Buffer.from(await (await fetch(`http://127.0.0.1:${PORT + 2}/ca.crt`)).arrayBuffer());
-  const ca = forge.pki.certificateFromAsn1(forge.asn1.fromDer(der.toString("binary")));
-  assert.equal(ca.getExtension("basicConstraints").cA, true);
+  const ca = new X509Certificate(der);
+  assert.equal(ca.ca, true);
+  assert.equal(ca.fingerprint256, pair.caFingerprint);
   // La página de configuración (accesible en la LAN) NO muestra el código.
   const page = await (await fetch(`http://127.0.0.1:${PORT + 2}/`)).text();
   assert.match(page, /Descargar certificado/);
@@ -155,10 +156,28 @@ test("HTTPS: un cliente que solo confía en la CA local acepta el servidor (como
     new Promise((resolve, reject) => https.get({ host: "127.0.0.1", port: TLS_PORT, path: "/health" }, resolve).on("error", reject))
   );
   // iOS exige como máximo 825 días de validez en el certificado del servidor.
-  const leaf = forge.pki.certificateFromPem(readFileSync(join(tmp, "cert", "server.pem"), "utf8"));
-  const days = (leaf.validity.notAfter - leaf.validity.notBefore) / 86400000;
+  const leaf = new X509Certificate(readFileSync(join(tmp, "cert", "server.pem"), "utf8"));
+  const days = (leaf.validToDate - leaf.validFromDate) / 86400000;
   assert.ok(days <= 826, `validez ${days} días`);
+  const ca = new X509Certificate(caPem);
+  assert.ok(leaf.checkIssued(ca) && leaf.verify(ca.publicKey), "firmado por la CA local");
+  assert.ok(leaf.checkIP("127.0.0.1") && leaf.checkHost("localhost"));
   assert.ok(existsSync(join(tmp, "cert", "ca-key.pem")));
+});
+
+test("conserva una CA existente con clave PKCS#1 (formato de versiones anteriores)", async () => {
+  const dir = join(tmp, "cert");
+  const caPem = readFileSync(join(dir, "ca.pem"), "utf8");
+  const pkcs1 = createPrivateKey(readFileSync(join(dir, "ca-key.pem"), "utf8")).export({ type: "pkcs1", format: "pem" });
+  writeFileSync(join(dir, "ca-key.pem"), pkcs1);
+  for (const f of ["server.pem", "server-key.pem", "server.json"]) rmSync(join(dir, f));
+  // +5: TLS_PORT+1 y +2 los ocupan los puertos local y de configuración del anterior.
+  await start(TLS_PORT + 5);
+  assert.equal(readFileSync(join(dir, "ca.pem"), "utf8"), caPem, "la CA no cambia");
+  const status = await new Promise((resolve, reject) =>
+    https.get({ host: "127.0.0.1", port: TLS_PORT + 5, path: "/health", ca: caPem }, (res) => resolve(res.statusCode)).on("error", reject)
+  );
+  assert.equal(status, 200);
 });
 
 test("bloquea la fuerza bruta del código tras 10 intentos", async () => {

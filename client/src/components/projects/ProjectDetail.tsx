@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, CalendarDays, Loader2, Pencil, RotateCcw, Target, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Copy, FileStack, LayoutDashboard, Layers, Loader2, Pencil, RotateCcw, Target, Trash2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Empty } from "@/components/ui/Empty";
@@ -17,6 +17,11 @@ import { ProjectForm } from "./ProjectForm";
 import { StageList } from "./StageList";
 import { StagePanel, type StagePatch } from "./StagePanel";
 import { ActionMenu, DeadlineBadge, formatDay, MenuItem, ProgressBar, ProjectAvatar, StatusBadge, STATUS_META } from "./shared";
+import { ApplyStructure } from "./ApplyStructure";
+import { StructureEditor } from "@/components/workflow/StructureEditor";
+import type { OpRunner } from "@/components/workflow/shared";
+import { normalizeStage, PRIORITY_LABEL, structureStats } from "@/services/workflow/logic";
+import type { SopRow } from "@/services/localDb";
 
 const SAVE_DELAY = 600;
 
@@ -42,6 +47,9 @@ export function ProjectDetail({ id }: { id: string }) {
 
   const stageId = params.get("etapa");
   const tab = params.get("tab") === "etapas" ? "stages" : "info";
+  /** «Resumen» (vista clásica) o «Sistema de trabajo» (estructura completa). */
+  const mode = params.get("modo") === "sistema" ? "system" : "summary";
+  const [applying, setApplying] = useState(false);
 
   const pending = useRef(new Map<string, StagePatch>());
   const version = useRef(0);
@@ -166,6 +174,23 @@ export function ProjectDetail({ id }: { id: string }) {
   const selectStage = useCallback((sid: string) => setQuery({ etapa: sid, tab: "etapas" }), [setQuery]);
 
   const progress = useMemo(() => (project ? projectProgress(project.stages) : 0), [project?.stages]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fullStages = useMemo(() => (project ? project.stages.map(normalizeStage) : []), [project?.stages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Cambio de estructura (sistema de trabajo): se guarda al momento. */
+  const runOp: OpRunner = useCallback(
+    async (op) => {
+      if (!(await flush())) return { ok: false };
+      try {
+        const r = await api.post<{ project: ProjectRow; createdId: string | null }>(`/projects/${id}/ops`, op);
+        setProject(r.project);
+        return { ok: true, createdId: r.createdId };
+      } catch (e) {
+        toast.error(errorMessage(e));
+        return { ok: false };
+      }
+    },
+    [flush, id]
+  );
 
   if (missing) {
     return <Empty title="Proyecto no encontrado" description="Puede que se haya eliminado definitivamente." action={<Link to="/proyectos" className="text-primary text-sm">Volver a los proyectos</Link>} />;
@@ -236,6 +261,18 @@ export function ProjectDetail({ id }: { id: string }) {
                       </MenuItem>
                     );
                   })}
+                <MenuItem icon={<Layers size={14} />} onClick={() => flush().then(() => setApplying(true))}>Aplicar plantilla o estructura…</MenuItem>
+                <MenuItem
+                  icon={<FileStack size={14} />}
+                  onClick={() => {
+                    const name = prompt("Nombre de la plantilla:", project.title);
+                    if (!name?.trim()) return;
+                    act(() => api.post<SopRow>("/sops", { kind: "template", name: name.trim(), color: project.color, description: project.description ? project.description.slice(0, 20000) : null, from: { type: "project", id } }), "Guardado como plantilla");
+                  }}
+                >
+                  Guardar como plantilla
+                </MenuItem>
+                <MenuItem icon={<Copy size={14} />} onClick={() => act(() => api.post<ProjectRow>(`/projects/${id}/duplicate`), "Proyecto duplicado").then((r) => r && navigate(`/proyectos/${r.id}`))}>Duplicar proyecto</MenuItem>
                 <MenuItem
                   danger
                   icon={<Trash2 size={14} />}
@@ -275,6 +312,48 @@ export function ProjectDetail({ id }: { id: string }) {
         <ProgressBar value={progress} color={project.color} label="Progreso general del proyecto" className="h-2.5" />
       </header>
 
+      <nav className="flex gap-1 border-b border-border pb-2" aria-label="Vista del proyecto">
+        {(
+          [
+            ["summary", "Resumen", LayoutDashboard],
+            ["system", "Sistema de trabajo", Workflow],
+          ] as const
+        ).map(([k, label, Icon]) => (
+          <button
+            key={k}
+            aria-current={mode === k ? "page" : undefined}
+            onClick={() => flush().then(() => setQuery({ modo: k === "system" ? "sistema" : null, etapa: null, tab: null }, true))}
+            className={cn("flex items-center gap-1.5 px-3 h-9 rounded-md text-sm whitespace-nowrap", mode === k ? "bg-primary/10 text-primary font-medium" : "text-subtle hover:text-text hover:bg-muted")}
+          >
+            <Icon size={15} aria-hidden /> {label}
+          </button>
+        ))}
+      </nav>
+
+      {mode === "system" ? (
+        <section aria-label="Sistema de trabajo" className="space-y-3">
+          {!trashed && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => flush().then(() => setApplying(true))}>
+                <Layers size={14} /> Aplicar plantilla
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const name = prompt("Nombre de la plantilla:", project.title);
+                  if (!name?.trim()) return;
+                  act(() => api.post<SopRow>("/sops", { kind: "template", name: name.trim(), color: project.color, from: { type: "project", id } }), "Guardado como plantilla");
+                }}
+              >
+                <FileStack size={14} /> Guardar como plantilla
+              </Button>
+            </div>
+          )}
+          <StructureEditor stages={fullStages} run={runOp} accent={project.color} readOnly={trashed} today={localDateKey()} emptyHint="Aún no hay etapas. Crea la primera, o aplica una plantilla SOP para empezar con una estructura probada." />
+        </section>
+      ) : (
+      <>
       {/* Móvil: pestañas. En escritorio se ven los dos paneles a la vez. */}
       <div className="flex gap-1 lg:hidden" role="tablist" aria-label="Secciones del proyecto">
         {(
@@ -339,6 +418,10 @@ export function ProjectDetail({ id }: { id: string }) {
           )}
         </div>
       </div>
+      </>
+      )}
+
+      <ApplyStructure open={applying} onClose={() => setApplying(false)} project={project} onApplied={setProject} />
 
       <ProjectForm open={editing} onClose={() => { setEditing(false); if (params.get("edit")) setQuery({ edit: null }, true); }} project={project} tags={tags} onSaved={setProject} />
     </article>
@@ -349,6 +432,7 @@ function ProjectInfo({ project, progress, readOnly, onStatus, onToggleObjective,
   const counts = { pending: 0, in_progress: 0, done: 0 };
   for (const s of project.stages) counts[stageState(s.progress)]++;
   const objectivesDone = project.objectives.filter((o) => o.done).length;
+  const stats = structureStats(project.stages);
 
   return (
     <section className="gt-surface p-4 space-y-6" aria-label="Información del proyecto">
@@ -376,6 +460,12 @@ function ProjectInfo({ project, progress, readOnly, onStatus, onToggleObjective,
         <Info label="Fin previsto" value={formatDay(project.endDate)} />
         <Info label="Etapas" value={`${counts.done}/${project.stages.length} completadas`} />
         <Info label="Modificado" value={new Date(project.updatedAt).toLocaleDateString()} />
+        {project.client && <Info label="Cliente" value={project.client} />}
+        {project.owner && <Info label="Responsable" value={project.owner} />}
+        {project.priority && <Info label="Prioridad" value={PRIORITY_LABEL[project.priority]} />}
+        {project.budget != null && <Info label="Presupuesto" value={`$ ${project.budget.toLocaleString("es", { maximumFractionDigits: 2 })}`} />}
+        {stats.activities > 0 && <Info label="Actividades" value={`${stats.activitiesDone}/${stats.activities} completadas`} />}
+        {stats.checks > 0 && <Info label="Verificaciones" value={`${stats.checksDone}/${stats.checks}`} />}
       </dl>
 
       <div className="space-y-2">

@@ -33,6 +33,15 @@ const ICONS: NoteIconDef[] = [
   { name: "Star", label: "Favorito" },
   { name: "Tag", label: "Etiqueta" },
   { name: "CircleEllipsis", label: "Otros" },
+  { name: "PiggyBank", label: "Ahorro" },
+  { name: "CreditCard", label: "Deudas" },
+  { name: "Clock", label: "Pendiente" },
+  { name: "TrendingUp", label: "Inversiones" },
+  { name: "Target", label: "Objetivo" },
+  { name: "Eye", label: "Observación" },
+  { name: "ClipboardList", label: "Procedimiento" },
+  { name: "Rocket", label: "Lanzamiento" },
+  { name: "Flag", label: "Meta" },
 ];
 
 export const DEFAULT_NOTE_ICON = "FileText";

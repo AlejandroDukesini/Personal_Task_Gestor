@@ -91,7 +91,7 @@ const tagSchema = z.object({
 const envelope = z.object({
   format: z.literal(EXPORT_FORMAT),
   version: z.number().int().min(1).max(EXPORT_VERSION),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
 });
 
 /** Igualdad de contenido estable (orden de claves independiente). */

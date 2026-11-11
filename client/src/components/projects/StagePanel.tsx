@@ -122,8 +122,15 @@ export function StagePanel({ stage, index, total, color, readOnly, onChange, onM
             {stage.progress} %
           </span>
         </div>
-        {readOnly ? (
-          <ProgressBar value={stage.progress} color={color} label="Progreso de la etapa" />
+        {readOnly || (stage.activities?.length ?? 0) > 0 ? (
+          <>
+            <ProgressBar value={stage.progress} color={color} label="Progreso de la etapa" />
+            {!readOnly && (
+              <p className="text-xs text-subtle">
+                Se calcula a partir de sus {stage.activities!.length} actividades (vista «Sistema de trabajo»).
+              </p>
+            )}
+          </>
         ) : (
           <>
             <div className="flex items-center gap-3">

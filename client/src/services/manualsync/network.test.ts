@@ -55,7 +55,8 @@ beforeAll(async () => {
     const t = setTimeout(() => reject(new Error("relé no arrancó")), 60000);
     relay.stdout!.on("data", (d) => String(d).includes("Código emparejar") && (clearTimeout(t), resolve()));
   });
-  pc = spawn(process.execPath, [path.join(ROOT, "node_modules/vite-node/vite-node.mjs"), "--root", path.join(ROOT, "client"), "src/test/pc-device.ts", URL_, CODE], {
+  // tsx resuelve el alias "@/" con el tsconfig del cliente (vite-node ya no viene con Vitest 4).
+  pc = spawn(process.execPath, [path.join(ROOT, "node_modules/tsx/dist/cli.mjs"), "src/test/pc-device.ts", URL_, CODE], {
     cwd: path.join(ROOT, "client"),
     stdio: ["pipe", "pipe", "pipe"],
   });

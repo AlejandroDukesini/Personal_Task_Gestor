@@ -1,5 +1,8 @@
 # Versión de escritorio (Windows) — Tauri 2
 
+Guía para **desarrollar, compilar y publicar** la app de escritorio. Para
+instalarla como usuario: [`INSTALL.md`](INSTALL.md).
+
 La app de escritorio es **la misma app React** (`client/`) dentro de una ventana
 nativa de Windows (WebView2) gracias a [Tauri 2](https://tauri.app). No hay un
 servidor local ni un frontend aparte: el build de Vite (`client/dist`) va dentro
@@ -9,12 +12,15 @@ del ejecutable.
 |---|---|
 | Nombre | Plan Gestor Task |
 | Identificador | `com.alejandrodukesini.gestortareas` (**no cambiar nunca**, ver «Datos») |
-| Versión | la de `client/package.json` (hoy 1.4.0); `src-tauri/Cargo.toml` debe coincidir |
-| Instalador | NSIS (`.exe`), por usuario (sin permisos de administrador), x64 |
+| Versión | la de `client/package.json` (`tauri.conf.json` la lee de ahí); `npm run version:check` comprueba que el resto coincide |
+| Instaladores | NSIS (`.exe`), por usuario (sin permisos de administrador), x64: online y offline |
 
 ## Requisitos para compilar (solo en el equipo de desarrollo)
 
-1. **Node.js** 20+ y `npm install` en la raíz del repositorio.
+1. **Node.js 24 LTS** (la versión de `.nvmrc`, la misma que usan CI y Netlify)
+   y `npm ci` en la raíz del repositorio. `npm ci` instala exactamente lo que
+   fija `package-lock.json`; el `.npmrc` del proyecto usa el registro público
+   de npm para que el lock sea igual en cualquier equipo.
 2. **Rust** estable, toolchain `stable-x86_64-pc-windows-msvc` (instalar con
    [rustup](https://rustup.rs)).
 3. **Visual Studio Build Tools 2022** con la carga «Desarrollo de escritorio con
@@ -28,11 +34,14 @@ del ejecutable.
 ## Comandos
 
 ```bash
-npm run desktop:dev     # ventana de escritorio con recarga en caliente (Vite en :5173)
-npm run desktop:build   # build de producción + instalador NSIS
+npm run desktop:dev            # ventana de escritorio con recarga en caliente (Vite en :5173)
+npm run desktop:build          # build de producción + instalador NSIS online
+npm run desktop:build:offline  # ídem, con WebView2 incluido (instalador offline)
 ```
 
-(Equivalen a `npm run tauri:dev` / `npm run tauri:build` dentro de `client/`.)
+(Equivalen a `npm run tauri:dev` / `tauri:build` / `tauri:build:offline` dentro
+de `client/`. La variante offline solo añade `src-tauri/tauri.offline.conf.json`,
+que Tauri fusiona sobre `tauri.conf.json`.)
 El flujo web de siempre (`npm run dev`, `npm run build`, Netlify) no cambia.
 
 ### Dónde queda el instalador
@@ -41,10 +50,72 @@ El flujo web de siempre (`npm run dev`, `npm run build`, Netlify) no cambia.
 client/src-tauri/target/release/bundle/nsis/Plan Gestor Task_<versión>_x64-setup.exe
 ```
 
-Es un **instalador**, no un ejecutable portátil: se copia a otro equipo con
-Windows 10/11 x64 y se ejecuta; no necesita Node, Rust ni el repositorio. Si
-el equipo no tuviera WebView2, el instalador descarga su instalador oficial
-(eso sí requiere internet una vez; en Windows 11 ya viene incluido).
+Las dos variantes generan **el mismo nombre de archivo**: renombra el primero
+antes de compilar el segundo (CI los renombra a
+`PlanGestorTask_<versión>_x64-setup.exe` y `…_x64-offline-setup.exe`).
+
+| Variante | `webviewInstallMode` | Tamaño (1.4.0) | Si falta WebView2 |
+|---|---|---|---|
+| Online | `downloadBootstrapper` | 11,5 MiB | Lo descarga de Microsoft (requiere Internet) |
+| Offline | `offlineInstaller` | 219 MiB | Lo instala desde el propio `.exe`, sin Internet |
+
+Para compilar la offline, Tauri descarga una vez el instalador independiente
+de WebView2 de Microsoft (`go.microsoft.com`). Son **instaladores**, no
+ejecutables portátiles: no necesitan Node, Rust ni el repositorio.
+
+## Integración continua y releases
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | push a `Principal`, pull requests, manual | `npm ci`, `version:check`, pruebas, build del frontend (con `tsc`), tipos del servidor; después compila el instalador online en `windows-latest` y lo deja como *artifact* (14 días). **No publica nada.** |
+| [`release.yml`](.github/workflows/release.yml) | push de un tag `vX.Y.Z` | Comprueba el tag (formato, que esté en `Principal`, que coincida con las versiones y que la release no exista), reutiliza `ci.yml` para compilar online **y** offline, genera `SHA256SUMS.txt`, una atestación de procedencia y crea la release con los tres archivos. |
+
+Permisos: `contents: read` en todo salvo el último job de `release.yml`
+(`contents: write` para crear la release, `id-token`/`attestations: write`
+para la atestación). Las acciones están fijadas por SHA de commit. No se usa
+ningún secreto aparte del `GITHUB_TOKEN` automático.
+
+### Publicar una versión
+
+1. Preparar la versión (en una rama o en `Principal`), por ejemplo 1.5.0:
+   ```bash
+   npm run version:set -- 1.5.0   # package.json, client, Cargo.toml/.lock, lock de npm, insignia del README
+   npm run version:check
+   npm test && npm run build
+   git commit -am "Versión 1.5.0"
+   ```
+2. Llevar ese commit a `Principal` (`git push`) y esperar a que **CI** pase.
+3. Crear y subir el tag desde ese commit:
+   ```bash
+   git tag -a v1.5.0 -m "Versión 1.5.0"
+   git push origin v1.5.0
+   ```
+4. Seguir el workflow **Release** en la pestaña *Actions* (~15–25 min).
+5. Comprobar en *Releases* que `v1.5.0` tiene los dos `.exe` y
+   `SHA256SUMS.txt`, y probar el instalador descargado en un Windows.
+
+Si algo falla **antes** de publicarse la release, corrige, borra el tag
+(`git push --delete origin v1.5.0 && git tag -d v1.5.0`) y repite desde el
+paso 1. Una release ya publicada no se sobrescribe: publica `v1.5.1`. Los tags
+antiguos (`version1.1.0`, `versions`) no siguen el formato y el workflow los
+ignora.
+
+### Firma de código (pendiente)
+
+Los instaladores se publican **sin firmar**: Windows SmartScreen muestra
+«Windows protegió su PC» hasta que el archivo gana reputación (ver
+[`INSTALL.md`](INSTALL.md#4-windows-muestra-una-advertencia)). La integridad se
+puede comprobar con `SHA256SUMS.txt` y `gh attestation verify`. Para firmar
+hace falta un certificado de firma de código real (u Azure Trusted Signing);
+Tauri lo admite con `bundle.windows.signCommand` o `certificateThumbprint`, y
+el certificado iría como secreto del repositorio, nunca en el código.
+
+### Otras plataformas
+
+Solo se publica Windows x64, que es lo que se compila y prueba. Tauri podría
+generar `.deb`/AppImage (Linux) y `.dmg` (macOS) en sus runners, pero no se
+han probado y macOS exigiría firma y notarización de Apple para abrirse sin
+avisos; la alternativa multiplataforma actual es la web/PWA.
 
 ## Datos del usuario
 
@@ -65,18 +136,9 @@ el equipo no tuviera WebView2, el instalador descarga su instalador oficial
   local depende del disco del equipo; no protege frente a fallos del disco,
   borrado de la carpeta de datos o pérdida del equipo.
 
-### Actualizar
-
-Ejecutar el instalador de la versión nueva sobre la instalada. Reemplaza los
-archivos del programa y **conserva** la carpeta de datos (mismo identificador).
-Antes de actualizar conviene descargar una copia de seguridad.
-
-### Desinstalar
-
-Desde «Aplicaciones instaladas» de Windows. El desinstalador NSIS ofrece una
-casilla para **borrar también los datos de la app**; si no se marca, la carpeta
-`%LOCALAPPDATA%\com.alejandrodukesini.gestortareas` se conserva y una
-reinstalación posterior vuelve a ver los datos.
+Actualizar (instalar encima) conserva esta carpeta; desinstalar la conserva
+salvo que se marque la casilla de borrar datos. Pasos para el usuario en
+[`INSTALL.md`](INSTALL.md#3-instalar).
 
 ## Funcionamiento sin conexión
 

@@ -19,14 +19,16 @@ import {
   nowIso,
   tombstone,
   type Db,
+  spaceOf,
   type NoteCategoryRow,
   type NoteRow,
+  type NoteSpace,
 } from "@/services/localDb";
 import { created, find, noContent, ok, parse, type Route } from "@/services/routeKit";
 import { docToText, EMPTY_DOC, sanitizeDoc, withCalculatedResults } from "./content";
 import { DEFAULT_NOTE_ICON, NOTE_COLORS } from "./icons";
 import { queryNotes, type NoteQuery } from "./query";
-import { deleteCategoryInput, MAX_NOTE_TEXT, noteCategoryInput, noteInput } from "./schemas";
+import { deleteCategoryInput, MAX_NOTE_TEXT, MAX_TAGS, noteCategoryInput, noteInput } from "./schemas";
 
 /** Archivos que ya no usa ninguna nota (incluidas las de la papelera). */
 export function orphanFileKeys(db: Db, candidates: string[]): string[] {
@@ -34,10 +36,29 @@ export function orphanFileKeys(db: Db, candidates: string[]): string[] {
   return [...new Set(candidates)].filter((k) => !used.has(k));
 }
 
-/** Categoría y subcategoría coherentes: la subcategoría debe colgar de la categoría. */
-function resolveCategories(db: Db, categoryId: string | null | undefined, subcategoryId: string | null | undefined): { categoryId: string | null; subcategoryId: string | null } {
+/** Etiquetas limpias: sin vacías ni repetidas (se conserva la primera grafía). */
+export function cleanTags(input: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    const t = raw.trim().replace(/\s+/g, " ").slice(0, 40);
+    if (!t || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    out.push(t);
+  }
+  if (out.length > MAX_TAGS) throw new ApiError(400, `Máximo ${MAX_TAGS} etiquetas por nota`);
+  return out;
+}
+
+function readSpace(v: string | null | undefined): NoteSpace {
+  return v === "finance" ? "finance" : "general";
+}
+
+/** Categoría y subcategoría coherentes: la subcategoría debe colgar de la categoría y ambas, del mismo espacio que la nota. */
+function resolveCategories(db: Db, categoryId: string | null | undefined, subcategoryId: string | null | undefined, space: NoteSpace = "general"): { categoryId: string | null; subcategoryId: string | null } {
   let cat = categoryId ? find(db.noteCategories, categoryId, "Categoría") : null;
   const sub = subcategoryId ? find(db.noteCategories, subcategoryId, "Subcategoría") : null;
+  for (const c of [cat, sub]) if (c && spaceOf(c) !== space) throw new ApiError(400, space === "finance" ? "La categoría no es de notas financieras" : "La categoría es de notas financieras");
   if (cat?.parentId) throw new ApiError(400, "La categoría elegida es una subcategoría");
   if (sub) {
     if (!sub.parentId) throw new ApiError(400, "La subcategoría elegida es una categoría principal");
@@ -57,13 +78,15 @@ function readQuery(params: URLSearchParams): NoteQuery {
   const get = (k: string) => params.get(k) ?? undefined;
   const cat = params.get("categoryId");
   return {
+    space: readSpace(params.get("space")),
+    tag: get("tag"),
     q: get("q"),
     status: (get("status") as NoteQuery["status"]) ?? "active",
     categoryId: cat === null ? undefined : cat === "none" ? null : cat,
     subcategoryId: get("subcategoryId"),
     from: get("from"),
     to: get("to"),
-    dateField: get("dateField") === "createdAt" ? "createdAt" : "updatedAt",
+    dateField: get("dateField") === "createdAt" ? "createdAt" : get("dateField") === "date" ? "date" : "updatedAt",
     hasAttachments: params.get("hasAttachments") === "1",
     sort: (get("sort") as NoteQuery["sort"]) ?? "updated",
     dir: get("dir") === "asc" ? "asc" : "desc",
@@ -80,10 +103,11 @@ function activeNote(db: Db, id: string): NoteRow {
 
 export const notesRoutes: Route[] = [
   /* ---------------------------------------------------------- categorías */
-  ["GET", "/notes/categories", () => {
+  ["GET", "/notes/categories", ({ query }) => {
     const db = loadDb();
+    const space = readSpace(query.get("space"));
     const count = (id: string) => db.notes.filter((n) => !n.deletedAt && (n.categoryId === id || n.subcategoryId === id)).length;
-    return ok(db.noteCategories.map((c) => ({ ...c, noteCount: count(c.id) })));
+    return ok(db.noteCategories.filter((c) => spaceOf(c) === space).map((c) => ({ ...c, noteCount: count(c.id) })));
   }],
   ["POST", "/notes/categories", ({ body }) => {
     const data = parse(noteCategoryInput, body);
@@ -91,7 +115,8 @@ export const notesRoutes: Route[] = [
       mutate((db) => {
         const parent = data.parentId ? find(db.noteCategories, data.parentId, "Categoría principal") : null;
         if (parent?.parentId) throw new ApiError(400, "Solo hay un nivel de subcategorías");
-        const siblings = db.noteCategories.filter((c) => (c.parentId ?? null) === (parent?.id ?? null));
+        const space = parent ? spaceOf(parent) : (data.space ?? "general");
+        const siblings = db.noteCategories.filter((c) => spaceOf(c) === space && (c.parentId ?? null) === (parent?.id ?? null));
         if (siblings.some((c) => c.name.toLowerCase() === data.name.toLowerCase())) throw new ApiError(409, "Ya existe una categoría con ese nombre aquí");
         const ts = nowIso();
         const row: NoteCategoryRow = {
@@ -100,6 +125,8 @@ export const notesRoutes: Route[] = [
           color: data.color ?? parent?.color ?? NOTE_COLORS[7],
           icon: data.icon ?? parent?.icon ?? "Tag",
           parentId: parent?.id ?? null,
+          // Las categorías generales no llevan el campo (igual que las antiguas).
+          ...(space === "finance" ? { space } : {}),
           createdAt: ts,
           updatedAt: ts,
         };
@@ -118,6 +145,7 @@ export const notesRoutes: Route[] = [
           if (data.parentId) {
             const parent = find(db.noteCategories, data.parentId, "Categoría principal");
             if (parent.parentId) throw new ApiError(400, "Solo hay un nivel de subcategorías");
+            if (spaceOf(parent) !== spaceOf(c)) throw new ApiError(400, "La categoría principal es de otro bloc de notas");
             if (db.noteCategories.some((x) => x.parentId === c.id)) throw new ApiError(409, "Tiene subcategorías: no puede convertirse en subcategoría");
           }
           // Las notas siguen coherentes: la categoría de las que la usaban se ajusta.
@@ -128,7 +156,7 @@ export const notesRoutes: Route[] = [
           c.parentId = data.parentId;
         }
         if (data.name !== undefined) {
-          const dup = db.noteCategories.some((x) => x.id !== c.id && (x.parentId ?? null) === (c.parentId ?? null) && x.name.toLowerCase() === data.name!.toLowerCase());
+          const dup = db.noteCategories.some((x) => x.id !== c.id && spaceOf(x) === spaceOf(c) && (x.parentId ?? null) === (c.parentId ?? null) && x.name.toLowerCase() === data.name!.toLowerCase());
           if (dup) throw new ApiError(409, "Ya existe una categoría con ese nombre aquí");
           c.name = data.name;
         }
@@ -154,6 +182,7 @@ export const notesRoutes: Route[] = [
         if (strategy === "reassign") {
           if (!targetId || removed.has(targetId)) throw new ApiError(400, "Elige otra categoría de destino");
           const t = find(db.noteCategories, targetId, "Categoría de destino");
+          if (spaceOf(t) !== spaceOf(c)) throw new ApiError(400, "La categoría de destino es de otro bloc de notas");
           target = t.parentId ? { categoryId: t.parentId, subcategoryId: t.id } : { categoryId: t.id, subcategoryId: null };
         }
         const ts = nowIso();
@@ -179,13 +208,19 @@ export const notesRoutes: Route[] = [
   /* --------------------------------------------------------------- notas */
   ["GET", "/notes", ({ query }) => {
     const db = loadDb();
-    const res = queryNotes(db.notes, db.noteCategories, readQuery(query));
+    const q = readQuery(query);
+    const res = queryNotes(db.notes, db.noteCategories, q);
+    const mine = db.notes.filter((n) => spaceOf(n) === q.space);
     const counts = {
-      active: db.notes.filter((n) => !n.deletedAt && !n.archived).length,
-      archived: db.notes.filter((n) => !n.deletedAt && n.archived).length,
-      trash: db.notes.filter((n) => n.deletedAt).length,
+      active: mine.filter((n) => !n.deletedAt && !n.archived).length,
+      archived: mine.filter((n) => !n.deletedAt && n.archived).length,
+      trash: mine.filter((n) => n.deletedAt).length,
     };
-    return ok({ ...res, counts });
+    // Etiquetas en uso en este bloc (para el filtro), sin repetir.
+    const tagMap = new Map<string, string>();
+    for (const n of mine) if (!n.deletedAt) for (const t of n.tags ?? []) if (!tagMap.has(t.toLowerCase())) tagMap.set(t.toLowerCase(), t);
+    const tags = [...tagMap.values()].sort((a, b) => a.localeCompare(b, "es"));
+    return ok({ ...res, counts, tags });
   }],
   ["GET", "/notes/:id", ({ params }) => ok(find(loadDb().notes, params.id, "Nota"))],
   ["POST", "/notes", ({ body }) => {
@@ -198,12 +233,13 @@ export const notesRoutes: Route[] = [
           if (existing) return existing;
         }
         const ts = nowIso();
+        const space = data.space ?? "general";
         const row: NoteRow = {
           id: data.id ?? newId(),
           title: data.title,
           description: data.description ?? null,
           ...withContent(data.content, { enabled: data.mathEnabled ?? true, decimals: data.mathDecimals ?? null }),
-          ...resolveCategories(db, data.categoryId, data.subcategoryId),
+          ...resolveCategories(db, data.categoryId, data.subcategoryId, space),
           color: data.color ?? null,
           icon: data.icon ?? DEFAULT_NOTE_ICON,
           attachments: data.attachments ?? [],
@@ -211,6 +247,10 @@ export const notesRoutes: Route[] = [
           deletedAt: null,
           mathEnabled: data.mathEnabled ?? true,
           mathDecimals: data.mathDecimals ?? null,
+          ...(space === "finance" ? { space } : {}),
+          pinned: data.pinned ?? false,
+          tags: cleanTags(data.tags ?? []),
+          date: data.date ?? null,
           createdAt: ts,
           updatedAt: ts,
         };
@@ -233,7 +273,7 @@ export const notesRoutes: Route[] = [
           // Cambiar de categoría sin decir subcategoría la deja vacía si ya no encaja.
           let subcategoryId = data.subcategoryId !== undefined ? data.subcategoryId : n.subcategoryId;
           if (data.subcategoryId === undefined && subcategoryId && db.noteCategories.find((c) => c.id === subcategoryId)?.parentId !== categoryId) subcategoryId = null;
-          Object.assign(n, resolveCategories(db, categoryId, subcategoryId));
+          Object.assign(n, resolveCategories(db, categoryId, subcategoryId, spaceOf(n)));
         }
         if (data.color !== undefined) n.color = data.color;
         if (data.icon !== undefined) n.icon = data.icon;
@@ -246,6 +286,9 @@ export const notesRoutes: Route[] = [
           n.attachments = data.attachments;
         }
         if (data.archived !== undefined) n.archived = data.archived;
+        if (data.pinned !== undefined) n.pinned = data.pinned;
+        if (data.tags !== undefined) n.tags = cleanTags(data.tags);
+        if (data.date !== undefined) n.date = data.date;
         if (data.mathEnabled !== undefined) n.mathEnabled = data.mathEnabled;
         if (data.mathDecimals !== undefined) n.mathDecimals = data.mathDecimals;
         // Tras aplicar los ajustes de cálculo: el texto derivado depende de ellos.
@@ -269,6 +312,7 @@ export const notesRoutes: Route[] = [
           // Mismo archivo (se comparte el binario), adjunto independiente.
           attachments: src.attachments.map((a) => ({ ...a, id: newId() })),
           archived: false,
+          pinned: false,
           deletedAt: null,
           createdAt: ts,
           updatedAt: ts,

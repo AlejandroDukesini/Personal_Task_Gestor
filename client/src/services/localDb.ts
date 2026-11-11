@@ -4,11 +4,12 @@
 
 import { __resetStorageForTests, configureStorage, createRestorePoint, openStorage, persistDb, type StorageInfo } from "./storage";
 import type { EventRecurrence } from "@/types";
+import { defaultSopTemplates } from "./sops/seeds";
 
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 7;
+export const DB_VERSION = 11;
 
 export interface SettingsRow {
   id: number;
@@ -494,12 +495,23 @@ export interface FinRecurringRow {
  * Categoría de notas. Con `parentId` es una subcategoría (un solo nivel): las
  * subcategorías solo se muestran dentro de su categoría principal.
  */
+/**
+ * Espacio de una nota o categoría: el bloc general o el de Finanzas («Notas
+ * financieras»). Es el MISMO sistema de notas (editor, adjuntos, papelera…);
+ * solo cambia dónde se muestra. Ausente = `general` (filas anteriores a la v9,
+ * que no se reescriben: ver la migración 9).
+ */
+export type NoteSpace = "general" | "finance";
+export const NOTE_SPACES = ["general", "finance"] as const;
+export const spaceOf = (row: { space?: NoteSpace }): NoteSpace => row.space ?? "general";
+
 export interface NoteCategoryRow {
   id: string;
   name: string;
   color: string;
   icon: string;
   parentId: string | null;
+  space?: NoteSpace;
   createdAt: string;
   updatedAt: string;
 }
@@ -545,6 +557,14 @@ export interface NoteRow {
   /** Cálculos automáticos en el editor y decimales (null = automático). */
   mathEnabled: boolean;
   mathDecimals: number | null;
+  /* Campos de la v9. Opcionales: ausentes en filas antiguas = valor por defecto. */
+  space?: NoteSpace;
+  /** Fijada arriba de la lista. */
+  pinned?: boolean;
+  /** Etiquetas libres, sin repetir (mayúsculas indiferentes). */
+  tags?: string[];
+  /** Fecha asociada a la nota (`YYYY-MM-DD`): vencimiento, fecha objetivo… */
+  date?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -557,13 +577,110 @@ export interface NoteRow {
  * sincronización nunca mezcla etapas de dos versiones distintas del proyecto.
  * Su orden es el del array.
  */
-export interface ProjectStage {
+export interface ProjectStage extends WfStageExtra {
   id: string;
   title: string;
   /** Markdown básico (se muestra con `components/Markdown`). */
   description: string | null;
-  /** Avance manual, entero de 0 a 100. 100 = completada (estado derivado). */
+  /**
+   * Avance, entero de 0 a 100. 100 = completada. Manual mientras la etapa no
+   * tenga actividades; con actividades se recalcula a partir de ellas.
+   */
   progress: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------- estructura de trabajo
+ * Estructura compartida por los SOP, sus plantillas y los proyectos
+ * profesionales: etapas → procedimientos, actividades, lista de verificación y
+ * documentación. Vive DENTRO de la fila de su contenedor (como las etapas de
+ * siempre): no hay huérfanos y la sincronización no mezcla versiones.
+ * Los campos son opcionales en `ProjectStage` porque las etapas anteriores a
+ * la v10 no los tienen (se leen con valores por defecto, sin reescribirlas).
+ */
+
+export type WfPriority = "low" | "medium" | "high" | "critical";
+export type WfActivityStatus = "pending" | "in_progress" | "blocked" | "done";
+export type WfStageStatus = "pending" | "in_progress" | "on_hold" | "done";
+
+export interface WfCheckItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/** Procedimiento de una etapa: instrucciones paso a paso. */
+export interface WfProcedure {
+  id: string;
+  title: string;
+  /** Markdown básico. */
+  instructions: string | null;
+  observations: string | null;
+  checklist: WfCheckItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WfActivity {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  priority: WfPriority;
+  status: WfActivityStatus;
+  /** Avance opcional (null = no se mide en porcentaje: cuenta su estado). */
+  progress: number | null;
+  observations: string | null;
+  checklist: WfCheckItem[];
+  /** Actividades (del mismo contenedor) que deben terminarse antes. */
+  dependsOn: string[];
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WfStageExtra {
+  subtitle?: string | null;
+  objective?: string | null;
+  color?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  priority?: WfPriority | null;
+  /** Null = derivado del avance. */
+  status?: WfStageStatus | null;
+  procedures?: WfProcedure[];
+  activities?: WfActivity[];
+  checklist?: WfCheckItem[];
+  /** Documentación de la etapa: Markdown básico (enlaces, entregables…). */
+  documentation?: string | null;
+  observations?: string | null;
+}
+
+/** Etapa completa (los SOP y plantillas siempre la guardan así). */
+export type WfStage = ProjectStage & Required<WfStageExtra>;
+
+export type SopKind = "sop" | "template";
+export type SopStatus = "draft" | "active" | "archived";
+
+/**
+ * Procedimiento operativo estándar (SOP) o plantilla. Las plantillas son SOP
+ * reutilizables: aplicarlas a un SOP o a un proyecto copia su estructura con
+ * ids nuevos, así que los cambios posteriores nunca alteran el original.
+ */
+export interface SopRow {
+  id: string;
+  kind: SopKind;
+  name: string;
+  description: string | null;
+  objective: string | null;
+  category: string | null;
+  /** Versión libre ("1.0", "2026-03"…). */
+  version: string;
+  status: SopStatus;
+  owner: string | null;
+  color: string;
+  stages: WfStage[];
   createdAt: string;
   updatedAt: string;
 }
@@ -597,8 +714,150 @@ export interface ProjectRow {
   finishedAt: string | null;
   objectives: ProjectObjective[];
   stages: ProjectStage[];
+  /* Campos de la v12 (proyecto profesional). Opcionales: ausentes en filas antiguas. */
+  /** Cliente o entidad relacionada. */
+  client?: string | null;
+  /** Responsable del proyecto. */
+  owner?: string | null;
+  priority?: WfPriority | null;
+  /** Presupuesto opcional (en la moneda principal; solo informativo). */
+  budget?: number | null;
+  /** Plantilla de la que se copió la estructura al crearlo (informativo). */
+  sourceTemplateId?: string | null;
   /** Papelera, igual que en notas: null = no está en la papelera. */
   deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------------ metas personales
+ * Proyectos › Personal: metas con fecha objetivo que se ven en una línea del
+ * tiempo. Su fase (próxima, en curso, retrasada…) NO se guarda: se deriva de
+ * las fechas, el estado y el avance al leer (ver services/personalGoals).
+ */
+
+export type PersonalGoalStatus = "planned" | "in_progress" | "paused" | "completed";
+
+export interface PersonalGoalHistory {
+  at: string;
+  /** Qué cambió, en texto legible («Avance: 20 % → 45 %»). */
+  text: string;
+}
+
+export interface PersonalGoalRow {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  color: string;
+  priority: WfPriority;
+  status: PersonalGoalStatus;
+  /** Avance manual, entero 0-100. */
+  progress: number;
+  /** Fechas locales `YYYY-MM-DD`. La objetivo es obligatoria: sitúa la meta en la línea del tiempo. */
+  startDate: string | null;
+  targetDate: string;
+  observations: string | null;
+  archived: boolean;
+  completedAt: string | null;
+  /** Últimos cambios relevantes (fechas, avance, estado…), del más reciente al más antiguo. */
+  history: PersonalGoalHistory[];
+  /** Proyecto del que se convirtió, si lo hay (solo informativo). */
+  sourceProjectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* -------------------------------------------------------------- académico
+ * Tareas universitarias. Todo cuelga de un semestre (`semesterId`): las
+ * materias, el horario y las actividades de un periodo nunca se mezclan con
+ * las de otro. Borrar un semestre o una materia borra en cascada lo suyo.
+ */
+
+export interface AcadSemesterRow {
+  id: string;
+  name: string;
+  /** Fechas locales `YYYY-MM-DD`. */
+  startDate: string;
+  endDate: string;
+  /** Semestre en curso. Como mucho uno a la vez. */
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcadSubjectRow {
+  id: string;
+  semesterId: string;
+  name: string;
+  code: string | null;
+  professor: string | null;
+  /** Correo, teléfono u horario de atención: texto libre. */
+  professorContact: string | null;
+  room: string | null;
+  credits: number | null;
+  description: string | null;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Una franja semanal de clase. `day`: 1 = lunes … 7 = domingo (ISO). */
+export interface AcadClassRow {
+  id: string;
+  semesterId: string;
+  subjectId: string;
+  day: number;
+  /** "HH:mm". */
+  startTime: string;
+  endTime: string;
+  /** Null = el profesor / aula de la materia. */
+  professor: string | null;
+  room: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AcadActivityType =
+  | "task"
+  | "exam"
+  | "presentation"
+  | "final_project"
+  | "group_work"
+  | "research"
+  | "reading"
+  | "delivery"
+  | "other";
+
+/** «Vencida» no se guarda: se deriva de la fecha límite al leer. */
+export type AcadActivityStatus = "pending" | "in_progress" | "review" | "done";
+
+export interface AcadReference {
+  id: string;
+  label: string;
+  /** Enlace opcional (https://…). */
+  url: string | null;
+}
+
+export interface AcadActivityRow {
+  id: string;
+  semesterId: string;
+  /** Null = actividad general del semestre. */
+  subjectId: string | null;
+  title: string;
+  description: string | null;
+  type: AcadActivityType;
+  /** Nombre del tipo cuando `type` es `other` ("Laboratorio", "Taller"…). */
+  customType: string | null;
+  dueDate: string | null;
+  dueTime: string | null;
+  priority: "low" | "medium" | "high" | "critical";
+  status: AcadActivityStatus;
+  progress: number;
+  references: AcadReference[];
+  observations: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -640,6 +899,12 @@ export interface Db {
   noteCategories: NoteCategoryRow[];
   notes: NoteRow[];
   projects: ProjectRow[];
+  acadSemesters: AcadSemesterRow[];
+  acadSubjects: AcadSubjectRow[];
+  acadClasses: AcadClassRow[];
+  acadActivities: AcadActivityRow[];
+  sops: SopRow[];
+  personalGoals: PersonalGoalRow[];
   tombstones: TombstoneRow[];
 }
 
@@ -667,6 +932,12 @@ export const SYNCED_COLLECTIONS = [
   "noteCategories",
   "notes",
   "projects",
+  "acadSemesters",
+  "acadSubjects",
+  "acadClasses",
+  "acadActivities",
+  "sops",
+  "personalGoals",
 ] as const;
 
 export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
@@ -679,6 +950,20 @@ export const FINANCE_COLLECTIONS = [
   "finGoals",
   "finRecurring",
   "finTags",
+] as const satisfies readonly SyncedCollection[];
+
+/**
+ * Colecciones de los módulos añadidos a partir de la v8. Las copias de
+ * seguridad las exportan e importan recorriendo esta lista (y validándolas con
+ * `MODULE_ROW_SCHEMAS`), sin una línea por colección.
+ */
+export const MODULE_COLLECTIONS = [
+  "acadSemesters",
+  "acadSubjects",
+  "acadClasses",
+  "acadActivities",
+  "sops",
+  "personalGoals",
 ] as const satisfies readonly SyncedCollection[];
 
 /** Error con código HTTP, para que la capa de rutas responda como lo hacía Express. */
@@ -813,6 +1098,12 @@ function emptyDb(): Db {
     noteCategories: [],
     notes: [],
     projects: [],
+    acadSemesters: [],
+    acadSubjects: [],
+    acadClasses: [],
+    acadActivities: [],
+    sops: [],
+    personalGoals: [],
     tombstones: [],
   };
 }
@@ -902,6 +1193,56 @@ export const MIGRATIONS: Migration[] = [
       // Solo una colección nueva y vacía: no se tocan datos existentes ni se
       // siembran proyectos de ejemplo.
       db.projects ??= [];
+    },
+  },
+  {
+    version: 8,
+    description: "Tareas universitarias: semestres, materias, horario y actividades académicas",
+    up: (db) => {
+      // Solo colecciones nuevas y vacías: no se toca ningún dato existente.
+      db.acadSemesters ??= [];
+      db.acadSubjects ??= [];
+      db.acadClasses ??= [];
+      db.acadActivities ??= [];
+    },
+  },
+  {
+    version: 9,
+    description: "Notas financieras: espacio de notas en Finanzas, notas fijadas, etiquetas y fechas",
+    up: (db) => {
+      // Las notas existentes NO se reescriben: sin `space` son del bloc
+      // general y sin `pinned`/`tags`/`date` se leen con valores por defecto.
+      // Solo se añaden las categorías financieras iniciales (ids fijos: dos
+      // dispositivos no las duplican; si el usuario borró una, no vuelve).
+      db.noteCategories ??= [];
+      const gone = new Set((db.tombstones ?? []).filter((t: { collection: string }) => t.collection === "noteCategories").map((t: { id: string }) => t.id));
+      for (const c of defaultFinanceNoteCategories()) {
+        if (!gone.has(c.id) && !db.noteCategories.some((x: { id: string }) => x.id === c.id)) db.noteCategories.push(c);
+      }
+    },
+  },
+  {
+    version: 10,
+    description: "SOP: procedimientos operativos estándar y plantillas reutilizables",
+    up: (db) => {
+      // Colección nueva + plantillas de ejemplo con ids fijos (no se duplican
+      // entre dispositivos ni resucitan si se borraron). Las etapas de los
+      // proyectos NO se reescriben: sus campos nuevos se leen por defecto.
+      db.sops ??= [];
+      const gone = new Set((db.tombstones ?? []).filter((t: { collection: string }) => t.collection === "sops").map((t: { id: string }) => t.id));
+      for (const t of defaultSopTemplates()) {
+        if (!gone.has(t.id) && !db.sops.some((x: { id: string }) => x.id === t.id)) db.sops.push(t);
+      }
+    },
+  },
+  {
+    version: 11,
+    description: "Proyectos profesionales y personales: metas personales con línea del tiempo",
+    up: (db) => {
+      // Colección nueva y vacía. Los proyectos existentes NO se tocan: todos
+      // son profesionales (conservan sus etapas); el usuario puede convertir
+      // cualquiera en meta personal desde su menú (el original va a la papelera).
+      db.personalGoals ??= [];
     },
   },
 ];
@@ -1045,6 +1386,31 @@ export function defaultNoteCategories(): NoteCategoryRow[] {
     c("ideas", "Ideas", "#eab308", "Lightbulb"),
     c("finance", "Finanzas", "#16a34a", "Wallet"),
     c("projects", "Proyectos", "#8b5cf6", "FolderKanban"),
+  ];
+}
+
+/** Categorías iniciales de las notas financieras. Ids fijos, como las demás semillas. */
+export function defaultFinanceNoteCategories(): NoteCategoryRow[] {
+  const c = (id: string, name: string, color: string, icon: string): NoteCategoryRow => ({
+    id: `notecat-fin-${id}`,
+    name,
+    color,
+    icon,
+    parentId: null,
+    space: "finance",
+    createdAt: SEED_STAMP,
+    updatedAt: SEED_STAMP,
+  });
+  return [
+    c("ideas", "Ideas financieras", "#eab308", "Lightbulb"),
+    c("savings", "Planes de ahorro", "#16a34a", "PiggyBank"),
+    c("debts", "Deudas", "#ef4444", "CreditCard"),
+    c("pending", "Pagos pendientes", "#f97316", "Clock"),
+    c("investments", "Inversiones", "#0ea5e9", "TrendingUp"),
+    c("budgets", "Presupuestos", "#6366f1", "Calculator"),
+    c("purchases", "Compras futuras", "#ec4899", "ShoppingCart"),
+    c("goals", "Objetivos económicos", "#8b5cf6", "Target"),
+    c("observations", "Observaciones", "#64748b", "Eye"),
   ];
 }
 
@@ -1420,7 +1786,8 @@ function seed(db: Db): Db {
   ];
 
   db.finCategories = defaultFinCategories();
-  db.noteCategories = defaultNoteCategories();
+  db.noteCategories = [...defaultNoteCategories(), ...defaultFinanceNoteCategories()];
+  db.sops = defaultSopTemplates();
 
   return db;
 }

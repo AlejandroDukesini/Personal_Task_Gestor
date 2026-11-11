@@ -24,9 +24,18 @@
     "sql:gen": "npm run sql:gen -w client",
     "pc": "npm run build && npm run start -w gestion-tareas-sync",
     "desktop:dev": "npm run tauri:dev -w client",
-    "desktop:build": "npm run tauri:build -w client"
+    "desktop:build": "npm run tauri:build -w client",
+    "desktop:build:offline": "npm run tauri:build:offline -w client",
+    "version:check": "node scripts/version.mjs check",
+    "version:set": "node scripts/version.mjs set"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
+  },
+  "overrides": {
+    "postcss-selector-parser": "^7.1.6"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

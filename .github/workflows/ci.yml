@@ -1,0 +1,100 @@
+# Validación: pruebas, builds y el instalador de Windows como artefacto de
+# prueba (Actions › ejecución › Artifacts). Nunca publica una release.
+# release.yml lo reutiliza (workflow_call) para compilar los instaladores
+# oficiales, así que los pasos de build viven solo aquí.
+name: CI
+
+on:
+  push:
+    branches: [Principal]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        description: "Compilar también el instalador offline (para la release)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Las builds de un tag (release) nunca se cancelan.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  validate:
+    name: Pruebas y builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Versiones coherentes
+        run: npm run version:check
+      # client: 510 pruebas de Vitest; sync: pruebas de node:test.
+      - run: npm test
+      # Incluye la comprobación de tipos (tsc -b) del cliente.
+      - name: Build del frontend
+        run: npm run build
+      - name: Tipos y build del servidor de referencia
+        run: |
+          npm exec -w server -- prisma generate
+          npm run build:server
+
+  windows:
+    name: Instalador de Windows
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Rust estable (MSVC)
+        run: rustup update stable --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: client/src-tauri -> target
+      - run: npm ci
+
+      # Tauri nombra ambos instaladores igual ("Plan Gestor Task_<v>_x64-setup.exe"):
+      # se renombran a nombres sin espacios y distinguibles antes del siguiente build.
+      - name: Instalador online (descarga WebView2 solo si falta)
+        run: |
+          version=$(node -p "require('./client/package.json').version")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          npm run desktop:build
+          mkdir -p installers
+          mv "client/src-tauri/target/release/bundle/nsis/Plan Gestor Task_${version}_x64-setup.exe" \
+             "installers/PlanGestorTask_${version}_x64-setup.exe"
+      - name: Instalador offline (incluye WebView2)
+        if: inputs.release
+        run: |
+          npm run desktop:build:offline
+          mv "client/src-tauri/target/release/bundle/nsis/Plan Gestor Task_${VERSION}_x64-setup.exe" \
+             "installers/PlanGestorTask_${VERSION}_x64-offline-setup.exe"
+      - run: ls -l installers
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installers
+          path: installers/
+          if-no-files-found: error
+          retention-days: ${{ inputs.release && 3 || 14 }}
+          compression-level: 0

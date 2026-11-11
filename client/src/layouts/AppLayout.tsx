@@ -18,6 +18,8 @@ import {
   Wallet,
   StickyNote,
   FolderKanban,
+  GraduationCap,
+  Workflow,
   RefreshCw,
   MoreHorizontal,
   X,
@@ -47,6 +49,8 @@ const nav: NavItem[] = [
   { to: "/tareas", icon: CheckSquare, label: "nav.tasks" },
   { to: "/notas", icon: StickyNote, label: "nav.notes" },
   { to: "/proyectos", icon: FolderKanban, label: "nav.projects" },
+  { to: "/universidad", icon: GraduationCap, label: "nav.academic" },
+  { to: "/sop", icon: Workflow, label: "nav.sop" },
   { to: "/habitos", icon: Activity, label: "nav.habits" },
   { to: "/calendario", icon: Calendar, label: "nav.calendar" },
   { to: "/categorias", icon: Folder, label: "nav.categories" },
@@ -94,14 +98,17 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="min-h-[100dvh] flex bg-bg text-text">
+    /* En móvil la pantalla se divide en dos: el área de contenido (con su propio
+       desplazamiento) ocupa solo el alto que queda por encima de la barra de
+       navegación, que va en el flujo normal y no flota sobre nada. En escritorio
+       se mantiene el desplazamiento de la ventana. */
+    <div className="h-[100dvh] flex flex-col md:h-auto md:min-h-[100dvh] md:flex-row bg-bg text-text">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div data-scroll-root className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain md:overflow-visible flex flex-col min-w-0">
         <Topbar />
         <UpdateBanner />
-        {/* En móvil se reserva el alto de la barra de pestañas + el indicador de inicio. */}
-        <main className="gt-safe-x [--gt-pad-x:1rem] sm:[--gt-pad-x:1.5rem] lg:[--gt-pad-x:2rem] flex-1 py-5 sm:py-6 pb-[calc(env(safe-area-inset-bottom)+84px)] md:pb-6">
+        <main className="gt-safe-x [--gt-pad-x:1rem] sm:[--gt-pad-x:1.5rem] lg:[--gt-pad-x:2rem] flex-1 py-5 sm:py-6">
           <StorageAlerts />
           <Outlet />
           <RestoreWizard />
@@ -236,7 +243,7 @@ function TabBar({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean })
   const inMore = MORE.some((m) => loc.pathname.startsWith(m.to));
   return (
     <nav
-      className="gt-safe-x md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-surface/90 backdrop-blur pb-[env(safe-area-inset-bottom)]"
+      className="gt-safe-x md:hidden shrink-0 relative z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
       aria-label="Navegación principal"
     >
       <ul className="grid grid-cols-5 h-[60px]">

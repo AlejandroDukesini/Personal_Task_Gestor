@@ -280,7 +280,7 @@ const gcalLinkSchema = z.object({
   syncedAt: z.string().max(64).nullable().optional(),
   state: z.enum(["pending", "synced", "error", "conflict", "remote_changed", "remote_deleted", "pending_delete"]),
   lastError: z.string().max(500).nullable().optional(),
-  remote: z.record(z.unknown()).nullable().optional(),
+  remote: z.record(z.string(), z.unknown()).nullable().optional(),
   deleteMode: z.enum(["future"]).nullable().optional(),
 });
 

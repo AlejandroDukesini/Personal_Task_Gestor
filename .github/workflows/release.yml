@@ -1,0 +1,105 @@
+# Release oficial: solo al publicar un tag vX.Y.Z (ver DESKTOP.md › Publicar
+# una versión). Valida tag y versiones, compila con ci.yml y crea la release
+# con los instaladores, SHA256SUMS.txt y atestación de procedencia.
+# Nunca sobrescribe una release existente.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Comprobar tag y versiones
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag con formato vX.Y.Z y en la rama Principal
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Tag inválido: $TAG (se espera vX.Y.Z)"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/Principal \
+            || { echo "::error::El commit del tag no está en la rama Principal"; exit 1; }
+      - name: Versiones de package.json, Cargo.toml… iguales al tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node scripts/version.mjs check "$TAG"
+      - name: La release no existe todavía
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::La release $TAG ya existe; no se sobrescribe. Publica una versión nueva."
+            exit 1
+          fi
+
+  build:
+    name: Compilar
+    needs: preflight
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      release: true
+
+  publish:
+    name: Publicar release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # crear la release y subir los archivos
+      id-token: write # atestación de procedencia
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-installers
+          path: installers
+      - name: SHA-256
+        working-directory: installers
+        run: |
+          sha256sum *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: installers/*.exe
+      - name: Crear la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          v="${TAG#v}"
+          cat > notes.md <<EOF
+          ## Descargar (Windows 10/11, 64 bits)
+
+          | Archivo | Para quién |
+          | :--- | :--- |
+          | **\`PlanGestorTask_${v}_x64-setup.exe\`** | **Recomendado.** Instalador normal (~12 MB). |
+          | \`PlanGestorTask_${v}_x64-offline-setup.exe\` | Equipos sin Internet (~220 MB, incluye WebView2). |
+          | \`SHA256SUMS.txt\` | Huellas para verificar la descarga (opcional). |
+
+          No hace falta instalar Node.js ni Rust. Los instaladores no están firmados:
+          si Windows muestra «Windows protegió su PC», pulsa **Más información › Ejecutar de todas formas**.
+          Guía completa: [INSTALL.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/INSTALL.md).
+          EOF
+          gh release create "$TAG" installers/*.exe installers/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Plan Gestor Task $TAG" \
+            --notes-file notes.md \
+            --generate-notes

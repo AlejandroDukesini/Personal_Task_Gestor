@@ -15,6 +15,7 @@ import {
   Repeat,
   Target,
   Wallet,
+  NotebookPen,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -36,6 +37,7 @@ import { RecurringView } from "@/components/finance/RecurringView";
 import { AnalysisView } from "@/components/finance/AnalysisView";
 import { DataView } from "@/components/finance/DataView";
 import { PurposesView } from "@/components/finance/PurposesView";
+import { FinanceNotesView } from "@/components/finance/FinanceNotes";
 
 const TABS = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
@@ -46,12 +48,13 @@ const TABS = [
   { id: "purposes", label: "Finalidades", icon: Hash },
   { id: "recurring", label: "Recurrentes", icon: Repeat },
   { id: "analysis", label: "Análisis", icon: BarChart3 },
+  { id: "notas", label: "Notas", icon: NotebookPen },
   { id: "data", label: "Datos", icon: Database },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 /** Pestañas en las que el periodo no aplica (listan todo). */
-const NO_PERIOD: TabId[] = ["accounts", "budgets", "goals", "recurring", "data"];
+const NO_PERIOD: TabId[] = ["accounts", "budgets", "goals", "recurring", "data", "notas"];
 
 export function Finance() {
   const [params, setParams] = useSearchParams();
@@ -141,7 +144,10 @@ export function Finance() {
         </div>
       )}
 
-      {error ? (
+      {tab === "notas" ? (
+        // Independiente de las cuentas: las notas no necesitan datos financieros.
+        <FinanceNotesView />
+      ) : error ? (
         <Card>
           <Empty title="No se pudieron cargar tus finanzas" description={error.message} action={<Button onClick={reload}>Reintentar</Button>} />
         </Card>

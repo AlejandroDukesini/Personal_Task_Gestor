@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import type { Editor } from "@tiptap/react";
-import { Archive, ArchiveRestore, ArrowLeft, Copy, Download, Eye, Loader2, Pencil, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, CalendarDays, Copy, Download, Eye, Loader2, Pencil, Pin, PinOff, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -17,11 +17,24 @@ import { cn } from "@/lib/utils";
 import { SaveStatus, type SaveState as Status } from "@/components/ui/SaveStatus";
 import { NoteEditor } from "./editor/NoteEditor";
 import { AttachmentsPanel } from "./AttachmentsPanel";
-import { ColorPicker, IconPicker } from "./pickers";
+import { ColorPicker, IconPicker, TagInput } from "./pickers";
 import { NoteIcon } from "./NoteIcon";
 import type { NoteCategory } from "./CategoryManager";
 
-type Meta = Pick<NoteRow, "title" | "description" | "categoryId" | "subcategoryId" | "color" | "icon" | "mathEnabled" | "mathDecimals">;
+type Meta = Pick<NoteRow, "title" | "description" | "categoryId" | "subcategoryId" | "color" | "icon" | "mathEnabled" | "mathDecimals"> & {
+  pinned: boolean;
+  tags: string[];
+  date: string | null;
+};
+
+/** Rutas del bloc al que pertenece la nota (general o financiero). */
+export interface NoteDetailPaths {
+  list: string;
+  note: (id: string) => string;
+}
+
+const DEFAULT_PATHS: NoteDetailPaths = { list: "/notas", note: (id) => `/notas/${id}` };
+const withQuery = (path: string, qs: string) => `${path}${path.includes("?") ? "&" : "?"}${qs}`;
 
 const SAVE_DELAY = 900;
 const DRAFT_DELAY = 300;
@@ -35,6 +48,9 @@ const metaOf = (n: NoteRow): Meta => ({
   icon: n.icon,
   mathEnabled: n.mathEnabled,
   mathDecimals: n.mathDecimals,
+  pinned: n.pinned ?? false,
+  tags: n.tags ?? [],
+  date: n.date ?? null,
 });
 
 /**
@@ -56,7 +72,7 @@ function download(name: string, content: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export function NoteDetail({ id, categories, startEditing, onChanged }: { id: string; categories: NoteCategory[]; startEditing: boolean; onChanged: () => void }) {
+export function NoteDetail({ id, categories, startEditing, onChanged, paths = DEFAULT_PATHS }: { id: string; categories: NoteCategory[]; startEditing: boolean; onChanged: () => void; paths?: NoteDetailPaths }) {
   const navigate = useNavigate();
   const [note, setNote] = useState<NoteRow | null>(null);
   const [missing, setMissing] = useState(false);
@@ -259,7 +275,7 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
   }
 
   if (missing) {
-    return <Empty title="Nota no encontrada" description="Puede que se haya eliminado definitivamente." action={<Link to="/notas" className="text-primary text-sm">Volver a las notas</Link>} />;
+    return <Empty title="Nota no encontrada" description="Puede que se haya eliminado definitivamente." action={<Link to={paths.list} className="text-primary text-sm">Volver a las notas</Link>} />;
   }
   if (!note || !meta) {
     return (
@@ -281,7 +297,7 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={async () => {
-            if ((await flush()) || confirm("No se pudieron guardar los últimos cambios (quedan como borrador en este dispositivo). ¿Salir igualmente?")) navigate("/notas");
+            if ((await flush()) || confirm("No se pudieron guardar los últimos cambios (quedan como borrador en este dispositivo). ¿Salir igualmente?")) navigate(paths.list);
           }}
           className="h-9 px-2 -ml-2 inline-flex items-center gap-1 rounded-md text-sm text-subtle hover:text-text hover:bg-muted"
         >
@@ -315,7 +331,7 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
                   action(
                     async () => release((await api.delete<{ orphanFileKeys: string[] }>(`/notes/${id}/purge`)).orphanFileKeys),
                     "Nota eliminada definitivamente",
-                    () => navigate("/notas?status=trash")
+                    () => navigate(withQuery(paths.list, "status=trash"))
                   );
                 }}
               >
@@ -324,7 +340,10 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
             </>
           ) : (
             <>
-              <IconBtn label="Duplicar" onClick={() => action(async () => navigate(`/notas/${(await api.post<NoteRow>(`/notes/${id}/duplicate`)).id}`), "Nota duplicada", () => undefined)}>
+              <IconBtn label={meta.pinned ? "Desfijar" : "Fijar arriba"} onClick={() => setField("pinned", !meta.pinned)}>
+                {meta.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+              </IconBtn>
+              <IconBtn label="Duplicar" onClick={() => action(async () => navigate(paths.note((await api.post<NoteRow>(`/notes/${id}/duplicate`)).id)), "Nota duplicada", () => undefined)}>
                 <Copy size={16} />
               </IconBtn>
               <IconBtn label={note.archived ? "Desarchivar" : "Archivar"} onClick={() => action(() => api.post(`/notes/${id}/${note.archived ? "unarchive" : "archive"}`), note.archived ? "Nota desarchivada" : "Nota archivada")}>
@@ -336,7 +355,7 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
                 danger
                 onClick={() => {
                   if (!confirm(`¿Enviar «${meta.title}» a la papelera? Podrás restaurarla después.`)) return;
-                  action(() => api.delete(`/notes/${id}`), "Nota enviada a la papelera", () => navigate("/notas"));
+                  action(() => api.delete(`/notes/${id}`), "Nota enviada a la papelera", () => navigate(paths.list));
                 }}
               >
                 <Trash2 size={16} />
@@ -412,11 +431,26 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
               <NoteIcon name={sub.icon} size={12} /> {sub.name}
             </Badge>
           )}
+          {meta.pinned && (
+            <span className="inline-flex items-center gap-1 text-primary">
+              <Pin size={12} aria-hidden /> Fijada
+            </span>
+          )}
+          {meta.date && (
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays size={12} aria-hidden /> {new Date(`${meta.date}T00:00:00`).toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric" })}
+            </span>
+          )}
+          {meta.tags.map((t) => (
+            <span key={t} className="text-primary">
+              #{t}
+            </span>
+          ))}
           <span>Creada {new Date(note.createdAt).toLocaleString()}</span>
           <span>· Modificada {new Date(note.updatedAt).toLocaleString()}</span>
           {canEdit && (
             <button className="ml-auto inline-flex items-center gap-1 h-8 px-2 rounded-md hover:bg-muted hover:text-text" onClick={() => setShowMeta((v) => !v)} aria-expanded={showMeta}>
-              <SlidersHorizontal size={14} /> Categoría, color y símbolo
+              <SlidersHorizontal size={14} /> Categoría, etiquetas, fecha y apariencia
             </button>
           )}
         </div>
@@ -448,6 +482,12 @@ export function NoteDetail({ id, categories, startEditing, onChanged }: { id: st
                   </option>
                 ))}
               </Select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <TagInput value={meta.tags} onChange={(v) => setField("tags", v)} />
+            <Field label="Fecha de la nota" hint="Opcional: vencimiento, fecha objetivo…">
+              <Input type="date" value={meta.date ?? ""} onChange={(e) => setField("date", e.target.value || null)} />
             </Field>
           </div>
           <ColorPicker value={meta.color} allowDefault label="Color de la nota (predeterminado: el de su categoría)" onChange={(v) => setField("color", v)} />

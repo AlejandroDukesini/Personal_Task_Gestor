@@ -19,6 +19,15 @@ import {
   Tag,
   User,
   Wallet,
+  PiggyBank,
+  CreditCard,
+  Clock,
+  TrendingUp,
+  Target,
+  Eye,
+  ClipboardList,
+  Rocket,
+  Flag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +57,15 @@ export const NOTE_ICON_COMPONENTS: Record<string, LucideIcon> = {
   Tag,
   User,
   Wallet,
+  PiggyBank,
+  CreditCard,
+  Clock,
+  TrendingUp,
+  Target,
+  Eye,
+  ClipboardList,
+  Rocket,
+  Flag,
 };
 
 /** Para ampliar la biblioteca junto con `registerNoteIcon`. */

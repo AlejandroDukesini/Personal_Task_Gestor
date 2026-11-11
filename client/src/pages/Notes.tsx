@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Archive, ArchiveRestore, Copy, FolderCog, LayoutGrid, List as ListIcon, Loader2, MoreVertical, Paperclip, Plus, RotateCcw, Search, StickyNote, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarDays, Copy, FolderCog, LayoutGrid, List as ListIcon, Loader2, MoreVertical, Paperclip, Pin, PinOff, Plus, RotateCcw, Search, StickyNote, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -9,7 +9,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Empty } from "@/components/ui/Empty";
 import { api } from "@/services/api";
-import { loadDb, newId, type NoteRow } from "@/services/localDb";
+import { newId, type NoteRow, type NoteSpace } from "@/services/localDb";
 import type { NoteSummary, NoteSort, NoteStatus } from "@/services/notes/query";
 
 import { errorMessage } from "@/components/finance/shared";
@@ -23,15 +23,32 @@ interface ListResult {
   total: number;
   nextOffset: number | null;
   counts: { active: number; archived: number; trash: number };
+  tags: string[];
 }
+
+/**
+ * Dónde vive un bloc de notas: la lista y la ruta de cada nota. El bloc general
+ * está en /notas; las notas financieras, dentro de Finanzas. Es el mismo
+ * sistema (mismas rutas de la API, editor, adjuntos y papelera).
+ */
+export interface NotePaths {
+  list: string;
+  note: (id: string) => string;
+}
+
+export const GENERAL_NOTES: NotePaths = { list: "/notas", note: (id) => `/notas/${id}` };
+export const FINANCE_NOTES: NotePaths = { list: "/finanzas?tab=notas", note: (id) => `/finanzas/notas/${id}` };
+
+/** Añade parámetros a una ruta que puede tener ya `?`. */
+export const withQuery = (path: string, qs: string) => `${path}${path.includes("?") ? "&" : "?"}${qs}`;
 
 const VIEW_KEY = "gestion-tareas:notes-view";
 
-function useCategories() {
+export function useNoteCategories(space: NoteSpace = "general") {
   const [categories, setCategories] = useState<NoteCategory[]>([]);
   const reload = useCallback(() => {
-    api.get<NoteCategory[]>("/notes/categories").then(setCategories).catch(() => undefined);
-  }, []);
+    api.get<NoteCategory[]>(`/notes/categories?space=${space}`).then(setCategories).catch(() => undefined);
+  }, [space]);
   useEffect(() => {
     reload();
     window.addEventListener("gt:sync-applied", reload);
@@ -43,17 +60,27 @@ function useCategories() {
 export function Notes() {
   const { id } = useParams();
   const [params] = useSearchParams();
-  const { categories, reload } = useCategories();
+  const { categories, reload } = useNoteCategories("general");
 
   // Los adjuntos sin usar ya no se borran solos (una pestaña con datos
   // desfasados borraba adjuntos recién añadidos en otra): se liberan a
   // petición del usuario en Ajustes › Copias de seguridad y recuperación.
 
-  if (id) return <NoteDetail key={id} id={id} categories={categories} startEditing={params.get("edit") === "1"} onChanged={reload} />;
-  return <NotesList categories={categories} reloadCategories={reload} />;
+  if (id) return <NoteDetail key={id} id={id} categories={categories} startEditing={params.get("edit") === "1"} onChanged={reload} paths={GENERAL_NOTES} />;
+  return <NotesBoard space="general" paths={GENERAL_NOTES} categories={categories} reloadCategories={reload} />;
 }
 
-function NotesList({ categories, reloadCategories }: { categories: NoteCategory[]; reloadCategories: () => void }) {
+interface BoardProps {
+  space: NoteSpace;
+  paths: NotePaths;
+  categories: NoteCategory[];
+  reloadCategories: () => void;
+  /** Dentro de otra página (Finanzas): sin cabecera propia. */
+  embedded?: boolean;
+}
+
+/** Lista de un bloc de notas: búsqueda, filtros, fijadas, archivo y papelera. */
+export function NotesBoard({ space, paths, categories, reloadCategories, embedded = false }: BoardProps) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<ListResult | null>(null);
@@ -67,7 +94,8 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
       return "cards";
     }
   });
-  const [creating, setCreating] = useState(params.get("new") === "1");
+  // `?new=1` (paleta de comandos) solo en el bloc general: en Finanzas `new` abre otro diálogo.
+  const [creating, setCreating] = useState(space === "general" && params.get("new") === "1");
   const [managing, setManaging] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
 
@@ -79,6 +107,8 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const hasAttachments = params.get("hasAttachments") === "1";
+  const tag = params.get("tag") ?? "";
+  const dateField = params.get("dateField") ?? "updatedAt";
 
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -87,7 +117,9 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
   };
 
   const query = useMemo(() => {
-    const p = new URLSearchParams({ status, sort, dir, limit: "30" });
+    const p = new URLSearchParams({ space, status, sort, dir, limit: "30" });
+    if (tag) p.set("tag", tag);
+    if (dateField !== "updatedAt") p.set("dateField", dateField);
     if (params.get("q")) p.set("q", params.get("q")!);
     if (categoryId) p.set("categoryId", categoryId);
     if (subcategoryId) p.set("subcategoryId", subcategoryId);
@@ -95,7 +127,7 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
     if (to) p.set("to", to);
     if (hasAttachments) p.set("hasAttachments", "1");
     return p.toString();
-  }, [params, status, sort, dir, categoryId, subcategoryId, from, to, hasAttachments]);
+  }, [params, space, status, sort, dir, categoryId, subcategoryId, from, to, hasAttachments, tag, dateField]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,24 +203,28 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
   const top = categories.filter((c) => !c.parentId);
   const subs = categories.filter((c) => c.parentId && c.parentId === categoryId);
   const catById = new Map(categories.map((c) => [c.id, c]));
-  const filtersActive = !!(params.get("q") || categoryId || subcategoryId || from || to || hasAttachments);
+  const filtersActive = !!(params.get("q") || categoryId || subcategoryId || from || to || hasAttachments || tag);
+  const headerActions = (
+    <>
+      <Button variant="outline" size={embedded ? "sm" : "md"} onClick={() => setManaging(true)}>
+        <FolderCog size={16} /> Categorías
+      </Button>
+      <Button size={embedded ? "sm" : "md"} onClick={() => setCreating(true)}>
+        <Plus size={16} /> Nueva nota
+      </Button>
+    </>
+  );
 
   return (
     <div>
-      <PageHeader
-        title="Notas"
-        description="Notas con formato, adjuntos y cálculos automáticos."
-        actions={
-          <>
-            <Button variant="outline" onClick={() => setManaging(true)}>
-              <FolderCog size={16} /> Categorías
-            </Button>
-            <Button onClick={() => setCreating(true)}>
-              <Plus size={16} /> Nueva nota
-            </Button>
-          </>
-        }
-      />
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <p className="text-sm text-subtle max-w-xl">Anotaciones libres sobre tus finanzas. No crean ni modifican movimientos, saldos ni presupuestos.</p>
+          <div className="flex gap-2">{headerActions}</div>
+        </div>
+      ) : (
+        <PageHeader title="Notas" description="Notas con formato, adjuntos y cálculos automáticos." actions={headerActions} />
+      )}
 
       <div className="flex gap-1 mb-3 overflow-x-auto" role="tablist" aria-label="Estado">
         {(
@@ -249,7 +285,20 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
             <ListIcon size={16} />
           </button>
         </div>
-        <Field label="Modificadas desde">
+        <Select aria-label="Etiqueta" value={tag} disabled={!data?.tags.length} onChange={(e) => set({ tag: e.target.value || null })}>
+          <option value="">{data?.tags.length ? "Todas las etiquetas" : "Sin etiquetas"}</option>
+          {data?.tags.map((t) => (
+            <option key={t} value={t}>
+              #{t}
+            </option>
+          ))}
+        </Select>
+        <Select aria-label="Filtrar fechas por" value={dateField} onChange={(e) => set({ dateField: e.target.value === "updatedAt" ? null : e.target.value })}>
+          <option value="updatedAt">Fechas: modificación</option>
+          <option value="createdAt">Fechas: creación</option>
+          <option value="date">Fechas: fecha de la nota</option>
+        </Select>
+        <Field label="Desde">
           <Input type="date" value={from} onChange={(e) => set({ from: e.target.value || null })} />
         </Field>
         <Field label="Hasta">
@@ -264,7 +313,7 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
             className="text-sm text-subtle hover:text-text pb-2 inline-flex items-center gap-1 justify-self-start"
             onClick={() => {
               setQ("");
-              set({ q: null, categoryId: null, subcategoryId: null, from: null, to: null, hasAttachments: null });
+              set({ q: null, categoryId: null, subcategoryId: null, from: null, to: null, hasAttachments: null, tag: null });
             }}
           >
             <X size={14} /> Quitar filtros
@@ -305,8 +354,10 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
               view={view}
               category={n.categoryId ? catById.get(n.categoryId) : undefined}
               subcategory={n.subcategoryId ? catById.get(n.subcategoryId) : undefined}
-              onOpen={() => navigate(`/notas/${n.id}`)}
-              onEdit={() => navigate(`/notas/${n.id}?edit=1`)}
+              href={paths.note(n.id)}
+              onOpen={() => navigate(paths.note(n.id))}
+              onEdit={() => navigate(`${paths.note(n.id)}?edit=1`)}
+              onPin={() => act(() => api.put(`/notes/${n.id}`, { pinned: !n.pinned }), n.pinned ? "Nota desfijada" : "Nota fijada")}
               onDuplicate={() => act(() => api.post(`/notes/${n.id}/duplicate`), "Nota duplicada")}
               onArchive={() => act(() => api.post(`/notes/${n.id}/${n.archived ? "unarchive" : "archive"}`), n.archived ? "Nota desarchivada" : "Nota archivada")}
               onDelete={() => confirm(`¿Enviar «${n.title}» a la papelera? Podrás restaurarla.`) && act(() => api.delete(`/notes/${n.id}`), "Nota enviada a la papelera")}
@@ -330,8 +381,8 @@ function NotesList({ categories, reloadCategories }: { categories: NoteCategory[
         </div>
       )}
 
-      <NewNoteDialog open={creating} onClose={() => setCreating(false)} categories={categories} defaultCategory={categoryId && categoryId !== "none" ? categoryId : ""} />
-      <CategoryManager open={managing} onClose={() => setManaging(false)} categories={categories} reload={() => { reloadCategories(); load(); }} />
+      <NewNoteDialog open={creating} onClose={() => setCreating(false)} categories={categories} defaultCategory={categoryId && categoryId !== "none" ? categoryId : ""} space={space} paths={paths} />
+      <CategoryManager open={managing} onClose={() => setManaging(false)} categories={categories} space={space} reload={() => { reloadCategories(); load(); }} />
     </div>
   );
 }
@@ -341,8 +392,10 @@ interface ItemProps {
   view: "cards" | "list";
   category?: NoteCategory;
   subcategory?: NoteCategory;
+  href: string;
   onOpen: () => void;
   onEdit: () => void;
+  onPin: () => void;
   onDuplicate: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -350,7 +403,7 @@ interface ItemProps {
   onPurge: () => void;
 }
 
-function NoteItem({ note, view, category, subcategory, onOpen, onEdit, onDuplicate, onArchive, onDelete, onRestore, onPurge }: ItemProps) {
+function NoteItem({ note, view, category, subcategory, href, onOpen, onEdit, onPin, onDuplicate, onArchive, onDelete, onRestore, onPurge }: ItemProps) {
   const [menu, setMenu] = useState(false);
   useEffect(() => {
     if (!menu) return;
@@ -380,6 +433,16 @@ function NoteItem({ note, view, category, subcategory, onOpen, onEdit, onDuplica
           <span className="sr-only"> adjuntos</span>
         </span>
       )}
+      {note.date && (
+        <span className="inline-flex items-center gap-0.5 text-xs text-subtle" title="Fecha de la nota">
+          <CalendarDays size={12} aria-hidden /> {new Date(`${note.date}T00:00:00`).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}
+        </span>
+      )}
+      {note.tags.map((t) => (
+        <span key={t} className="text-xs text-primary">
+          #{t}
+        </span>
+      ))}
       {note.archived && !trashed && <Badge>Archivada</Badge>}
     </>
   );
@@ -398,6 +461,7 @@ function NoteItem({ note, view, category, subcategory, onOpen, onEdit, onDuplica
           ) : (
             <>
               <MenuItem onClick={onEdit} icon={<StickyNote size={14} />}>Editar</MenuItem>
+              <MenuItem onClick={onPin} icon={note.pinned ? <PinOff size={14} /> : <Pin size={14} />}>{note.pinned ? "Desfijar" : "Fijar arriba"}</MenuItem>
               <MenuItem onClick={onDuplicate} icon={<Copy size={14} />}>Duplicar</MenuItem>
               <MenuItem onClick={onArchive} icon={note.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}>{note.archived ? "Desarchivar" : "Archivar"}</MenuItem>
               <MenuItem onClick={onDelete} icon={<Trash2 size={14} />} danger>Eliminar</MenuItem>
@@ -414,8 +478,11 @@ function NoteItem({ note, view, category, subcategory, onOpen, onEdit, onDuplica
         <span className="h-9 w-9 rounded-md flex items-center justify-center shrink-0" style={{ background: `${accent}22`, color: accent }}>
           <NoteIcon name={note.icon} size={17} />
         </span>
-        <Link to={`/notas/${note.id}`} className="flex-1 min-w-0">
-          <span className="block font-medium truncate">{note.title}</span>
+        <Link to={href} className="flex-1 min-w-0">
+          <span className="block font-medium truncate">
+            {note.pinned && <Pin size={12} className="inline mr-1 text-primary" aria-label="Fijada" />}
+            {note.title}
+          </span>
           <span className="block text-xs text-subtle truncate">{note.preview || note.description || "Sin contenido"}</span>
         </Link>
         <div className="hidden md:flex items-center gap-1.5">{chips}</div>
@@ -434,7 +501,8 @@ function NoteItem({ note, view, category, subcategory, onOpen, onEdit, onDuplica
         <span className="h-9 w-9 rounded-md flex items-center justify-center shrink-0" style={{ background: `${accent}26`, color: accent }}>
           <NoteIcon name={note.icon} size={17} />
         </span>
-        <Link to={`/notas/${note.id}`} className="flex-1 min-w-0 font-medium leading-snug line-clamp-2 break-words" onClick={(e) => e.stopPropagation()}>
+        <Link to={href} className="flex-1 min-w-0 font-medium leading-snug line-clamp-2 break-words" onClick={(e) => e.stopPropagation()}>
+          {note.pinned && <Pin size={13} className="inline mr-1 text-primary" aria-label="Fijada" />}
           {note.title}
         </Link>
         {actions}
@@ -455,7 +523,7 @@ function MenuItem({ onClick, icon, danger, children }: { onClick: () => void; ic
   );
 }
 
-function NewNoteDialog({ open, onClose, categories, defaultCategory }: { open: boolean; onClose: () => void; categories: NoteCategory[]; defaultCategory: string }) {
+function NewNoteDialog({ open, onClose, categories, defaultCategory, space, paths }: { open: boolean; onClose: () => void; categories: NoteCategory[]; defaultCategory: string; space: NoteSpace; paths: NotePaths }) {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [categoryId, setCategoryId] = useState(defaultCategory);
@@ -478,9 +546,9 @@ function NewNoteDialog({ open, onClose, categories, defaultCategory }: { open: b
     e.preventDefault();
     setBusy(true);
     try {
-      const n = await api.post<NoteRow>("/notes", { id: idRef.current, title: title.trim(), categoryId: categoryId || null, subcategoryId: subcategoryId || null, icon: cat?.icon });
+      const n = await api.post<NoteRow>("/notes", { id: idRef.current, space, title: title.trim(), categoryId: categoryId || null, subcategoryId: subcategoryId || null, icon: cat?.icon });
       onClose();
-      navigate(`/notas/${n.id}?edit=1`);
+      navigate(`${paths.note(n.id)}?edit=1`);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -492,7 +560,7 @@ function NewNoteDialog({ open, onClose, categories, defaultCategory }: { open: b
     <Dialog open={open} onClose={onClose} title="Nueva nota" size="sm">
       <form className="space-y-3" onSubmit={create}>
         <Field label="Título">
-          <Input required autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej.: Presupuesto de la mudanza" />
+          <Input required autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={space === "finance" ? "Ej.: Plan de ahorro para computador" : "Ej.: Presupuesto de la mudanza"} />
         </Field>
         <Field label="Categoría">
           <Select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setSubcategoryId(""); }}>

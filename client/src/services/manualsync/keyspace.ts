@@ -206,6 +206,15 @@ const REFS: Partial<Record<EntryCollection, Ref[]>> = {
     { field: "categoryId", target: "noteCategories" },
     { field: "subcategoryId", target: "noteCategories" },
   ],
+  acadSubjects: [{ field: "semesterId", target: "acadSemesters" }],
+  acadClasses: [
+    { field: "semesterId", target: "acadSemesters" },
+    { field: "subjectId", target: "acadSubjects" },
+  ],
+  acadActivities: [
+    { field: "semesterId", target: "acadSemesters" },
+    { field: "subjectId", target: "acadSubjects" },
+  ],
 };
 
 /** Claves a las que apunta una fila. */
@@ -236,6 +245,7 @@ export function labelOf(e: { collection: string; row: Record<string, unknown> | 
   if (e.collection === "habitLogs") return `Registro del ${String(r.date ?? "").slice(0, 10)}`;
   if (e.collection === "habitSchedules") return `Horario ${String(r.startTime ?? "")} desde ${String(r.startDate ?? "")}`;
   if (e.collection === "gcalLinks") return "Vínculo con Google Calendar";
+  if (e.collection === "acadClasses") return `Clase ${String(r.startTime ?? "")}–${String(r.endTime ?? "")}`;
   if (e.collection === "taskTags") return "Etiquetas de una tarea";
   return e.id;
 }
@@ -263,6 +273,10 @@ export const COLLECTION_LABEL: Record<string, string> = {
   noteCategories: "Categoría de notas",
   notes: "Nota",
   projects: "Proyecto",
+  acadSemesters: "Semestre",
+  acadSubjects: "Materia",
+  acadClasses: "Clase del horario",
+  acadActivities: "Actividad académica",
   taskTags: "Etiquetas de tarea",
   settings: "Ajustes",
 };

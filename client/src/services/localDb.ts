@@ -8,7 +8,7 @@ import type { EventRecurrence } from "@/types";
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 export interface SettingsRow {
   id: number;
@@ -603,6 +603,100 @@ export interface ProjectRow {
   updatedAt: string;
 }
 
+/* -------------------------------------------------------------- académico
+ * Tareas universitarias. Todo cuelga de un semestre (`semesterId`): las
+ * materias, el horario y las actividades de un periodo nunca se mezclan con
+ * las de otro. Borrar un semestre o una materia borra en cascada lo suyo.
+ */
+
+export interface AcadSemesterRow {
+  id: string;
+  name: string;
+  /** Fechas locales `YYYY-MM-DD`. */
+  startDate: string;
+  endDate: string;
+  /** Semestre en curso. Como mucho uno a la vez. */
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcadSubjectRow {
+  id: string;
+  semesterId: string;
+  name: string;
+  code: string | null;
+  professor: string | null;
+  /** Correo, teléfono u horario de atención: texto libre. */
+  professorContact: string | null;
+  room: string | null;
+  credits: number | null;
+  description: string | null;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Una franja semanal de clase. `day`: 1 = lunes … 7 = domingo (ISO). */
+export interface AcadClassRow {
+  id: string;
+  semesterId: string;
+  subjectId: string;
+  day: number;
+  /** "HH:mm". */
+  startTime: string;
+  endTime: string;
+  /** Null = el profesor / aula de la materia. */
+  professor: string | null;
+  room: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AcadActivityType =
+  | "task"
+  | "exam"
+  | "presentation"
+  | "final_project"
+  | "group_work"
+  | "research"
+  | "reading"
+  | "delivery"
+  | "other";
+
+/** «Vencida» no se guarda: se deriva de la fecha límite al leer. */
+export type AcadActivityStatus = "pending" | "in_progress" | "review" | "done";
+
+export interface AcadReference {
+  id: string;
+  label: string;
+  /** Enlace opcional (https://…). */
+  url: string | null;
+}
+
+export interface AcadActivityRow {
+  id: string;
+  semesterId: string;
+  /** Null = actividad general del semestre. */
+  subjectId: string | null;
+  title: string;
+  description: string | null;
+  type: AcadActivityType;
+  /** Nombre del tipo cuando `type` es `other` ("Laboratorio", "Taller"…). */
+  customType: string | null;
+  dueDate: string | null;
+  dueTime: string | null;
+  priority: "low" | "medium" | "high" | "critical";
+  status: AcadActivityStatus;
+  progress: number;
+  references: AcadReference[];
+  observations: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Lápida de borrado. Sin ella, sincronizar dos dispositivos por "última
  * escritura gana" resucitaría cualquier fila borrada en A la próxima vez que B
@@ -640,6 +734,10 @@ export interface Db {
   noteCategories: NoteCategoryRow[];
   notes: NoteRow[];
   projects: ProjectRow[];
+  acadSemesters: AcadSemesterRow[];
+  acadSubjects: AcadSubjectRow[];
+  acadClasses: AcadClassRow[];
+  acadActivities: AcadActivityRow[];
   tombstones: TombstoneRow[];
 }
 
@@ -667,6 +765,10 @@ export const SYNCED_COLLECTIONS = [
   "noteCategories",
   "notes",
   "projects",
+  "acadSemesters",
+  "acadSubjects",
+  "acadClasses",
+  "acadActivities",
 ] as const;
 
 export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
@@ -679,6 +781,18 @@ export const FINANCE_COLLECTIONS = [
   "finGoals",
   "finRecurring",
   "finTags",
+] as const satisfies readonly SyncedCollection[];
+
+/**
+ * Colecciones de los módulos añadidos a partir de la v8. Las copias de
+ * seguridad las exportan e importan recorriendo esta lista (y validándolas con
+ * `MODULE_ROW_SCHEMAS`), sin una línea por colección.
+ */
+export const MODULE_COLLECTIONS = [
+  "acadSemesters",
+  "acadSubjects",
+  "acadClasses",
+  "acadActivities",
 ] as const satisfies readonly SyncedCollection[];
 
 /** Error con código HTTP, para que la capa de rutas responda como lo hacía Express. */
@@ -813,6 +927,10 @@ function emptyDb(): Db {
     noteCategories: [],
     notes: [],
     projects: [],
+    acadSemesters: [],
+    acadSubjects: [],
+    acadClasses: [],
+    acadActivities: [],
     tombstones: [],
   };
 }
@@ -902,6 +1020,17 @@ export const MIGRATIONS: Migration[] = [
       // Solo una colección nueva y vacía: no se tocan datos existentes ni se
       // siembran proyectos de ejemplo.
       db.projects ??= [];
+    },
+  },
+  {
+    version: 8,
+    description: "Tareas universitarias: semestres, materias, horario y actividades académicas",
+    up: (db) => {
+      // Solo colecciones nuevas y vacías: no se toca ningún dato existente.
+      db.acadSemesters ??= [];
+      db.acadSubjects ??= [];
+      db.acadClasses ??= [];
+      db.acadActivities ??= [];
     },
   },
 ];

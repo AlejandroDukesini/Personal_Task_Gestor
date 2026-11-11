@@ -30,6 +30,7 @@ import {
   type LucideIcon,
   StickyNote,
   FolderKanban,
+  GraduationCap,
 } from "lucide-react";
 import { useTheme } from "@/store/theme";
 import { usePalette } from "@/store/palette";
@@ -98,6 +99,7 @@ export function CommandPalette() {
       { id: "nav-tasks", group: "Ir a", label: "Tareas", icon: CheckSquare, keywords: "todo pendientes", run: go("/tareas") },
       { id: "nav-notes", group: "Ir a", label: "Notas", icon: StickyNote, keywords: "apuntes documentos adjuntos calculos", run: go("/notas") },
       { id: "nav-projects", group: "Ir a", label: "Proyectos", icon: FolderKanban, keywords: "etapas progreso planificacion seguimiento", run: go("/proyectos") },
+      { id: "nav-academic", group: "Ir a", label: "Tareas universitarias", icon: GraduationCap, keywords: "universidad semestre materias horario parciales entregas", run: go("/universidad") },
       { id: "nav-habits", group: "Ir a", label: "Hábitos", icon: Activity, keywords: "rachas streak", run: go("/habitos") },
       { id: "nav-cal", group: "Ir a", label: "Calendario", icon: Calendar, keywords: "eventos agenda", run: go("/calendario") },
       { id: "nav-cats", group: "Ir a", label: "Categorías", icon: Folder, run: go("/categorias") },

@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   ApiError,
   FINANCE_COLLECTIONS,
+  MODULE_COLLECTIONS,
   ensureOwnerTags,
   loadDb,
   mutate,
@@ -41,6 +42,8 @@ import { notesRoutes } from "./notes/routes";
 import { NOTE_ROW_SCHEMAS } from "./notes/schemas";
 import { projectRoutes } from "./projects/routes";
 import { PROJECT_ROW_SCHEMAS } from "./projects/schemas";
+import { academicRoutes } from "./academic/routes";
+import { MODULE_ROW_SCHEMAS } from "./moduleSchemas";
 import { goalProgress } from "./finance/calc";
 import { FINANCE_ROW_SCHEMAS } from "./finance/schemas";
 import { todayKey } from "./finance/dates";
@@ -584,6 +587,7 @@ const routes: Route[] = [
   ...financeRoutes,
   ...notesRoutes,
   ...projectRoutes,
+  ...academicRoutes,
   ...habitRoutes,
 
   // Categorías
@@ -1396,6 +1400,7 @@ const routes: Route[] = [
         // Los binarios de los adjuntos no viajan en la copia (solo sus datos).
         notes: db.notes,
         projects: db.projects,
+        ...Object.fromEntries(MODULE_COLLECTIONS.map((c) => [c, db[c]])),
         // Sin el hash del PIN: una copia no debe servir para atacarlo offline.
         settings: { ...db.settings, pinHash: null },
       },
@@ -1439,6 +1444,7 @@ const routes: Route[] = [
           noteCategories: rows,
           notes: rows,
           projects: rows,
+          ...Object.fromEntries(MODULE_COLLECTIONS.map((c) => [c, rows])),
           // `settings` viaja en el fichero por compatibilidad, pero nunca se
           // aplica: importar ajustes ajenos permitiría, por ejemplo, sustituir
           // el hash del PIN por uno conocido por el atacante.
@@ -1478,8 +1484,20 @@ const routes: Route[] = [
       }
     });
 
+    // Módulos nuevos (académico…): cada uno con su esquema estricto.
+    const modules = data as unknown as Partial<Record<(typeof MODULE_COLLECTIONS)[number], unknown[]>>;
+    for (const c of MODULE_COLLECTIONS) {
+      (modules[c] ?? []).forEach((r, i) => {
+        const res = MODULE_ROW_SCHEMAS[c].safeParse(stripDangerousKeys(r));
+        if (!res.success) {
+          throw new ApiError(400, `Copia no válida: ${c}[${i}] ${res.error.issues[0]?.path.join(".")}: ${res.error.issues[0]?.message}`);
+        }
+      });
+    }
+
     mutate((db) => {
       if (replace) {
+        for (const c of MODULE_COLLECTIONS) (db as any)[c] = [];
         db.projects = [];
         db.notes = [];
         db.noteCategories = [];
@@ -1527,6 +1545,7 @@ const routes: Route[] = [
       upsert(db.noteCategories, data.noteCategories ?? []);
       upsert(db.notes, data.notes ?? []);
       upsert(db.projects, data.projects ?? []);
+      for (const c of MODULE_COLLECTIONS) upsert(db[c] as { id: string }[], (modules[c] ?? []) as any[]);
       // Filas de versiones anteriores: rellena los campos nuevos.
       for (const t of db.tasks) {
         t.recurrence ??= null;

@@ -208,6 +208,7 @@ const DESTRUCTIVE: [string, RegExp, string][] = [
   ["POST", /^\/projects\/trash\/empty$/, "vaciar la papelera de proyectos"],
   ["DELETE", /^\/academic\/(semesters|subjects)\/[^/]+$/, "eliminar un semestre o una materia con su contenido"],
   ["DELETE", /^\/sops\/[^/]+$/, "eliminar un SOP o una plantilla"],
+  ["DELETE", /^\/personal-goals\/[^/]+$/, "eliminar una meta personal"],
   ["POST", /^\/backup\/import$/, "importar una copia"],
   ["POST", /^\/finance\/import$/, "importar datos financieros"],
 ];
@@ -265,6 +266,7 @@ const COUNT_LABELS: [keyof Db, string][] = [
   ["acadSubjects", "Materias"],
   ["acadActivities", "Actividades académicas"],
   ["sops", "SOP y plantillas"],
+  ["personalGoals", "Metas personales"],
   ["categories", "Categorías"],
   ["finAccounts", "Cuentas"],
   ["finTransactions", "Movimientos"],

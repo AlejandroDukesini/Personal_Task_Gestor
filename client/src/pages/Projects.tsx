@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { FolderKanban, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { Briefcase, Flag, FolderKanban, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
@@ -16,6 +16,7 @@ import type { ProjectStatus } from "@/services/localDb";
 import { formatPercent } from "@/services/projects/progress";
 import type { ProjectSummary, ProjectView } from "@/services/projects/query";
 import { cn } from "@/lib/utils";
+import { PersonalGoals } from "@/components/projects/personal/PersonalGoals";
 
 interface ListResult {
   items: ProjectSummary[];
@@ -32,10 +33,40 @@ const VIEWS: [param: string, view: ProjectView, label: string, count: keyof List
   ["papelera", "trash", "Papelera", "trash"],
 ];
 
+const SECTIONS = [
+  { id: "profesional", label: "Profesional", icon: Briefcase },
+  { id: "personal", label: "Personal", icon: Flag },
+] as const;
+
+/**
+ * Proyectos con dos lógicas distintas: «Profesional» (proyectos con etapas,
+ * actividades y plantillas) y «Personal» (metas en una línea del tiempo).
+ * Los proyectos existentes son profesionales; cualquiera puede convertirse
+ * en meta personal desde su menú.
+ */
 export function Projects() {
   const { id } = useParams();
+  const [params, setParams] = useSearchParams();
   if (id) return <ProjectDetail key={id} id={id} />;
-  return <ProjectsList />;
+  const section = params.get("seccion") === "personal" ? "personal" : "profesional";
+  return (
+    <div>
+      <PageHeader title="Proyectos" description={section === "personal" ? "Tus metas personales en el tiempo: dónde estás respecto a cada objetivo." : "Proyectos profesionales con etapas, actividades y plantillas reutilizables."} />
+      <nav className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-2 mb-4 border-b border-border" aria-label="Tipo de proyecto">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setParams(s.id === "personal" ? { seccion: "personal" } : {}, { replace: true })}
+            aria-current={section === s.id ? "page" : undefined}
+            className={cn("flex items-center gap-1.5 px-4 h-10 rounded-md text-sm whitespace-nowrap", section === s.id ? "bg-primary/10 text-primary font-medium" : "text-subtle hover:text-text hover:bg-muted")}
+          >
+            <s.icon size={16} aria-hidden /> {s.label}
+          </button>
+        ))}
+      </nav>
+      {section === "personal" ? <PersonalGoals /> : <ProjectsList />}
+    </div>
+  );
 }
 
 function ProjectsList() {
@@ -101,28 +132,23 @@ function ProjectsList() {
 
   return (
     <div>
-      <PageHeader
-        title="Proyectos"
-        description="Etapas, objetivos y fechas, con el progreso calculado a partir de las etapas."
-        actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={16} /> Nuevo proyecto
-          </Button>
-        }
-      />
-
-      <div className="flex gap-1 mb-3 overflow-x-auto" role="tablist" aria-label="Estado">
-        {VIEWS.map(([param, v, label, count]) => (
-          <button
-            key={v}
-            role="tab"
-            aria-selected={view === v}
-            onClick={() => set({ vista: param || null })}
-            className={cn("h-9 px-3 rounded-md text-sm whitespace-nowrap", view === v ? "bg-primary/10 text-primary font-medium" : "text-subtle hover:bg-muted hover:text-text")}
-          >
-            {label} {data && <span className="tabular-nums text-xs opacity-80">{data.counts[count]}</span>}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex gap-1 overflow-x-auto flex-1" role="tablist" aria-label="Estado">
+          {VIEWS.map(([param, v, label, count]) => (
+            <button
+              key={v}
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => set({ vista: param || null })}
+              className={cn("h-9 px-3 rounded-md text-sm whitespace-nowrap", view === v ? "bg-primary/10 text-primary font-medium" : "text-subtle hover:bg-muted hover:text-text")}
+            >
+              {label} {data && <span className="tabular-nums text-xs opacity-80">{data.counts[count]}</span>}
+            </button>
+          ))}
+        </div>
+        <Button onClick={() => setCreating(true)}>
+          <Plus size={16} /> Nuevo proyecto
+        </Button>
       </div>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-2 items-center mb-4" aria-label="Buscar y filtrar">
@@ -198,6 +224,10 @@ function ProjectsList() {
               onEdit={() => navigate(`/proyectos/${p.id}?edit=1`)}
               onStatus={(s) => act(() => api.put(`/projects/${p.id}`, { status: s }), `Proyecto ${STATUS_META[s].label.toLowerCase()}`)}
               onDelete={() => confirm(`¿Enviar «${p.title}» a la papelera? Sus etapas se conservan y podrás restaurarlo.`) && act(() => api.delete(`/projects/${p.id}`), "Proyecto enviado a la papelera")}
+              onToPersonal={() =>
+                confirm(`¿Convertir «${p.title}» en una meta personal? Se creará la meta con sus fechas, color y avance, y el proyecto irá a la papelera (podrás restaurarlo).`) &&
+                act(() => api.post(`/personal-goals/from-project/${p.id}`), "Convertido en meta personal")
+              }
               onRestore={() => act(() => api.post(`/projects/${p.id}/restore`), "Proyecto restaurado")}
               onPurge={() => confirm(`¿Eliminar «${p.title}» y sus ${p.stagesTotal} etapas definitivamente? No se podrá recuperar.`) && act(() => api.delete(`/projects/${p.id}/purge`), "Proyecto eliminado definitivamente")}
             />
@@ -226,9 +256,10 @@ interface CardProps {
   onDelete: () => void;
   onRestore: () => void;
   onPurge: () => void;
+  onToPersonal: () => void;
 }
 
-function ProjectCard({ project: p, onOpen, onEdit, onStatus, onDelete, onRestore, onPurge }: CardProps) {
+function ProjectCard({ project: p, onOpen, onEdit, onStatus, onDelete, onRestore, onPurge, onToPersonal }: CardProps) {
   const trashed = !!p.deletedAt;
   return (
     <li
@@ -266,6 +297,7 @@ function ProjectCard({ project: p, onOpen, onEdit, onStatus, onDelete, onRestore
                     </MenuItem>
                   );
                 })}
+              <MenuItem onClick={onToPersonal} icon={<Flag size={14} />}>Convertir en meta personal</MenuItem>
               <MenuItem onClick={onDelete} icon={<Trash2 size={14} />} danger>Eliminar</MenuItem>
             </>
           )}

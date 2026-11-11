@@ -9,7 +9,7 @@ import { defaultSopTemplates } from "./sops/seeds";
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 export interface SettingsRow {
   id: number;
@@ -720,6 +720,44 @@ export interface ProjectRow {
   updatedAt: string;
 }
 
+/* ------------------------------------------------------ metas personales
+ * Proyectos › Personal: metas con fecha objetivo que se ven en una línea del
+ * tiempo. Su fase (próxima, en curso, retrasada…) NO se guarda: se deriva de
+ * las fechas, el estado y el avance al leer (ver services/personalGoals).
+ */
+
+export type PersonalGoalStatus = "planned" | "in_progress" | "paused" | "completed";
+
+export interface PersonalGoalHistory {
+  at: string;
+  /** Qué cambió, en texto legible («Avance: 20 % → 45 %»). */
+  text: string;
+}
+
+export interface PersonalGoalRow {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  color: string;
+  priority: WfPriority;
+  status: PersonalGoalStatus;
+  /** Avance manual, entero 0-100. */
+  progress: number;
+  /** Fechas locales `YYYY-MM-DD`. La objetivo es obligatoria: sitúa la meta en la línea del tiempo. */
+  startDate: string | null;
+  targetDate: string;
+  observations: string | null;
+  archived: boolean;
+  completedAt: string | null;
+  /** Últimos cambios relevantes (fechas, avance, estado…), del más reciente al más antiguo. */
+  history: PersonalGoalHistory[];
+  /** Proyecto del que se convirtió, si lo hay (solo informativo). */
+  sourceProjectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* -------------------------------------------------------------- académico
  * Tareas universitarias. Todo cuelga de un semestre (`semesterId`): las
  * materias, el horario y las actividades de un periodo nunca se mezclan con
@@ -856,6 +894,7 @@ export interface Db {
   acadClasses: AcadClassRow[];
   acadActivities: AcadActivityRow[];
   sops: SopRow[];
+  personalGoals: PersonalGoalRow[];
   tombstones: TombstoneRow[];
 }
 
@@ -888,6 +927,7 @@ export const SYNCED_COLLECTIONS = [
   "acadClasses",
   "acadActivities",
   "sops",
+  "personalGoals",
 ] as const;
 
 export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
@@ -913,6 +953,7 @@ export const MODULE_COLLECTIONS = [
   "acadClasses",
   "acadActivities",
   "sops",
+  "personalGoals",
 ] as const satisfies readonly SyncedCollection[];
 
 /** Error con código HTTP, para que la capa de rutas responda como lo hacía Express. */
@@ -1052,6 +1093,7 @@ function emptyDb(): Db {
     acadClasses: [],
     acadActivities: [],
     sops: [],
+    personalGoals: [],
     tombstones: [],
   };
 }
@@ -1181,6 +1223,16 @@ export const MIGRATIONS: Migration[] = [
       for (const t of defaultSopTemplates()) {
         if (!gone.has(t.id) && !db.sops.some((x: { id: string }) => x.id === t.id)) db.sops.push(t);
       }
+    },
+  },
+  {
+    version: 11,
+    description: "Proyectos profesionales y personales: metas personales con línea del tiempo",
+    up: (db) => {
+      // Colección nueva y vacía. Los proyectos existentes NO se tocan: todos
+      // son profesionales (conservan sus etapas); el usuario puede convertir
+      // cualquiera en meta personal desde su menú (el original va a la papelera).
+      db.personalGoals ??= [];
     },
   },
 ];

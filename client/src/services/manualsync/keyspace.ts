@@ -278,6 +278,7 @@ export const COLLECTION_LABEL: Record<string, string> = {
   acadClasses: "Clase del horario",
   acadActivities: "Actividad académica",
   sops: "SOP o plantilla",
+  personalGoals: "Meta personal",
   taskTags: "Etiquetas de tarea",
   settings: "Ajustes",
 };

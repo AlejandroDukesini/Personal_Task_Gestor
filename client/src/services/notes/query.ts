@@ -6,20 +6,25 @@
  * título, descripción, contenido, categoría, subcategoría o adjuntos.
  */
 
-import type { NoteCategoryRow, NoteRow } from "@/services/localDb";
+import { spaceOf, type NoteCategoryRow, type NoteRow, type NoteSpace } from "@/services/localDb";
 
 export type NoteStatus = "active" | "archived" | "trash" | "all";
 export type NoteSort = "updated" | "created" | "title" | "category";
 
 export interface NoteQuery {
+  /** Bloc general (predeterminado) o notas financieras. */
+  space?: NoteSpace;
   q?: string;
+  /** Solo notas con esta etiqueta (sin distinguir mayúsculas ni tildes). */
+  tag?: string;
   status?: NoteStatus;
   categoryId?: string | null;
   subcategoryId?: string | null;
   /** Rango de fechas (AAAA-MM-DD, inclusivo) sobre `dateField`. */
   from?: string;
   to?: string;
-  dateField?: "updatedAt" | "createdAt";
+  /** `date` = la fecha asociada a la nota (las que no tienen quedan fuera). */
+  dateField?: "updatedAt" | "createdAt" | "date";
   hasAttachments?: boolean;
   sort?: NoteSort;
   dir?: "asc" | "desc";
@@ -28,7 +33,7 @@ export interface NoteQuery {
 }
 
 /** Nota sin el documento (las listas no lo necesitan y pesa). */
-export type NoteSummary = Omit<NoteRow, "content"> & { preview: string };
+export type NoteSummary = Omit<NoteRow, "content"> & { preview: string; space: NoteSpace; pinned: boolean; tags: string[]; date: string | null };
 
 export const PAGE_SIZE = 30;
 
@@ -43,7 +48,7 @@ const localDay = (iso: string) => {
 
 export function summarize(n: NoteRow): NoteSummary {
   const { content: _content, ...rest } = n;
-  return { ...rest, preview: n.text.replace(/\s+/g, " ").slice(0, 240) };
+  return { ...rest, space: spaceOf(n), pinned: n.pinned ?? false, tags: n.tags ?? [], date: n.date ?? null, preview: n.text.replace(/\s+/g, " ").slice(0, 240) };
 }
 
 export function queryNotes(notes: NoteRow[], categories: NoteCategoryRow[], q: NoteQuery = {}): { items: NoteSummary[]; total: number; nextOffset: number | null } {
@@ -51,8 +56,12 @@ export function queryNotes(notes: NoteRow[], categories: NoteCategoryRow[], q: N
   const status = q.status ?? "active";
   const words = fold(q.q ?? "").split(/\s+/).filter(Boolean);
   const field = q.dateField ?? "updatedAt";
+  const space = q.space ?? "general";
+  const tag = q.tag ? fold(q.tag) : null;
 
   const filtered = notes.filter((n) => {
+    if (spaceOf(n) !== space) return false;
+    if (tag && !(n.tags ?? []).some((t) => fold(t) === tag)) return false;
     if (status === "active" && (n.archived || n.deletedAt)) return false;
     if (status === "archived" && (!n.archived || n.deletedAt)) return false;
     if (status === "trash" && !n.deletedAt) return false;
@@ -61,13 +70,14 @@ export function queryNotes(notes: NoteRow[], categories: NoteCategoryRow[], q: N
     if (q.subcategoryId && n.subcategoryId !== q.subcategoryId) return false;
     if (q.hasAttachments && !n.attachments.length) return false;
     if (q.from || q.to) {
-      const day = localDay(n[field]);
+      const day = field === "date" ? n.date : localDay(n[field]);
+      if (!day) return false;
       if (q.from && day < q.from) return false;
       if (q.to && day > q.to) return false;
     }
     if (words.length) {
       const hay = fold(
-        [n.title, n.description ?? "", n.text, catName.get(n.categoryId ?? "") ?? "", catName.get(n.subcategoryId ?? "") ?? "", ...n.attachments.flatMap((a) => [a.name, a.label ?? ""])].join("\n")
+        [n.title, n.description ?? "", n.text, ...(n.tags ?? []), catName.get(n.categoryId ?? "") ?? "", catName.get(n.subcategoryId ?? "") ?? "", ...n.attachments.flatMap((a) => [a.name, a.label ?? ""])].join("\n")
       );
       if (!words.every((w) => hay.includes(w))) return false;
     }
@@ -78,6 +88,9 @@ export function queryNotes(notes: NoteRow[], categories: NoteCategoryRow[], q: N
   const sort = q.sort ?? "updated";
   const collator = new Intl.Collator("es", { sensitivity: "base", numeric: true });
   filtered.sort((a, b) => {
+    // Las fijadas, siempre arriba (en cualquier orden).
+    const pin = Number(b.pinned ?? false) - Number(a.pinned ?? false);
+    if (pin) return pin;
     let r = 0;
     if (sort === "updated") r = a.updatedAt.localeCompare(b.updatedAt);
     else if (sort === "created") r = a.createdAt.localeCompare(b.createdAt);

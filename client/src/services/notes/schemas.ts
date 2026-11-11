@@ -14,6 +14,16 @@ const icon = z.string().max(40).refine(isNoteIcon, "Icono desconocido");
 const text = (max: number) => z.string().trim().max(max);
 
 export const MAX_ATTACHMENTS = 30;
+export const MAX_TAGS = 20;
+
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (AAAA-MM-DD)").refine((v) => !Number.isNaN(Date.parse(v)), "Fecha inválida");
+const space = z.enum(["general", "finance"]);
+const tag = text(40).min(1, "La etiqueta no puede estar vacía");
+/** Etiquetas sin repetir (sin distinguir mayúsculas). */
+const tags = z
+  .array(tag)
+  .max(MAX_TAGS, `Máximo ${MAX_TAGS} etiquetas por nota`)
+  .refine((t) => new Set(t.map((x) => x.toLowerCase())).size === t.length, "Etiqueta repetida");
 export const MAX_NOTE_TEXT = 200_000;
 
 export const attachmentRow = z.object({
@@ -44,6 +54,11 @@ export const noteRow = z.object({
   deletedAt: iso.nullable(),
   mathEnabled: z.boolean(),
   mathDecimals: z.number().int().min(0).max(10).nullable(),
+  // v9: opcionales (las filas antiguas no los tienen).
+  space: space.optional(),
+  pinned: z.boolean().optional(),
+  tags: tags.optional(),
+  date: day.nullable().optional(),
   createdAt: iso,
   updatedAt: iso,
 });
@@ -54,6 +69,7 @@ export const noteCategoryRow = z.object({
   color: hexColor,
   icon,
   parentId: idSchema.nullable(),
+  space: space.optional(),
   createdAt: iso,
   updatedAt: iso,
 });
@@ -75,6 +91,11 @@ export const noteInput = z.object({
   archived: z.boolean().optional(),
   mathEnabled: z.boolean().optional(),
   mathDecimals: z.number().int().min(0).max(10).nullable().optional(),
+  /** Solo al crear: el espacio de una nota no cambia después. */
+  space: space.optional(),
+  pinned: z.boolean().optional(),
+  tags: z.array(z.string()).max(MAX_TAGS * 2).optional(),
+  date: day.nullable().optional(),
 });
 
 export const noteCategoryInput = z.object({
@@ -82,6 +103,8 @@ export const noteCategoryInput = z.object({
   color: hexColor.optional(),
   icon: icon.optional(),
   parentId: idSchema.nullable().optional(),
+  /** Solo al crear (las subcategorías heredan el de su categoría). */
+  space: space.optional(),
 });
 
 export const deleteCategoryInput = z.object({

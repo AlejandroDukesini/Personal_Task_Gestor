@@ -1,4 +1,5 @@
-import { Check } from "lucide-react";
+import { useState } from "react";
+import { Check, X } from "lucide-react";
 import { NOTE_COLORS, noteIcons, readableOn } from "@/services/notes/icons";
 import { cn } from "@/lib/utils";
 import { NoteIcon } from "./NoteIcon";
@@ -59,6 +60,58 @@ export function IconPicker({ value, onChange }: { value: string; onChange: (v: s
             <NoteIcon name={i.name} size={18} />
           </button>
         ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Etiquetas libres: Enter o coma para añadir, × para quitar. Sin repetidas. */
+export function TagInput({ value, onChange, suggestions = [], max = 20 }: { value: string[]; onChange: (v: string[]) => void; suggestions?: string[]; max?: number }) {
+  const [draft, setDraft] = useState("");
+  const add = (raw: string) => {
+    const t = raw.trim().replace(/\s+/g, " ").slice(0, 40);
+    setDraft("");
+    if (!t || value.length >= max || value.some((x) => x.toLowerCase() === t.toLowerCase())) return;
+    onChange([...value, t]);
+  };
+  const listId = "gt-tag-suggestions";
+  return (
+    <fieldset>
+      <legend className="text-xs font-medium text-subtle uppercase tracking-wide mb-1.5">Etiquetas</legend>
+      <div className="gt-field flex flex-wrap items-center gap-1.5 px-2 py-1.5 min-h-9">
+        {value.map((t) => (
+          <span key={t} className="gt-pill inline-flex items-center gap-1 bg-muted px-2 py-0.5 text-xs">
+            #{t}
+            <button type="button" className="text-subtle hover:text-text" aria-label={`Quitar etiqueta ${t}`} onClick={() => onChange(value.filter((x) => x !== t))}>
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        {value.length < max && (
+          <input
+            aria-label="Añadir etiqueta"
+            list={suggestions.length ? listId : undefined}
+            className="flex-1 min-w-[8rem] bg-transparent text-sm outline-none"
+            placeholder={value.length ? "" : "Escribe y pulsa Enter"}
+            value={draft}
+            maxLength={40}
+            onChange={(e) => (e.target.value.endsWith(",") ? add(e.target.value.slice(0, -1)) : setDraft(e.target.value))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add(draft);
+              } else if (e.key === "Backspace" && !draft && value.length) onChange(value.slice(0, -1));
+            }}
+            onBlur={() => draft && add(draft)}
+          />
+        )}
+        {suggestions.length > 0 && (
+          <datalist id={listId}>
+            {suggestions.filter((s) => !value.includes(s)).map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        )}
       </div>
     </fieldset>
   );

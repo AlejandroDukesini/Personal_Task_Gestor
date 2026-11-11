@@ -5,7 +5,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { api } from "@/services/api";
-import type { NoteCategoryRow } from "@/services/localDb";
+import type { NoteCategoryRow, NoteSpace } from "@/services/localDb";
 import { errorMessage } from "@/components/finance/shared";
 import { ColorPicker, IconPicker } from "./pickers";
 import { NoteIcon } from "./NoteIcon";
@@ -17,11 +17,13 @@ interface Props {
   onClose: () => void;
   categories: NoteCategory[];
   reload: () => void;
+  /** Bloc al que pertenecen las categorías nuevas. */
+  space?: NoteSpace;
 }
 
 type Form = { id?: string; name: string; color: string; icon: string; parentId: string | null };
 
-export function CategoryManager({ open, onClose, categories, reload }: Props) {
+export function CategoryManager({ open, onClose, categories, reload, space = "general" }: Props) {
   const [form, setForm] = useState<Form | null>(null);
   const [deleting, setDeleting] = useState<NoteCategory | null>(null);
   const top = categories.filter((c) => !c.parentId);
@@ -32,7 +34,7 @@ export function CategoryManager({ open, onClose, categories, reload }: Props) {
     try {
       const body = { name: form.name, color: form.color, icon: form.icon, parentId: form.parentId };
       if (form.id) await api.put(`/notes/categories/${form.id}`, body);
-      else await api.post("/notes/categories", body);
+      else await api.post("/notes/categories", { ...body, space });
       toast.success(form.id ? "Categoría actualizada" : "Categoría creada");
       setForm(null);
       reload();

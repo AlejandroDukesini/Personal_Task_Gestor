@@ -8,7 +8,7 @@ import type { EventRecurrence } from "@/types";
 const STORAGE_KEY = "gestion-tareas:db";
 /** Copia íntegra del guardado anterior a cada migración (ver `migrate`). */
 const BACKUP_KEY_PREFIX = "gestion-tareas:db:backup-v";
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export interface SettingsRow {
   id: number;
@@ -494,12 +494,23 @@ export interface FinRecurringRow {
  * Categoría de notas. Con `parentId` es una subcategoría (un solo nivel): las
  * subcategorías solo se muestran dentro de su categoría principal.
  */
+/**
+ * Espacio de una nota o categoría: el bloc general o el de Finanzas («Notas
+ * financieras»). Es el MISMO sistema de notas (editor, adjuntos, papelera…);
+ * solo cambia dónde se muestra. Ausente = `general` (filas anteriores a la v9,
+ * que no se reescriben: ver la migración 9).
+ */
+export type NoteSpace = "general" | "finance";
+export const NOTE_SPACES = ["general", "finance"] as const;
+export const spaceOf = (row: { space?: NoteSpace }): NoteSpace => row.space ?? "general";
+
 export interface NoteCategoryRow {
   id: string;
   name: string;
   color: string;
   icon: string;
   parentId: string | null;
+  space?: NoteSpace;
   createdAt: string;
   updatedAt: string;
 }
@@ -545,6 +556,14 @@ export interface NoteRow {
   /** Cálculos automáticos en el editor y decimales (null = automático). */
   mathEnabled: boolean;
   mathDecimals: number | null;
+  /* Campos de la v9. Opcionales: ausentes en filas antiguas = valor por defecto. */
+  space?: NoteSpace;
+  /** Fijada arriba de la lista. */
+  pinned?: boolean;
+  /** Etiquetas libres, sin repetir (mayúsculas indiferentes). */
+  tags?: string[];
+  /** Fecha asociada a la nota (`YYYY-MM-DD`): vencimiento, fecha objetivo… */
+  date?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1033,6 +1052,21 @@ export const MIGRATIONS: Migration[] = [
       db.acadActivities ??= [];
     },
   },
+  {
+    version: 9,
+    description: "Notas financieras: espacio de notas en Finanzas, notas fijadas, etiquetas y fechas",
+    up: (db) => {
+      // Las notas existentes NO se reescriben: sin `space` son del bloc
+      // general y sin `pinned`/`tags`/`date` se leen con valores por defecto.
+      // Solo se añaden las categorías financieras iniciales (ids fijos: dos
+      // dispositivos no las duplican; si el usuario borró una, no vuelve).
+      db.noteCategories ??= [];
+      const gone = new Set((db.tombstones ?? []).filter((t: { collection: string }) => t.collection === "noteCategories").map((t: { id: string }) => t.id));
+      for (const c of defaultFinanceNoteCategories()) {
+        if (!gone.has(c.id) && !db.noteCategories.some((x: { id: string }) => x.id === c.id)) db.noteCategories.push(c);
+      }
+    },
+  },
 ];
 
 /* ------------------------------------------------ etiquetas financieras */
@@ -1174,6 +1208,31 @@ export function defaultNoteCategories(): NoteCategoryRow[] {
     c("ideas", "Ideas", "#eab308", "Lightbulb"),
     c("finance", "Finanzas", "#16a34a", "Wallet"),
     c("projects", "Proyectos", "#8b5cf6", "FolderKanban"),
+  ];
+}
+
+/** Categorías iniciales de las notas financieras. Ids fijos, como las demás semillas. */
+export function defaultFinanceNoteCategories(): NoteCategoryRow[] {
+  const c = (id: string, name: string, color: string, icon: string): NoteCategoryRow => ({
+    id: `notecat-fin-${id}`,
+    name,
+    color,
+    icon,
+    parentId: null,
+    space: "finance",
+    createdAt: SEED_STAMP,
+    updatedAt: SEED_STAMP,
+  });
+  return [
+    c("ideas", "Ideas financieras", "#eab308", "Lightbulb"),
+    c("savings", "Planes de ahorro", "#16a34a", "PiggyBank"),
+    c("debts", "Deudas", "#ef4444", "CreditCard"),
+    c("pending", "Pagos pendientes", "#f97316", "Clock"),
+    c("investments", "Inversiones", "#0ea5e9", "TrendingUp"),
+    c("budgets", "Presupuestos", "#6366f1", "Calculator"),
+    c("purchases", "Compras futuras", "#ec4899", "ShoppingCart"),
+    c("goals", "Objetivos económicos", "#8b5cf6", "Target"),
+    c("observations", "Observaciones", "#64748b", "Eye"),
   ];
 }
 
@@ -1549,7 +1608,7 @@ function seed(db: Db): Db {
   ];
 
   db.finCategories = defaultFinCategories();
-  db.noteCategories = defaultNoteCategories();
+  db.noteCategories = [...defaultNoteCategories(), ...defaultFinanceNoteCategories()];
 
   return db;
 }

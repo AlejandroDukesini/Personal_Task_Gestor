@@ -19,6 +19,7 @@ const Categories = lazy(() => import("./pages/Categories").then((m) => ({ defaul
 const Tags = lazy(() => import("./pages/Tags").then((m) => ({ default: m.Tags })));
 const Notes = lazy(() => import("./pages/Notes").then((m) => ({ default: m.Notes })));
 const Projects = lazy(() => import("./pages/Projects").then((m) => ({ default: m.Projects })));
+const FinanceNotePage = lazy(() => import("./components/finance/FinanceNotes").then((m) => ({ default: m.FinanceNotePage })));
 const Academic = lazy(() => import("./pages/Academic").then((m) => ({ default: m.Academic })));
 const Finance = lazy(() => import("./pages/Finance").then((m) => ({ default: m.Finance })));
 const Goals = lazy(() => import("./pages/Goals").then((m) => ({ default: m.Goals })));
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/proyectos/:id" element={<Projects />} />
             <Route path="/universidad" element={<Academic />} />
             <Route path="/finanzas" element={<Finance />} />
+            <Route path="/finanzas/notas/:id" element={<FinanceNotePage />} />
             <Route path="/estadisticas" element={<Stats />} />
             <Route path="/sincronizacion" element={<SyncCenter />} />
             <Route path="/configuracion" element={<SettingsPage />} />

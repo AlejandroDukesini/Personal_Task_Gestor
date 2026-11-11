@@ -23,7 +23,8 @@ describe("modelo y migración", () => {
   });
 
   it("una base nueva trae categorías de notas iniciales con ids fijos", () => {
-    expect(loadDb().noteCategories.map((c) => c.name)).toEqual(["Personal", "Trabajo", "Estudios", "Ideas", "Finanzas", "Proyectos"]);
+    // Las del bloc general (las financieras viven en su propio espacio).
+    expect(loadDb().noteCategories.filter((c) => !c.space).map((c) => c.name)).toEqual(["Personal", "Trabajo", "Estudios", "Ideas", "Finanzas", "Proyectos"]);
   });
 });
 

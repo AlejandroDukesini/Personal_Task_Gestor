@@ -1,0 +1,339 @@
+IMPLEMENTACIÓN DE NUEVAS FUNCIONALIDADES
+=======================================
+Rama: Beta · Fecha: 11 de noviembre de 2026 · Versión de la base local: 8 → 11
+
+
+1. RESUMEN GENERAL
+------------------
+Se incorporaron seis bloques funcionales sobre la aplicación existente, sin
+eliminar funcionalidades ni cambiar de tecnología:
+
+  1. Tareas universitarias (nuevo módulo «Universidad»).
+  2. Notas financieras (pestaña «Notas» dentro de Finanzas).
+  3. SOP — Standard Operating Procedures (nuevo módulo independiente).
+  4. Reestructuración de Proyectos en «Profesional» y «Personal».
+  5. Línea del tiempo de metas personales.
+  6. Sistema operativo de proyectos profesionales con plantillas.
+
+Todo funciona sin conexión, persiste en el almacenamiento local, viaja en las
+copias de seguridad y se sincroniza entre dispositivos con el mecanismo que
+ya existía. Cada bloque se publicó en su propio commit en la rama Beta.
+
+
+2. ARQUITECTURA ENCONTRADA
+--------------------------
+- Cliente React 18 + TypeScript + Vite + Tailwind; escritorio con Tauri 2
+  (client/src-tauri). Rutas con react-router-dom 7, iconos lucide-react,
+  validación con zod 4, animaciones discretas con framer-motion.
+- Aplicación local-first: no hay servidor. `services/api.ts` conserva la
+  interfaz de un cliente HTTP, pero resuelve cada petición contra un router
+  local (`services/localApi.ts` + rutas por módulo con `services/routeKit.ts`).
+- Persistencia: una sola base JSON (`services/localDb.ts`) guardada en
+  IndexedDB/localStorage. Toda escritura pasa por `mutate` (atómica: si algo
+  falla, no se escribe nada). Migraciones versionadas (`MIGRATIONS`), con copia
+  íntegra del guardado anterior antes de migrar.
+- Sincronización manual entre dispositivos (`services/manualsync`) por
+  filas, con lápidas de borrado y validación estricta de cada fila recibida.
+- Copias de seguridad (`services/backup`): copia automática verificada
+  antes de cualquier operación destructiva (lista `DESTRUCTIVE`).
+- Convención clave del proyecto (respetada): las filas existentes NO se
+  reescriben al añadir campos; los campos nuevos son opcionales y se leen
+  con valores por defecto. Las semillas usan ids fijos para que dos
+  dispositivos no dupliquen datos.
+
+
+3. FUNCIONALIDADES IMPLEMENTADAS Y CÓMO USARLAS
+-----------------------------------------------
+3.1 Tareas universitarias (menú «Universidad», ruta /universidad)
+  - Semestres: crear, editar, eliminar (en cascada, con copia previa),
+    marcar como activo (solo uno a la vez) y consultar semestres anteriores
+    con el selector de la cabecera. Cada semestre tiene sus propias materias,
+    horario y actividades.
+  - Materias: nombre, código, profesor, contacto, aula, créditos,
+    descripción y color. Su horario se ve en la tarjeta.
+  - Horario: cuadrícula semanal (lunes a sábado; domingo si tiene clases).
+    Pulsar un día o «Nueva clase» abre un panel lateral. Si dos clases se
+    solapan se avisa mientras se escribe y, al guardar, se pide confirmación;
+    las clases en conflicto se marcan en rojo.
+  - Actividades: tareas, parciales, exposiciones, proyectos finales, trabajos
+    grupales, investigaciones, lecturas, entregas y tipos personalizados.
+    Estados: pendiente, en progreso, en revisión, completada y «Vencida»
+    (derivada de la fecha límite). Prioridad, avance, referencias con
+    enlace y observaciones. Filtros por materia, estado, prioridad, tipo y
+    rango de fechas, búsqueda y orden. El semestre es el filtro superior.
+  - Panel: pendientes, completadas, vencidas, avance medio, próximas
+    entregas, próximos parciales, materias activas con su avance, resumen de
+    la semana (clases de hoy y entregas) y calendario académico mensual.
+    Todo se calcula al leer, así que siempre está actualizado.
+
+3.2 Notas financieras (Finanzas › pestaña «Notas»)
+  - Reutiliza el bloc de notas de la aplicación (mismo editor enriquecido,
+    adjuntos, cálculos, categorías, archivo y papelera) en un espacio propio
+    que no se mezcla con las notas generales.
+  - Categorías iniciales: ideas financieras, planes de ahorro, deudas, pagos
+    pendientes, inversiones, presupuestos, compras futuras, objetivos
+    económicos y observaciones; se pueden crear más (y subcategorías).
+  - Fijar notas arriba, etiquetas (filtro y búsqueda), fecha asociada
+    (filtro por fecha de la nota), colores y búsqueda en todo el contenido.
+    Fijar, etiquetas y fecha también están disponibles en las notas
+    generales.
+  - No requiere tener cuentas y nunca crea ni modifica movimientos, saldos
+    ni presupuestos (comprobado con pruebas).
+
+3.3 SOP (menú «SOP», ruta /sop)
+  - Pestañas «Procedimientos», «Plantillas» y «Archivados».
+  - Cada SOP o plantilla: nombre, descripción, objetivo, categoría, versión,
+    estado (activo/borrador/archivado), responsable, color y fechas de
+    creación y modificación.
+  - En el detalle, editor de estructura sin límites artificiales: etapas
+    que se expanden/contraen con objetivo, descripción, fechas, prioridad,
+    estado, avance, documentación y observaciones; procedimientos con
+    instrucciones paso a paso y su lista de verificación; actividades con
+    fecha límite, prioridad, estado, avance, observaciones, checklist y
+    dependencias (sin ciclos); lista de verificación de la etapa. Todo se
+    crea, edita, duplica, reordena (botones subir/bajar) y elimina.
+  - Plantillas: crear desde cero, duplicar, editar, eliminar, «Guardar como
+    plantilla» un SOP y «Crear SOP con esta plantilla». Cada copia es
+    independiente (ids nuevos en todos los niveles, empieza sin avances).
+    Plantillas iniciales: «Desarrollo de software» (las 9 etapas pedidas) y
+    «Proyecto de investigación».
+  - Archivar y restaurar; eliminar definitivamente (con copia previa).
+  - Funciona sin crear ningún proyecto. Desde una plantilla, «Más acciones ›
+    Usar en un proyecto profesional» crea un proyecto con esa estructura.
+
+3.4 Proyectos: Profesional y Personal (menú «Proyectos»)
+  - Dos pestañas con lógicas distintas. Los proyectos existentes no se
+    modificaron: todos aparecen en «Profesional» con sus etapas.
+  - Cualquier proyecto puede reclasificarse con «Convertir en meta
+    personal» (menú ⋮ de su tarjeta): la meta recoge título, descripción,
+    fechas, color, etiqueta y avance; objetivos y etapas pasan a sus
+    observaciones; el proyecto original va a la papelera y se puede
+    restaurar. Todo en una sola escritura atómica.
+
+3.5 Metas personales y línea del tiempo (Proyectos › Personal)
+  - Metas: nombre, descripción, categoría, color, prioridad, estado,
+    avance, fecha de inicio, fecha objetivo, observaciones, fecha de
+    creación, archivo e historial de cambios.
+  - Línea del tiempo vertical a la izquierda, blanca por defecto (su color
+    se puede cambiar en la barra de años y volver a blanco), dividida por
+    los años que contienen metas (y el actual). Cada meta aparece en su
+    fecha objetivo con una bola de su color, la fecha resaltada, su nombre y
+    una conexión a su tarjeta (fase, avance y tiempo restante). Los inicios
+    se marcan con un punto hueco. «Hoy» se marca en su posición.
+  - Navegación: botón «Hoy» y saltos a cada año (la barra queda fija al
+    desplazarse). Las metas pasadas siguen visibles.
+  - Leyenda por fase (retrasadas, próximas a finalizar, en ejecución,
+    próximas a comenzar, futuras, en pausa, finalizadas): pulsar resalta
+    esa fase y atenúa las demás, sin ocultarlas.
+  - Al pulsar una meta se abre un panel lateral con toda su información,
+    tiempo restante, avance editable, completar/reabrir, archivar,
+    eliminar, editar e historial de modificaciones.
+  - Alternativa de vista en tarjetas y pestaña de archivadas.
+
+3.6 Sistema operativo de proyectos profesionales (Proyectos › Profesional)
+  - Datos nuevos: cliente o entidad, responsable, prioridad y presupuesto
+    opcional (informativo), además de nombre, descripción, fechas, estado,
+    categoría y color existentes.
+  - Al crear: «Desde cero» (etapas iniciales opcionales), «Plantilla SOP» u
+    «Otro proyecto» (duplica su estructura).
+  - En el detalle, nueva vista «Sistema de trabajo» con el mismo editor de
+    estructura que SOP (etapas, procedimientos, actividades con checklist y
+    dependencias, listas, documentación). La vista clásica se conserva como
+    «Resumen». El avance de una etapa con actividades se calcula a partir
+    de ellas; el progreso del proyecto sigue saliendo de las etapas.
+  - Menú del proyecto: «Aplicar plantilla o estructura…» (añadir al final o
+    sustituir, con confirmación), «Guardar como plantilla» y «Duplicar
+    proyecto» (copia que empieza de cero).
+  - Pestaña «Plantillas» dentro de Profesional: administrador de plantillas
+    (la misma biblioteca que SOP) para crear, editar, duplicar, eliminar y
+    usar una plantilla en un proyecto nuevo.
+  - Aplicar una plantilla siempre genera una copia independiente: los
+    cambios del proyecto no alteran la plantilla ni otros proyectos.
+
+
+4. ARCHIVOS CREADOS (rutas bajo client/src)
+-------------------------------------------
+Módulo académico
+  pages/Academic.tsx
+  components/academic/{shared,SemestersView,SubjectsView,ScheduleView,ActivitiesView,OverviewView}.tsx
+  services/academic/{schemas,logic,routes}.ts
+Notas financieras
+  components/finance/FinanceNotes.tsx
+SOP y estructura compartida
+  pages/Sop.tsx
+  components/sop/SopForm.tsx
+  components/workflow/{shared,Editors,StructureEditor}.tsx
+  services/sops/{schemas,seeds,routes}.ts
+  services/workflow/{schemas,logic,ops}.ts
+Proyectos y metas
+  components/projects/{ApplyStructure,ProjectTemplates}.tsx
+  components/projects/personal/{shared,GoalForm,GoalDetail,PersonalGoals,Timeline}.tsx
+  services/personalGoals/{schemas,logic,routes,timeline}.ts
+Comunes
+  components/ui/SidePanel.tsx      (panel lateral que conserva el contexto)
+  lib/runAction.ts                 (acción + aviso discreto + recarga)
+  services/moduleSchemas.ts        (esquemas estrictos de las colecciones nuevas)
+  test/ui.ts                       (utilidades de pruebas de interfaz)
+Pruebas
+  services/academic/academic.test.ts, components/academic/academic.ui.test.ts
+  services/notes/financeNotes.test.ts, components/finance/financeNotes.ui.test.ts
+  services/sops/sops.test.ts, components/sop/sop.ui.test.ts
+  services/personalGoals/{personalGoals,timeline}.test.ts
+  components/projects/{projects,professional}.ui.test.ts
+  components/projects/personal/timeline.ui.test.ts
+  services/projects/professional.test.ts
+Documentación
+  IMPLEMENTACION_NUEVAS_FUNCIONALIDADES.txt (este archivo, en la raíz)
+
+
+5. ARCHIVOS MODIFICADOS (rutas bajo client/src)
+-----------------------------------------------
+  App.tsx                         rutas /universidad, /sop, /sop/:id, /finanzas/notas/:id
+  layouts/AppLayout.tsx, lib/i18n.ts, components/CommandPalette.tsx
+                                  entradas de menú y de la paleta de comandos
+  services/localDb.ts             tipos, colecciones, migraciones 8-11, semillas
+  services/localApi.ts            registro de rutas; exportar/importar copias
+  services/backup/backup.ts       operaciones destructivas con copia previa, recuentos
+  services/manualsync/{engine,keyspace}.ts   validación y etiquetas de sincronización
+  services/notes/{schemas,query,routes,icons}.ts   espacios, fijadas, etiquetas, fecha
+  components/notes/{NoteDetail,CategoryManager,pickers,NoteIcon}.tsx
+  pages/Notes.tsx                 lista reutilizable por espacio (NotesBoard)
+  pages/Finance.tsx               pestaña «Notas»
+  pages/Projects.tsx              pestañas Profesional/Personal, plantillas, conversión
+  components/projects/{ProjectDetail,ProjectForm,StagePanel}.tsx
+  services/projects/{schemas,routes}.ts   campos profesionales y estructura
+  services/notes/notes.test.ts    ajuste: la base nueva trae también categorías financieras
+
+
+6. CAMBIOS EN LA BASE DE DATOS
+------------------------------
+Colecciones nuevas (todas sincronizadas, en copias de seguridad y con
+validación estricta):
+  acadSemesters, acadSubjects, acadClasses, acadActivities   (v8)
+  sops                                                        (v10)
+  personalGoals                                               (v11)
+Campos nuevos OPCIONALES (no se reescriben filas antiguas):
+  notes: space, pinned, tags, date · noteCategories: space     (v9)
+  etapas de proyecto: subtitle, objective, color, startDate, endDate,
+    priority, status, procedures, activities, checklist, documentation,
+    observations                                               (v10)
+  projects: client, owner, priority, budget, sourceTemplateId  (bloque 6;
+    opcionales, no requieren migración)
+Integridad: borrado en cascada con lápidas (semestre → materias, clases y
+actividades; materia → clases y actividades); dependencias entre
+actividades sin ciclos y limpiadas al borrar; categorías de notas que no se
+mezclan entre blocs; ids únicos en todos los niveles; nombres sin duplicar
+donde corresponde (semestres, materias por semestre, SOP y plantillas).
+
+
+7. MIGRACIONES EJECUTADAS
+-------------------------
+  v8  Tareas universitarias: colecciones nuevas vacías.
+  v9  Notas financieras: categorías financieras iniciales con ids fijos (no
+      reaparecen si el usuario las borró en otro dispositivo).
+  v10 SOP: colección nueva + plantillas iniciales con ids fijos.
+  v11 Metas personales: colección nueva vacía; proyectos intactos.
+Antes de migrar, la aplicación guarda una copia íntegra del guardado
+anterior (`gestion-tareas:db:backup-vN`); además, cualquier borrado en
+cascada o definitivo genera antes una copia de seguridad verificada.
+
+
+8. PRUEBAS REALIZADAS
+---------------------
+Pruebas automáticas (vitest), de servicio y de interfaz (happy-dom, montando
+las páginas reales y actuando como el usuario: clics, escritura, envíos):
+  - Académico: CRUD de semestres (activo único, nombres únicos, fechas),
+    materias, horario con detección y confirmación de solapes, actividades,
+    filtros, panel, cascadas con lápidas, migración y sincronización; UI de
+    alta de semestre, materia, clase con solape y actividad.
+  - Finanzas: CRUD, búsqueda, etiquetas, fecha, fijadas, archivo,
+    papelera, duplicado, separación de blocs y categorías, compatibilidad
+    con notas antiguas, sincronización y verificación de que no se tocan
+    movimientos, cuentas, presupuestos, metas ni recurrentes.
+  - SOP: CRUD, archivo, borrado, etapas (incluido crear 13 y reordenar),
+    procedimientos, actividades, listas, dependencias (propias, ciclos,
+    inexistentes, limpieza), avance automático, independencia de copias y
+    plantillas, creación desde proyectos, sincronización; UI completa.
+  - Metas: fases, tiempo restante, CRUD, historial, completar/reabrir,
+    archivo, borrado, búsqueda, conversión de proyectos; disposición de la
+    línea (años, orden, hoy, separaciones mínimas y máximas, inicios); UI de
+    línea, panel de detalle y leyenda.
+  - Profesional: datos nuevos, creación desde plantilla y desde otro
+    proyecto, independencia de estructuras, operaciones, compatibilidad con
+    proyectos antiguos, aplicar/guardar plantillas, duplicar; UI completa.
+  - Regresión: toda la batería previa de la aplicación.
+Compilación: `tsc -b` sin errores y `vite build` correcto tras cada bloque.
+Consola: las pruebas de interfaz no emiten advertencias de React.
+
+
+9. RESULTADOS DE LAS PRUEBAS
+----------------------------
+  Batería completa final: 38 archivos, 594 pruebas superadas, 1 omitida
+  (omitida ya antes de estos cambios), 0 fallos.
+  Evolución: 527 (inicio) → 530 → 543 → 559 → 572 → 580 → 594.
+  Compilación de Tauri: ver apartado 12.
+
+
+10. COMMITS CREADOS
+-------------------
+  c1c88c4 feat(academico): implementar módulo de gestión universitaria
+  15078dc feat(finanzas): incorporar bloc de notas financieras
+  4613cb5 feat(sop): crear sistema independiente de procedimientos
+  6ef630c feat(proyectos): implementar separación personal y profesional
+  0925428 feat(metas): implementar línea del tiempo personal
+  6b0348e feat(proyectos): incorporar plantillas de gestión profesional
+  (más el commit de esta documentación)
+
+
+11. CONFIRMACIÓN DE LOS PUSHES A BETA
+-------------------------------------
+Cada commit se subió a origin/Beta (https://github.com/AlejandroDukesini/
+Personal_Task_Gestor.git) sin force push, y tras cada push se ejecutó
+`git fetch` y se comprobó que `origin/Beta` apuntaba al commit recién creado.
+
+
+12. PROBLEMAS ENCONTRADOS
+-------------------------
+  - El trabajo anterior se había interrumpido a mitad del bloque 1: el
+    servicio académico y sus pruebas existían sin commit y faltaba casi toda
+    la interfaz. Se revisó, se completó y se publicó.
+  - No había pruebas de interfaz: se añadió `test/ui.ts` (montaje con
+    router, eventos reales, animaciones desactivadas en pruebas).
+  - Al añadir las categorías financieras a la base nueva cambió lo que
+    esperaba una prueba previa de notas; se ajustó para comprobar solo las
+    del bloc general.
+  - Compilación de Tauri: NO VERIFICADA. Se lanzó `npx tauri build
+    --no-bundle` (Rust 1.99 disponible), pero el entorno la detuvo por falta
+    de memoria antes de terminar; no llegó a producir resultado ni error. La
+    parte nativa (client/src-tauri: Rust, permisos y configuración) no se
+    modificó, y el frontend que empaqueta compila con `vite build`. Queda
+    pendiente ejecutar `npm run tauri:build` en client/ con memoria libre.
+
+
+13. LIMITACIONES PENDIENTES
+---------------------------
+  - Los «archivos» de actividades académicas son referencias con nombre y
+    enlace; no se suben binarios (las notas sí admiten adjuntos).
+  - El reordenamiento en el editor de estructura usa botones subir/bajar
+    (accesibles con teclado), no arrastrar y soltar.
+  - Los SOP no llevan un historial de versiones: la versión es un campo que
+    gestiona el usuario. Las metas personales sí guardan historial.
+  - El presupuesto del proyecto es informativo y no se vincula con Finanzas.
+  - El color de la línea del tiempo es una preferencia de este dispositivo
+    (no se sincroniza).
+  - La verificación visual se hizo con pruebas de interfaz automatizadas;
+    conviene una revisión manual en la aplicación de escritorio y en el
+    móvil para ajustes finos de diseño.
+
+
+14. RECOMENDACIONES TÉCNICAS
+---------------------------
+  - Mantener `services/workflow` como única implementación de la
+    estructura de trabajo (SOP, plantillas y proyectos) y ampliar ahí.
+  - Si se añade arrastrar y soltar al editor de estructura, reutilizar las
+    operaciones `*.reorder` existentes (ya validan el orden completo).
+  - Considerar un vínculo explícito y opcional entre notas financieras o
+    presupuestos de proyecto y Finanzas, siempre con confirmación.
+  - Ejecutar `npm test` y `npm run build` en client/ antes de pasar Beta a
+    Principal, y revisar en un dispositivo real la línea del tiempo con
+    muchas metas.

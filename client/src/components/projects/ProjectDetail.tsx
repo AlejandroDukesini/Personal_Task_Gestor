@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, CalendarDays, Copy, FileStack, LayoutDashboard, Layers, Loader2, Pencil, RotateCcw, Target, Trash2, Workflow } from "lucide-react";
+import { ArrowLeft, Briefcase, CalendarDays, Copy, Flag, FileStack, LayoutDashboard, Layers, Loader2, Pencil, RotateCcw, Target, Trash2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Empty } from "@/components/ui/Empty";
@@ -9,7 +9,7 @@ import { Markdown } from "@/components/Markdown";
 import { SaveStatus, type SaveState } from "@/components/ui/SaveStatus";
 import { errorMessage } from "@/components/finance/shared";
 import { api } from "@/services/api";
-import { localDateKey, type ProjectRow, type ProjectStatus } from "@/services/localDb";
+import { kindOf, localDateKey, type ProjectRow, type ProjectStatus } from "@/services/localDb";
 import { formatPercent, projectProgress, stageState } from "@/services/projects/progress";
 import { deadlineOf } from "@/services/projects/query";
 import { cn } from "@/lib/utils";
@@ -217,15 +217,28 @@ export function ProjectDetail({ id }: { id: string }) {
     act(async () => setProject(await api.post<ProjectRow>(`/projects/${id}/stages/reorder`, { ids })));
   };
 
+  const personal = kindOf(project) === "personal";
+  /** Lista de la sección a la que pertenece el proyecto. */
+  const listUrl = personal ? "/proyectos?seccion=personal" : "/proyectos";
+
   async function back() {
-    if ((await flush()) || confirm("No se pudieron guardar los últimos cambios. ¿Salir igualmente?")) navigate("/proyectos");
+    if ((await flush()) || confirm("No se pudieron guardar los últimos cambios. ¿Salir igualmente?")) navigate(listUrl);
+  }
+
+  /** Reclasificar: primero se guarda lo pendiente; el proyecto se conserva íntegro. */
+  async function moveKind() {
+    const to = personal ? "professional" : "personal";
+    const label = to === "personal" ? "Personal" : "Profesional";
+    if (!confirm(`¿Mover «${project!.title}» a ${label}? Se conserva todo: etapas, actividades, tareas, fechas y avance.`)) return;
+    if (!(await flush())) return void toast.error("No se pudieron guardar los últimos cambios: inténtalo de nuevo");
+    act(async () => setProject(await api.post<ProjectRow>(`/projects/${id}/kind`, { kind: to })), `Proyecto movido a ${label}`);
   }
 
   return (
     <article className="max-w-6xl mx-auto space-y-4" aria-label={`Proyecto ${project.title}`}>
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={back} className="h-9 px-2 -ml-2 inline-flex items-center gap-1 rounded-md text-sm text-subtle hover:text-text hover:bg-muted">
-          <ArrowLeft size={16} /> Proyectos
+          <ArrowLeft size={16} /> {personal ? "Proyectos personales" : "Proyectos"}
         </button>
         <SaveStatus status={save} onRetry={() => flush()} />
         <div className="ml-auto flex items-center gap-1">
@@ -239,7 +252,7 @@ export function ProjectDetail({ id }: { id: string }) {
                 variant="danger"
                 onClick={() => {
                   if (!confirm(`¿Eliminar «${project.title}» y sus ${project.stages.length} etapas definitivamente? No se podrá recuperar.`)) return;
-                  act(() => api.delete(`/projects/${id}/purge`), "Proyecto eliminado definitivamente").then((r) => r !== null && navigate("/proyectos?vista=papelera"));
+                  act(() => api.delete(`/projects/${id}/purge`), "Proyecto eliminado definitivamente").then((r) => r !== null && navigate(`${listUrl}${personal ? "&" : "?"}vista=papelera`));
                 }}
               >
                 <Trash2 size={14} /> Eliminar definitivamente
@@ -272,13 +285,16 @@ export function ProjectDetail({ id }: { id: string }) {
                 >
                   Guardar como plantilla
                 </MenuItem>
+                <MenuItem icon={personal ? <Briefcase size={14} /> : <Flag size={14} />} onClick={moveKind}>
+                  {personal ? "Mover a Profesional" : "Mover a Personal"}
+                </MenuItem>
                 <MenuItem icon={<Copy size={14} />} onClick={() => act(() => api.post<ProjectRow>(`/projects/${id}/duplicate`), "Proyecto duplicado").then((r) => r && navigate(`/proyectos/${r.id}`))}>Duplicar proyecto</MenuItem>
                 <MenuItem
                   danger
                   icon={<Trash2 size={14} />}
                   onClick={() => {
                     if (!confirm(`¿Enviar «${project.title}» a la papelera? Sus etapas se conservan y podrás restaurarlo.`)) return;
-                    act(() => api.delete(`/projects/${id}`), "Proyecto enviado a la papelera").then((r) => r !== null && navigate("/proyectos"));
+                    act(() => api.delete(`/projects/${id}`), "Proyecto enviado a la papelera").then((r) => r !== null && navigate(listUrl));
                   }}
                 >
                   Eliminar
@@ -298,6 +314,7 @@ export function ProjectDetail({ id }: { id: string }) {
             <h1 className="gt-heading text-2xl break-words">{project.title}</h1>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <StatusBadge status={project.status} />
+              {personal && <Badge>Personal</Badge>}
               {project.tag && <Badge color={project.color}>{project.tag}</Badge>}
               <DeadlineBadge deadline={deadline} />
             </div>

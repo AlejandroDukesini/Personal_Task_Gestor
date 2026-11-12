@@ -20,6 +20,7 @@ export const percent = z.number({ error: (iss) => (iss.input === undefined ? und
 export const MAX_STAGES = 200;
 export const MAX_OBJECTIVES = 50;
 export const PROJECT_STATUSES = ["active", "inactive", "finished"] as const;
+export const PROJECT_KINDS = ["professional", "personal"] as const;
 
 /** Etapa: campos de siempre + los de la estructura de trabajo (v10, opcionales). */
 export const stageRow = z.object({
@@ -58,6 +59,7 @@ export const projectRow = z.object({
   priority: z.enum(WF_PRIORITIES).nullable().optional(),
   budget: z.number().min(0).max(1e15).nullable().optional(),
   sourceTemplateId: idSchema.nullable().optional(),
+  kind: z.enum(PROJECT_KINDS).optional(),
   deletedAt: iso.nullable(),
   createdAt: iso,
   updatedAt: iso,
@@ -90,11 +92,17 @@ export const projectInput = z.object({
   owner: text(120).nullable().optional(),
   priority: z.enum(WF_PRIORITIES).nullable().optional(),
   budget: z.number({ error: (iss) => (iss.input === undefined ? undefined : "El presupuesto debe ser un número") }).min(0, "El presupuesto no puede ser negativo").max(1e15).nullable().optional(),
+  /** Sección donde se crea (por defecto, profesional). */
+  kind: z.enum(PROJECT_KINDS).optional(),
   /** Solo al crear: copiar la estructura de una plantilla/SOP o de otro proyecto. */
   from: z.object({ type: z.enum(["sop", "project"]), id: idSchema }).optional(),
 });
 
-export const projectPatch = projectInput.omit({ id: true, stages: true, from: true }).partial();
+// La clasificación no se cambia con un PUT: tiene su propia operación (`/projects/:id/kind`).
+export const projectPatch = projectInput.omit({ id: true, stages: true, from: true, kind: true }).partial();
+
+/** Reclasificar un proyecto: solo cambia la sección; todo lo demás queda intacto. */
+export const kindInput = z.object({ kind: z.enum(PROJECT_KINDS) });
 
 /** Aplicar una estructura a un proyecto existente: añadirla al final o sustituir la actual. */
 export const applyStructureInput = z.object({

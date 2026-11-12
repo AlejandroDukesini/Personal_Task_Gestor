@@ -12,7 +12,7 @@ import { ProjectDetail } from "@/components/projects/ProjectDetail";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { ActionMenu, DeadlineBadge, formatDay, MenuItem, plainText, ProgressBar, ProjectAvatar, StatusBadge, STATUS_META } from "@/components/projects/shared";
 import { api } from "@/services/api";
-import type { ProjectStatus } from "@/services/localDb";
+import type { ProjectKind, ProjectStatus } from "@/services/localDb";
 import { formatPercent } from "@/services/projects/progress";
 import type { ProjectSummary, ProjectView } from "@/services/projects/query";
 import { cn } from "@/lib/utils";
@@ -39,11 +39,17 @@ const SECTIONS = [
   { id: "personal", label: "Personal", icon: Flag },
 ] as const;
 
+/** Dentro de Personal: proyectos completos (por defecto) o metas en la línea del tiempo. */
+const PERSONAL_TABS = [
+  { id: "", label: "Proyectos", icon: FolderKanban },
+  { id: "metas", label: "Metas", icon: Flag },
+] as const;
+
 /**
- * Proyectos con dos lógicas distintas: «Profesional» (proyectos con etapas,
- * actividades y plantillas) y «Personal» (metas en una línea del tiempo).
- * Los proyectos existentes son profesionales; cualquiera puede convertirse
- * en meta personal desde su menú.
+ * Proyectos en dos secciones: «Profesional» y «Personal». Los proyectos de
+ * ambas son la misma estructura (etapas, actividades, tareas, plantillas);
+ * solo cambia su clasificación (`kind`), y moverlos de una a otra conserva
+ * todo. Personal incluye además las metas en una línea del tiempo.
  */
 export function Projects() {
   const { id } = useParams();
@@ -65,12 +71,33 @@ export function Projects() {
           </button>
         ))}
       </nav>
-      {section === "personal" ? <PersonalGoals /> : <ProjectsList />}
+      {section === "personal" ? (
+        <>
+          <nav className="flex gap-1 mb-3" aria-label="Contenido personal">
+            {PERSONAL_TABS.map((t) => {
+              const current = (params.get("tipo") === "metas" ? "metas" : "") === t.id;
+              return (
+                <button
+                  key={t.id || "proyectos"}
+                  onClick={() => setParams(t.id ? { seccion: "personal", tipo: t.id } : { seccion: "personal" }, { replace: true })}
+                  aria-current={current ? "page" : undefined}
+                  className={cn("flex items-center gap-1.5 h-9 px-3 rounded-md text-sm whitespace-nowrap", current ? "bg-muted text-text font-medium" : "text-subtle hover:text-text hover:bg-muted")}
+                >
+                  <t.icon size={14} aria-hidden /> {t.label}
+                </button>
+              );
+            })}
+          </nav>
+          {params.get("tipo") === "metas" ? <PersonalGoals /> : <ProjectsList kind="personal" />}
+        </>
+      ) : (
+        <ProjectsList kind="professional" />
+      )}
     </div>
   );
 }
 
-function ProjectsList() {
+function ProjectsList({ kind }: { kind: ProjectKind }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<ListResult | null>(null);
@@ -95,7 +122,7 @@ function ProjectsList() {
   const load = useCallback(async () => {
     setLoading(true);
     const [s, d] = sort.split(":");
-    const p = new URLSearchParams({ view, sort: s, dir: d });
+    const p = new URLSearchParams({ view, sort: s, dir: d, kind });
     if (params.get("q")) p.set("q", params.get("q")!);
     if (tag) p.set("tag", tag);
     try {
@@ -105,7 +132,7 @@ function ProjectsList() {
     } finally {
       setLoading(false);
     }
-  }, [view, sort, tag, params]);
+  }, [view, sort, tag, params, kind]);
 
   useEffect(() => {
     load();
@@ -231,8 +258,8 @@ function ProjectsList() {
         ) : items.length === 0 ? (
           <Empty
             icon={FolderKanban}
-            title={filtersActive ? "Ningún proyecto coincide" : view === "trash" ? "La papelera está vacía" : view === "all" ? "Aún no tienes proyectos" : `No hay proyectos ${VIEWS.find((v) => v[1] === view)![2].toLowerCase()}`}
-            description={filtersActive ? "Prueba con otras palabras o quita filtros." : view === "all" ? "Crea tu primer proyecto, divídelo en etapas y sigue su avance." : undefined}
+            title={filtersActive ? "Ningún proyecto coincide" : view === "trash" ? "La papelera está vacía" : view === "all" ? (kind === "personal" ? "Aún no tienes proyectos personales" : "Aún no tienes proyectos") : `No hay proyectos ${VIEWS.find((v) => v[1] === view)![2].toLowerCase()}`}
+            description={filtersActive ? "Prueba con otras palabras o quita filtros." : view === "all" ? (kind === "personal" ? "Crea uno aquí o mueve un proyecto desde Profesional (menú del proyecto › Mover a Personal): conserva todas sus etapas y actividades." : "Crea tu primer proyecto, divídelo en etapas y sigue su avance.") : undefined}
             action={view === "all" && !filtersActive ? <Button onClick={() => setCreating(true)}><Plus size={16} /> Nuevo proyecto</Button> : undefined}
           />
         ) : (
@@ -245,10 +272,12 @@ function ProjectsList() {
                 onEdit={() => navigate(`/proyectos/${p.id}?edit=1`)}
                 onStatus={(s) => act(() => api.put(`/projects/${p.id}`, { status: s }), `Proyecto ${STATUS_META[s].label.toLowerCase()}`)}
                 onDelete={() => confirm(`¿Enviar «${p.title}» a la papelera? Sus etapas se conservan y podrás restaurarlo.`) && act(() => api.delete(`/projects/${p.id}`), "Proyecto enviado a la papelera")}
-                onToPersonal={() =>
-                  confirm(`¿Convertir «${p.title}» en una meta personal? Se creará la meta con sus fechas, color y avance, y el proyecto irá a la papelera (podrás restaurarlo).`) &&
-                  act(() => api.post(`/personal-goals/from-project/${p.id}`), "Convertido en meta personal")
-                }
+                moveLabel={kind === "personal" ? "Mover a Profesional" : "Mover a Personal"}
+                onMove={() => {
+                  const to: ProjectKind = kind === "personal" ? "professional" : "personal";
+                  const label = to === "personal" ? "Personal" : "Profesional";
+                  if (confirm(`¿Mover «${p.title}» a ${label}? Se conserva todo: etapas, actividades, tareas, fechas y avance.`)) act(() => api.post(`/projects/${p.id}/kind`, { kind: to }), `Proyecto movido a ${label}`);
+                }}
                 onRestore={() => act(() => api.post(`/projects/${p.id}/restore`), "Proyecto restaurado")}
                 onPurge={() => confirm(`¿Eliminar «${p.title}» y sus ${p.stagesTotal} etapas definitivamente? No se podrá recuperar.`) && act(() => api.delete(`/projects/${p.id}/purge`), "Proyecto eliminado definitivamente")}
               />
@@ -267,6 +296,7 @@ function ProjectsList() {
           if (params.get("new") || params.get("plantilla")) set({ new: null, plantilla: null });
         }}
         tags={data?.tags ?? []}
+        kind={kind}
         onSaved={(p) => navigate(`/proyectos/${p.id}`)}
       />
     </div>
@@ -281,10 +311,11 @@ interface CardProps {
   onDelete: () => void;
   onRestore: () => void;
   onPurge: () => void;
-  onToPersonal: () => void;
+  onMove: () => void;
+  moveLabel: string;
 }
 
-function ProjectCard({ project: p, onOpen, onEdit, onStatus, onDelete, onRestore, onPurge, onToPersonal }: CardProps) {
+function ProjectCard({ project: p, onOpen, onEdit, onStatus, onDelete, onRestore, onPurge, onMove, moveLabel }: CardProps) {
   const trashed = !!p.deletedAt;
   return (
     <li
@@ -322,7 +353,7 @@ function ProjectCard({ project: p, onOpen, onEdit, onStatus, onDelete, onRestore
                     </MenuItem>
                   );
                 })}
-              <MenuItem onClick={onToPersonal} icon={<Flag size={14} />}>Convertir en meta personal</MenuItem>
+              <MenuItem onClick={onMove} icon={moveLabel.endsWith("Personal") ? <Flag size={14} /> : <Briefcase size={14} />}>{moveLabel}</MenuItem>
               <MenuItem onClick={onDelete} icon={<Trash2 size={14} />} danger>Eliminar</MenuItem>
             </>
           )}

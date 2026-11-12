@@ -1,0 +1,139 @@
+CORRECCIÓN — TRANSFERENCIA ENTRE PROYECTOS PROFESIONALES Y PERSONALES
+=====================================================================
+Fecha: 2026-11-11 · Rama: Beta
+
+1. CAUSA RAÍZ
+-------------
+La opción «Convertir en meta personal» (menú de la tarjeta en Proyectos ›
+Profesional) no reclasificaba el proyecto: llamaba a
+POST /personal-goals/from-project/:id (client/src/services/personalGoals/routes.ts),
+que:
+  a) CREABA una entidad distinta (PersonalGoalRow, con id nuevo) que solo
+     admite título, descripción, categoría, color, fechas y un avance numérico;
+  b) aplanaba objetivos y etapas a texto en «observaciones» (las actividades,
+     tareas, procedimientos, dependencias, prioridades, estados y
+     documentación de las etapas se perdían por completo);
+  c) mandaba el proyecto original a la PAPELERA (deletedAt).
+Es decir: conversión destructiva a otro modelo + borrado lógico del original.
+No era un fallo de persistencia ni de serialización: el diseño de la
+operación era el problema. La sección «Personal» solo sabía mostrar metas,
+no proyectos.
+
+2. ARCHIVOS MODIFICADOS
+-----------------------
+client/src/services/localDb.ts
+  - Tipo ProjectKind ("professional" | "personal") y helper kindOf().
+  - ProjectRow.kind opcional. Ausente = profesional → NO hay migración:
+    los datos existentes no se reescriben.
+client/src/services/projects/schemas.ts
+  - projectRow acepta `kind` (sin esto, backups y sincronización lo
+    descartarían al validar). projectInput acepta `kind` al crear.
+  - projectPatch NO acepta `kind`: editar nunca cambia la sección.
+  - kindInput para la operación de reclasificación.
+client/src/services/projects/query.ts
+  - Filtro por sección (`kind`).
+client/src/services/projects/routes.ts
+  - NUEVA: POST /projects/:id/kind → cambia solo `kind` y `updatedAt`, en
+    una única escritura atómica (`mutate`). Idempotente.
+  - GET /projects?kind=… filtra lista, contadores y etiquetas por sección.
+  - POST /projects guarda `kind` (por defecto profesional).
+  - Duplicar conserva la sección (copia la fila completa).
+client/src/services/personalGoals/routes.ts
+  - ELIMINADA la ruta destructiva /personal-goals/from-project/:id.
+  - NUEVA: POST /personal-goals/:id/recover-project (ver punto 5).
+client/src/pages/Projects.tsx
+  - Personal tiene dos subpestañas: «Proyectos» (proyectos completos, por
+    defecto) y «Metas» (la línea del tiempo, sin cambios).
+  - Menú de la tarjeta: «Mover a Personal» / «Mover a Profesional».
+  - «Nuevo proyecto» crea en la sección en la que estás.
+client/src/components/projects/ProjectForm.tsx
+  - Prop `kind` para crear en la sección correcta.
+client/src/components/projects/ProjectDetail.tsx
+  - Menú «Mover a Personal / Profesional» (guarda antes los cambios
+    pendientes de etapas), insignia «Personal», y «volver» lleva a la
+    sección correcta.
+client/src/components/projects/personal/GoalDetail.tsx
+  - Botón «Recuperar proyecto original» en metas creadas con la conversión
+    antigua.
+Pruebas:
+  client/src/services/projects/reclassify.test.ts           (nuevo)
+  client/src/services/personalGoals/personalGoals.test.ts   (conversión → recuperación)
+  client/src/components/projects/projects.ui.test.ts        (interfaz)
+
+No se tocaron: plantillas SOP, módulo de metas (salvo la ruta de
+conversión retirada y la nueva de recuperación), migraciones ni
+almacenamiento.
+
+3. CÓMO FUNCIONA AHORA
+----------------------
+Proyectos personales y profesionales son el MISMO modelo (ProjectRow) en la
+misma colección. La sección es la propiedad `kind`.
+«Mover a Personal» → POST /projects/:id/kind { kind: "personal" }:
+  1. localiza el proyecto por su id (si está en la papelera → 409);
+  2. cambia `kind` y `updatedAt` (este último para que la sincronización
+     entre dispositivos propague el cambio);
+  3. no toca nada más: mismo id, etapas, procedimientos, actividades,
+     checklist/tareas, dependencias, fechas, estados, prioridades,
+     objetivos, notas/documentación, plantilla de origen, createdAt;
+  4. todo en una escritura atómica; si falla, no se escribe nada.
+El proceso inverso es idéntico con { kind: "professional" }.
+No se crea ni se borra ninguna fila; no hay lápidas; no hay duplicados.
+
+4. PRUEBAS EJECUTADAS (vitest) — TODAS SUPERADAS
+-------------------------------------------------
+Proyecto de prueba: creado desde la plantilla SOP «software» (9 etapas con
+actividades) + etapa extra con procedimiento, 2 actividades (una con
+dependencia y checklist), actividades completadas, en curso y pendientes,
+fechas de inicio/fin en proyecto y etapas, prioridades en proyecto, etapa y
+actividad, objetivos hechos/pendientes, descripción en Markdown, notas de
+etapa, cliente, responsable y presupuesto.
+
+[x] Al trasladarlo a Personal conserva toda su información
+    (igualdad profunda de la fila completa salvo kind/updatedAt).
+[x] El identificador no cambia.
+[x] No se crea duplicado (mismo número de proyectos; una sola fila con ese id).
+[x] No se eliminan etapas ni actividades (10 etapas; actividades intactas).
+[x] Las tareas conservan sus estados (done / in_progress / pending).
+[x] Fechas y prioridades intactas.
+[x] El progreso calculado es idéntico antes y después.
+[x] Persiste tras reiniciar (se descarta la memoria y se relee del
+    almacenamiento) — en ambos sentidos.
+[x] Vuelve a Profesional sin perder información.
+[x] No afecta a otros proyectos, a las plantillas SOP ni a las metas
+    (comparación exacta antes/después).
+[x] `kind` sobrevive a la validación de copias de seguridad y de la
+    sincronización (el esquema ya no lo descarta).
+[x] Editar con PUT no puede cambiar la sección; repetir el traslado no hace
+    nada; duplicar conserva la sección; filas antiguas sin `kind` aparecen en
+    Profesional; un valor inválido → 400; en la papelera → 409.
+[x] Interfaz: mover desde el menú de la tarjeta desaparece de Profesional,
+    aparece en Personal › Proyectos con «0/2 etapas», y vuelve.
+[x] Recuperación de conversiones antiguas (punto 5).
+
+Resultado global: npm test → 39 archivos, 600 pruebas superadas (1 omitida,
+preexistente). npm run build → correcto. tsc → sin errores.
+No se probó manualmente en el navegador ni en la app de escritorio.
+
+5. DATOS AFECTADOS POR EL ERROR ANTERIOR
+----------------------------------------
+La conversión antigua NO borraba el proyecto: lo mandaba a la papelera y
+guardaba su id en la meta (sourceProjectId). Por tanto:
+  - Si el proyecto sigue en la papelera, la información es 100 % recuperable.
+    En Proyectos › Personal › Metas, abre la meta → «Recuperar proyecto
+    original». En una sola escritura: el proyecto sale de la papelera con
+    todo su contenido, queda en Personal, y la meta se ARCHIVA (no se borra;
+    se puede restaurar). Queda anotado en el historial de la meta.
+    (Alternativa manual: Profesional › Papelera › Restaurar → Mover a
+    Personal.)
+  - Si el proyecto se eliminó definitivamente (papelera vaciada o
+    «Eliminar definitivamente»), la app responde «El proyecto original se
+    eliminó definitivamente: no queda información que recuperar» y no
+    inventa etapas. Lo único que queda es el resumen en las observaciones
+    de la meta. Fuentes externas posibles: una copia de seguridad exportada
+    anterior a la conversión (asistente de restauración de copias de la app) u
+    otro dispositivo sincronizado que aún no haya recibido la lápida.
+
+No se ejecutó ninguna limpieza, reinicio ni migración. Los datos reales del
+usuario viven en el navegador / app de escritorio y no se inspeccionaron
+desde aquí: no puedo afirmar cuántos proyectos quedan en la papelera ni si
+alguno se purgó. Eso se ve en la propia app con el botón anterior.

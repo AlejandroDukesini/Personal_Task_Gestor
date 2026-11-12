@@ -695,6 +695,14 @@ export interface ProjectObjective {
 export type ProjectStatus = "active" | "inactive" | "finished";
 
 /**
+ * Clasificación del proyecto: misma estructura (etapas, actividades, tareas…)
+ * en las dos secciones. Ausente en filas antiguas = profesional, así que no
+ * hace falta migrar nada. Cambiarla solo mueve el proyecto de pestaña.
+ */
+export type ProjectKind = "professional" | "personal";
+export const kindOf = (p: { kind?: ProjectKind | null }): ProjectKind => (p.kind === "personal" ? "personal" : "professional");
+
+/**
  * Proyecto. El progreso general NO se guarda: se deriva siempre de las etapas
  * (ver `services/projects/progress.ts`), así que nunca queda desactualizado.
  */
@@ -724,6 +732,8 @@ export interface ProjectRow {
   budget?: number | null;
   /** Plantilla de la que se copió la estructura al crearlo (informativo). */
   sourceTemplateId?: string | null;
+  /** Sección donde se muestra (ver `ProjectKind`). Opcional: ausente = profesional. */
+  kind?: ProjectKind;
   /** Papelera, igual que en notas: null = no está en la papelera. */
   deletedAt: string | null;
   createdAt: string;

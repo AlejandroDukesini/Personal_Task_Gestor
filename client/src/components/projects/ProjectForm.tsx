@@ -7,7 +7,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { ColorPicker, IconPicker } from "@/components/notes/pickers";
 import { errorMessage } from "@/components/finance/shared";
 import { api } from "@/services/api";
-import { newId, type ProjectObjective, type ProjectRow, type ProjectStatus, type WfPriority } from "@/services/localDb";
+import { newId, type ProjectKind, type ProjectObjective, type ProjectRow, type ProjectStatus, type WfPriority } from "@/services/localDb";
 import { parseMoney, toInputValue } from "@/lib/money";
 import { PRIORITY_LABEL } from "@/services/workflow/logic";
 import { WF_PRIORITIES } from "@/services/workflow/schemas";
@@ -59,7 +59,7 @@ const formOf = (p?: ProjectRow | null): Form => ({
  * Crear o editar un proyecto. Nada se escribe hasta pulsar «Guardar»:
  * cancelar (o cerrar) no toca los datos, y si había cambios se pide confirmación.
  */
-export function ProjectForm({ open, onClose, project, tags, onSaved, initialTemplateId }: { open: boolean; onClose: () => void; project?: ProjectRow | null; tags: string[]; onSaved: (p: ProjectRow) => void; initialTemplateId?: string | null }) {
+export function ProjectForm({ open, onClose, project, tags, onSaved, initialTemplateId, kind }: { open: boolean; onClose: () => void; project?: ProjectRow | null; tags: string[]; onSaved: (p: ProjectRow) => void; initialTemplateId?: string | null; /** Sección donde se crea (solo al crear). */ kind?: ProjectKind }) {
   const editing = !!project;
   const [form, setForm] = useState<Form>(() => formOf(project));
   const [busy, setBusy] = useState(false);
@@ -122,7 +122,7 @@ export function ProjectForm({ open, onClose, project, tags, onSaved, initialTemp
     try {
       const saved = editing
         ? await api.put<ProjectRow>(`/projects/${project!.id}`, body)
-        : await api.post<ProjectRow>("/projects", { ...body, id: idRef.current, ...structure });
+        : await api.post<ProjectRow>("/projects", { ...body, id: idRef.current, kind: kind ?? "professional", ...structure });
       toast.success(editing ? "Proyecto actualizado" : "Proyecto creado");
       onSaved(saved);
       onClose();

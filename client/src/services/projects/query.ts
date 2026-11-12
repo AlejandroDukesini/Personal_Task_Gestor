@@ -4,7 +4,7 @@
  * todas las palabras aparezcan en título, descripción, etiqueta u objetivos.
  */
 
-import type { ProjectRow, ProjectStatus } from "@/services/localDb";
+import { kindOf, type ProjectKind, type ProjectRow, type ProjectStatus } from "@/services/localDb";
 import { fold } from "@/services/notes/query";
 import { projectProgress } from "./progress";
 
@@ -14,6 +14,8 @@ export type ProjectSort = "updated" | "created" | "title" | "start" | "end" | "p
 export interface ProjectQuery {
   q?: string;
   view?: ProjectView;
+  /** Sección: sin indicar, todas. */
+  kind?: ProjectKind;
   tag?: string;
   sort?: ProjectSort;
   dir?: "asc" | "desc";
@@ -56,6 +58,7 @@ export function queryProjects(projects: ProjectRow[], today: string, q: ProjectQ
 
   const items = projects
     .filter((p) => {
+      if (q.kind && kindOf(p) !== q.kind) return false;
       if (view === "trash") {
         if (!p.deletedAt) return false;
       } else if (p.deletedAt || (view !== "all" && p.status !== view)) return false;

@@ -6,15 +6,15 @@
  *   historial de la meta.
  * - Archivar es reversible; eliminar es definitivo (copia automática previa y
  *   lápida para la sincronización).
- * - Un proyecto puede convertirse en meta: se crea la meta y el proyecto va a
- *   la papelera (recuperable), en la misma escritura.
+ * - Los proyectos NO se convierten en metas: pasan a Personal conservando
+ *   todo (`POST /projects/:id/kind`). Las metas creadas con la antigua
+ *   conversión pueden recuperar su proyecto original (`recover-project`).
  */
 
 import { ApiError, localDateKey, loadDb, mutate, newId, nowIso, tombstone, type PersonalGoalRow, type PersonalGoalStatus } from "@/services/localDb";
 import { created, find, ok, parse, type Route } from "@/services/routeKit";
 import { fold } from "@/services/notes/query";
 import { NOTE_COLORS } from "@/services/notes/icons";
-import { projectProgress } from "@/services/projects/progress";
 import { PRIORITY_LABEL } from "@/services/workflow/logic";
 import { daysBetween, phaseOf, STATUS_LABEL, timeLeftLabel, yearOf, type GoalPhase } from "./logic";
 import { goalInput, goalPatch, MAX_HISTORY } from "./schemas";
@@ -190,51 +190,29 @@ export const personalGoalRoutes: Route[] = [
   ],
 
   /**
-   * Reclasificar un proyecto como meta personal. Nada se pierde: la meta
-   * recoge título, descripción, fechas, color, etiqueta y avance; los
-   * objetivos y etapas pasan a las observaciones, y el proyecto original va a
-   * la papelera (se puede restaurar).
+   * Recuperar el proyecto original de una meta creada con la antigua
+   * «Convertir en meta personal» (que copiaba solo título, descripción,
+   * fechas y avance y mandaba el proyecto a la papelera). Si el proyecto
+   * sigue existiendo (papelera incluida), vuelve íntegro —mismo id, etapas,
+   * actividades y tareas— a Proyectos › Personal. La meta NO se borra: se
+   * archiva (reversible) para no duplicar. Todo en una sola escritura.
+   * Si el proyecto se eliminó definitivamente no hay nada que recuperar.
    */
-  ["POST", "/personal-goals/from-project/:projectId", ({ params }) =>
-    created(
+  ["POST", "/personal-goals/:id/recover-project", ({ params }) =>
+    ok(
       mutate((db) => {
-        const p = find(db.projects, params.projectId, "Proyecto");
-        if (p.deletedAt) throw new ApiError(409, "El proyecto está en la papelera");
+        const g = find(db.personalGoals, params.id, "Meta");
+        if (!g.sourceProjectId) throw new ApiError(400, "Esta meta no se creó a partir de un proyecto");
+        const p = db.projects.find((x) => x.id === g.sourceProjectId);
+        if (!p) throw new ApiError(404, "El proyecto original se eliminó definitivamente: no queda información que recuperar");
         const ts = nowIso();
-        const today = localDateKey();
-        const progress = Math.round(projectProgress(p.stages));
-        const status: PersonalGoalStatus = p.status === "finished" ? "completed" : p.status === "inactive" ? "paused" : p.startDate && p.startDate > today ? "planned" : "in_progress";
-        const notes = [
-          p.objectives.length ? `Objetivos:\n${p.objectives.map((o) => `${o.done ? "✓" : "•"} ${o.text}`).join("\n")}` : "",
-          p.stages.length ? `Etapas:\n${p.stages.map((s) => `• ${s.title} (${s.progress} %)`).join("\n")}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n\n")
-          .slice(0, 5000);
-        const target = p.endDate ?? (p.startDate && p.startDate > today ? p.startDate : today);
-        const row: PersonalGoalRow = {
-          id: newId(),
-          title: p.title,
-          description: p.description,
-          category: p.tag,
-          color: p.color,
-          priority: "medium",
-          status,
-          progress: status === "completed" ? 100 : progress,
-          startDate: p.startDate && p.startDate <= target ? p.startDate : null,
-          targetDate: target,
-          observations: notes || null,
-          archived: false,
-          completedAt: status === "completed" ? (p.finishedAt ?? ts) : null,
-          history: [{ at: ts, text: `Convertida desde el proyecto «${p.title}»` }],
-          sourceProjectId: p.id,
-          createdAt: ts,
-          updatedAt: ts,
-        };
-        db.personalGoals.push(row);
-        p.deletedAt = ts;
+        p.deletedAt = null;
+        p.kind = "personal";
         p.updatedAt = ts;
-        return row;
+        if (!g.archived) g.archived = true;
+        g.updatedAt = ts;
+        log(g, `Proyecto original «${p.title}» recuperado en Proyectos › Personal`, ts);
+        return { project: p, goal: g };
       })
     ),
   ],

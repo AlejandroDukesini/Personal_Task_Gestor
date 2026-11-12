@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
-import { DB_VERSION, loadDb, migrate } from "@/services/localDb";
+import { DB_VERSION, loadDb, migrate, mutate } from "@/services/localDb";
 import { call, expectStatus } from "@/test/helpers";
 import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { phaseOf, timeLeftLabel } from "./logic";
@@ -90,24 +90,42 @@ describe("CRUD de metas", () => {
   });
 });
 
-describe("conversión de proyectos", () => {
-  it("un proyecto se convierte en meta sin perder datos y el original va a la papelera", async () => {
-    const p = await call("POST", "/projects", { title: "Aprender alemán", color: "#0ea5e9", tag: "Idiomas", startDate: "2026-02-01", endDate: "2027-02-01", description: "Nivel B1", objectives: [{ text: "Aprobar examen", done: false }], stages: [{ title: "A1" }, { title: "A2" }] });
+describe("recuperar proyectos convertidos con la versión anterior", () => {
+  /** Estado que dejaba la antigua «Convertir en meta personal»: meta resumida + proyecto en la papelera. */
+  async function legacyConversion() {
+    const p = await call("POST", "/projects", { title: "Aprender alemán", startDate: "2026-02-01", endDate: "2027-02-01", objectives: [{ text: "Aprobar examen", done: false }], stages: [{ title: "A1" }, { title: "A2" }] });
     await call("PUT", `/projects/${p.id}/stages/${p.stages[0].id}`, { progress: 100 });
-    const g = await call("POST", `/personal-goals/from-project/${p.id}`);
-    expect(g).toMatchObject({ title: "Aprender alemán", color: "#0ea5e9", category: "Idiomas", startDate: "2026-02-01", targetDate: "2027-02-01", description: "Nivel B1", progress: 50, sourceProjectId: p.id });
-    expect(g.observations).toContain("Aprobar examen");
-    expect(g.observations).toContain("A2 (0 %)");
+    await call("DELETE", `/projects/${p.id}`);
+    const g = await goal({ title: "Aprender alemán", targetDate: "2027-02-01" });
+    mutate((db) => {
+      db.personalGoals.find((x) => x.id === g.id)!.sourceProjectId = p.id;
+    });
+    return { p: loadDb().projects.find((x) => x.id === p.id)!, g };
+  }
+
+  it("el proyecto original vuelve íntegro a Personal y la meta se archiva (no se borra)", async () => {
+    const { p, g } = await legacyConversion();
+    const { stages, objectives, id, createdAt } = structuredClone(p);
+    const r = await call("POST", `/personal-goals/${g.id}/recover-project`);
     const proj = loadDb().projects.find((x) => x.id === p.id)!;
-    expect(proj.deletedAt).not.toBeNull();
-    expect(proj.stages).toHaveLength(2); // recuperable íntegro
-    await expectStatus(409, call("POST", `/personal-goals/from-project/${p.id}`));
+    expect(r.project.id).toBe(id);
+    expect(proj).toMatchObject({ id, createdAt, kind: "personal", deletedAt: null });
+    expect(proj.stages).toEqual(stages);
+    expect(proj.objectives).toEqual(objectives);
+    expect(loadDb().projects).toHaveLength(1);
+    const meta = loadDb().personalGoals.find((x) => x.id === g.id)!;
+    expect(meta.archived).toBe(true);
+    expect(meta.history[0].text).toMatch(/recuperado/);
   });
 
-  it("un proyecto finalizado se convierte en meta completada", async () => {
-    const p = await call("POST", "/projects", { title: "Mudanza", status: "finished", endDate: "2026-05-01" });
-    const g = await call("POST", `/personal-goals/from-project/${p.id}`);
-    expect(g).toMatchObject({ status: "completed", progress: 100 });
+  it("si el proyecto se eliminó definitivamente, lo dice y no inventa nada", async () => {
+    const { p, g } = await legacyConversion();
+    await call("DELETE", `/projects/${p.id}/purge`);
+    expect(await expectStatus(404, call("POST", `/personal-goals/${g.id}/recover-project`))).toMatch(/eliminó definitivamente/);
+    expect(loadDb().projects).toHaveLength(0);
+    expect(loadDb().personalGoals.find((x) => x.id === g.id)!.archived).toBe(false);
+    const plain = await goal();
+    await expectStatus(400, call("POST", `/personal-goals/${plain.id}/recover-project`));
   });
 });
 

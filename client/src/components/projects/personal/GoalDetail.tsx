@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Archive, ArchiveRestore, CheckCircle2, History, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, CheckCircle2, FolderKanban, History, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SidePanel } from "@/components/ui/SidePanel";
@@ -26,6 +27,7 @@ interface Props {
 export function GoalDetail({ goal, onClose, onEdit, reload }: Props) {
   const [progress, setProgress] = useState(0);
   const [fresh, setFresh] = useState<GoalView | null>(goal);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setFresh(goal);
@@ -96,6 +98,24 @@ export function GoalDetail({ goal, onClose, onEdit, reload }: Props) {
         </div>
 
         {g.description && <p className="text-sm whitespace-pre-line">{g.description}</p>}
+
+        {g.sourceProjectId && (
+          <div className="rounded-md border border-border p-3 text-sm space-y-2">
+            <p className="text-subtle">
+              Esta meta se creó desde un proyecto con la conversión anterior, que solo copiaba título, descripción, fechas y avance. Si el proyecto original sigue en la papelera, puedes recuperarlo completo (etapas, actividades y tareas) en Proyectos › Personal. La meta se archivará, no se borra.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                confirm("¿Recuperar el proyecto original completo en Proyectos › Personal? La meta se archivará (podrás restaurarla).") &&
+                act(() => api.post(`/personal-goals/${g.id}/recover-project`), "Proyecto original recuperado en Personal").then((ok) => ok && navigate(`/proyectos/${g.sourceProjectId}`))
+              }
+            >
+              <FolderKanban size={14} /> Recuperar proyecto original
+            </Button>
+          </div>
+        )}
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           {rows.map(([k, v]) => (

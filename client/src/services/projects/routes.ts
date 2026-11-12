@@ -8,11 +8,11 @@
  *   definitivamente» lo quita (con sus etapas) y deja una lápida.
  */
 
-import { ApiError, localDateKey, loadDb, mutate, newId, nowIso, tombstone, type Db, type ProjectObjective, type ProjectRow, type ProjectStage } from "@/services/localDb";
+import { ApiError, kindOf, localDateKey, loadDb, mutate, newId, nowIso, tombstone, type Db, type ProjectObjective, type ProjectRow, type ProjectStage } from "@/services/localDb";
 import { created, find, noContent, ok, parse, type Route } from "@/services/routeKit";
 import { NOTE_COLORS } from "@/services/notes/icons";
 import { queryProjects, type ProjectQuery } from "./query";
-import { applyStructureInput, MAX_STAGES, projectInput, projectPatch, reorderInput, stageInput, stagePatch } from "./schemas";
+import { applyStructureInput, kindInput, MAX_STAGES, projectInput, projectPatch, reorderInput, stageInput, stagePatch } from "./schemas";
 import { cloneStages } from "@/services/workflow/logic";
 import { applyOp } from "@/services/workflow/ops";
 import { structureOp } from "@/services/workflow/schemas";
@@ -49,6 +49,7 @@ function readQuery(params: URLSearchParams): ProjectQuery {
   return {
     q: params.get("q") ?? undefined,
     view: (params.get("view") as ProjectQuery["view"]) ?? "all",
+    kind: params.get("kind") === "personal" ? "personal" : params.get("kind") === "professional" ? "professional" : undefined,
     tag: params.get("tag") ?? undefined,
     sort: (params.get("sort") as ProjectQuery["sort"]) ?? "updated",
     dir: params.get("dir") === "asc" ? "asc" : "desc",
@@ -58,16 +59,19 @@ function readQuery(params: URLSearchParams): ProjectQuery {
 export const projectRoutes: Route[] = [
   ["GET", "/projects", ({ query }) => {
     const db = loadDb();
-    const alive = db.projects.filter((p) => !p.deletedAt);
+    const q = readQuery(query);
+    // Contadores y etiquetas de la sección pedida (o de todas si no se indica).
+    const inSection = q.kind ? db.projects.filter((p) => kindOf(p) === q.kind) : db.projects;
+    const alive = inSection.filter((p) => !p.deletedAt);
     const counts = {
       all: alive.length,
       active: alive.filter((p) => p.status === "active").length,
       inactive: alive.filter((p) => p.status === "inactive").length,
       finished: alive.filter((p) => p.status === "finished").length,
-      trash: db.projects.length - alive.length,
+      trash: inSection.length - alive.length,
     };
     const tags = [...new Set(alive.map((p) => p.tag).filter((t): t is string => !!t))].sort((a, b) => a.localeCompare(b, "es"));
-    return ok({ items: queryProjects(db.projects, localDateKey(), readQuery(query)), counts, tags });
+    return ok({ items: queryProjects(db.projects, localDateKey(), q), counts, tags });
   }],
   ["GET", "/projects/:id", ({ params }) => ok(find(loadDb().projects, params.id, "Proyecto"))],
   ["POST", "/projects", ({ body }) => {
@@ -102,6 +106,7 @@ export const projectRoutes: Route[] = [
           priority: data.priority ?? null,
           budget: data.budget ?? null,
           sourceTemplateId: data.from?.type === "sop" ? data.from.id : null,
+          kind: data.kind ?? "professional",
           deletedAt: null,
           createdAt: ts,
           updatedAt: ts,
@@ -135,6 +140,26 @@ export const projectRoutes: Route[] = [
           p.finishedAt = data.status === "finished" ? ts : null;
         }
         p.updatedAt = ts;
+        return p;
+      })
+    );
+  }],
+  /**
+   * Reclasificar (profesional ⇄ personal). Es el MISMO proyecto: mismo id,
+   * mismas etapas, actividades, tareas, fechas, estados, prioridades,
+   * objetivos, documentación y plantilla de origen. Solo cambian `kind` y
+   * `updatedAt` (para que la sincronización propague el cambio). Una sola
+   * escritura atómica; repetirla no hace nada.
+   */
+  ["POST", "/projects/:id/kind", ({ params, body }) => {
+    const { kind } = parse(kindInput, body);
+    return ok(
+      mutate((db) => {
+        const p = activeProject(db, params.id);
+        if (kindOf(p) !== kind) {
+          p.kind = kind;
+          p.updatedAt = nowIso();
+        }
         return p;
       })
     );

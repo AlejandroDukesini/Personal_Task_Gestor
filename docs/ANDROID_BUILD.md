@@ -177,7 +177,29 @@ menor o igual que el instalado.
   (elige Descargas, Drive…). Haz copias periódicas: son la única protección
   frente a una desinstalación.
 
-## 12. Problemas frecuentes
+## 12. Pruebas realizadas (1.4.0)
+
+En el emulador `Pixel API 34` (Android 14, WebView 113), con el APK de release firmado:
+
+| Prueba | Resultado |
+|---|---|
+| Instalar, abrir, cerrar | ✅ |
+| Actualizar encima de una versión anterior (`adb install -r`) | ✅ conserva los datos creados antes |
+| Crear, editar (título y fecha con el selector nativo) y eliminar una tarea | ✅ (el `confirm()` se muestra como diálogo nativo) |
+| Crear un proyecto | ✅ |
+| Crear una nota y escribir (`200+200=` → `400`) | ✅ autoguardado |
+| Exportar una nota (`.txt`) con «Guardar como» | ✅ archivo escrito en Descargas con su contenido |
+| Forzar cierre y reabrir en modo avión | ✅ datos intactos, sin conexión |
+| Minimizar y volver | ✅ mantiene la pantalla |
+| Horizontal | ✅ cambia al diseño con panel lateral |
+| Pantalla de 320 dp | ✅ (las tarjetas del panel apilan el icono por debajo de 360 px) |
+| Teclado virtual | ✅ los formularios quedan por encima del teclado |
+| Botón Atrás | ✅ navega el historial; con un panel abierto lo cierra cambiando de pantalla |
+| Barra inferior frente a los botones del sistema | ✅ (corregido en `MainActivity.kt`) |
+
+Pendiente: probar en un teléfono físico y en una tablet.
+
+## 13. Problemas frecuentes
 
 | Síntoma | Causa / solución |
 |---|---|

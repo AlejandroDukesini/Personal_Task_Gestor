@@ -86,8 +86,12 @@ y un menú «Más».
 
 ### Android
 
-<!-- ANDROID_SCREENSHOTS -->
-_Pendiente: capturas del APK en el emulador._
+APK de release instalado en un emulador Pixel con Android 14. La barra
+inferior sustituye al panel lateral y respeta los botones del sistema.
+
+| Panel principal | Tareas | Proyectos | Notas |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/assets/screenshots/dashboard-android.png" alt="Panel principal en Android" width="200"> | <img src="docs/assets/screenshots/tasks-android.png" alt="Tareas en Android" width="200"> | <img src="docs/assets/screenshots/projects-android.png" alt="Proyecto en Android" width="200"> | <img src="docs/assets/screenshots/notes-android.png" alt="Nota con cálculo automático en Android" width="200"> |
 
 ---
 
@@ -370,6 +374,11 @@ Personal_Task_Gestor/
 - Los **recordatorios** solo se lanzan con la app abierta: no hay servicio en
   segundo plano.
 - **Google Calendar** solo está disponible en la versión web.
+- En Android, el botón **Atrás** vuelve a la pantalla anterior; si hay un
+  panel abierto (menú «Más», formulario) se cierra junto con ese cambio de
+  pantalla, en lugar de cerrarse solo el panel.
+- El APK se ha probado en un emulador (Android 14), todavía no en un
+  teléfono físico.
 - Los **adjuntos de las notas** no viajan en las copias JSON ni en la
   sincronización (solo sus datos descriptivos).
 - El proyecto **no tiene licencia definida** todavía.

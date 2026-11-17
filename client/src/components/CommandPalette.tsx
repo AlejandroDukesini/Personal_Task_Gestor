@@ -23,7 +23,7 @@ import {
   Sun,
   Tag,
   Target,
-  Wifi,
+  RefreshCw,
   Wallet,
   ArrowUpRight,
   ArrowDownLeft,
@@ -241,9 +241,9 @@ export function CommandPalette() {
       {
         id: "sync",
         group: "Acciones",
-        label: "Sincronizar (Wi‑Fi o archivo)",
-        icon: Wifi,
-        keywords: "qr wifi lan movil telefono sync",
+        label: "Sincronizar con archivo cifrado",
+        icon: RefreshCw,
+        keywords: "sincronizar archivo paquete movil telefono sync",
         run: () => navigate("/sincronizacion"),
       },
       {

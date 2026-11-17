@@ -10,15 +10,9 @@ import {
   FileLock2,
   HardDrive,
   History,
-  KeyRound,
-  Laptop,
-  Link2,
-  RefreshCw,
   ShieldCheck,
-  Smartphone,
   Trash2,
   Upload,
-  Wifi,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -49,14 +43,11 @@ import {
   type PairedDevice,
   type SyncLogEntry,
 } from "@/services/manualsync/session";
-import { pairWith, startNetworkSync, type NetworkSession } from "@/services/manualsync/network";
 import type { ChangeItem, DeviceRef, Plan, Resolution, SyncSummary } from "@/services/manualsync/engine";
 import { COLLECTION_LABEL } from "@/services/manualsync/keyspace";
 import { cn } from "@/lib/utils";
 
-type Review =
-  | { kind: "network"; session: NetworkSession }
-  | { kind: "file"; plan: Plan; password: string };
+type Review = { plan: Plan; password: string };
 
 function when(iso: string | null | undefined) {
   if (!iso) return "nunca";
@@ -66,12 +57,11 @@ function when(iso: string | null | undefined) {
 const MB = (n: number | null) => (n === null ? "—" : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 export function SyncCenter() {
-  const { devices, pending, service, listening, listenError, peers, refresh, setListening } = useSyncCenter();
+  const { devices, pending, refresh } = useSyncCenter();
   const [self, setSelf] = useState<DeviceRef | null>(null);
   const [storage, setStorage] = useState<{ persisted: boolean | null; usage: number | null; quota: number | null } | null>(null);
   const [log, setLog] = useState<SyncLogEntry[]>([]);
   const [points, setPoints] = useState<RestorePoint[]>([]);
-  const [step, setStep] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ summary: SyncSummary; warnings: string[]; peer: string; followUp?: string } | null>(null);
@@ -92,64 +82,42 @@ export function SyncCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const networkDevices = devices.filter((d) => d.secret && d.relayUrl);
   const lastOk = log.find((l) => l.status === "ok");
-
-  async function syncNow(peer: PairedDevice) {
-    setBusy(true);
-    try {
-      const session = await startNetworkSync(peer, setStep);
-      setReview({ kind: "network", session });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e), { duration: 8000 });
-      void reload();
-    } finally {
-      setStep(null);
-      setBusy(false);
-    }
-  }
 
   async function confirmReview(res: Record<string, Resolution>) {
     if (!review) return;
     setBusy(true);
     try {
-      if (review.kind === "network") {
-        const { summary, warnings } = await review.session.finish(res);
-        setResult({ summary, warnings, peer: review.session.peer.name });
-      } else {
-        const { answer, warnings } = await commitPlan(review.plan, res, "archivo");
-        const file = await sealFile(answer, review.password);
-        const answerName = `respuesta-para-${slug(review.plan.offer.from.name)}-${stampForFile()}.gtsync`;
-        // Los cambios ya se aplicaron aquí: el archivo de respuesta es imprescindible
-        // para el otro dispositivo, así que si se cancela se vuelve a pedir una vez.
-        if (!wasSaved(await saveFile(answerName, JSON.stringify(file))) && !wasSaved(await saveFile(answerName, JSON.stringify(file)))) {
-          toast.error("Los cambios se aplicaron, pero el archivo de respuesta no se guardó. Repite la sincronización desde el otro dispositivo.", { duration: 10000 });
-        }
-        setResult({
-          summary: answer.summary,
-          warnings,
-          peer: review.plan.offer.from.name,
-          followUp: `Para terminar, importa el archivo de respuesta en «${review.plan.offer.from.name}» (Sincronización → Importar archivo) con la misma contraseña.`,
-        });
+      const { answer, warnings } = await commitPlan(review.plan, res, "archivo");
+      const file = await sealFile(answer, review.password);
+      const answerName = `respuesta-para-${slug(review.plan.offer.from.name)}-${stampForFile()}.gtsync`;
+      // Los cambios ya se aplicaron aquí: el archivo de respuesta es imprescindible
+      // para el otro dispositivo, así que si se cancela se vuelve a pedir una vez.
+      if (!wasSaved(await saveFile(answerName, JSON.stringify(file))) && !wasSaved(await saveFile(answerName, JSON.stringify(file)))) {
+        toast.error("Los cambios se aplicaron, pero el archivo de respuesta no se guardó. Repite la sincronización desde el otro dispositivo.", { duration: 10000 });
       }
+      setResult({
+        summary: answer.summary,
+        warnings,
+        peer: review.plan.offer.from.name,
+        followUp: `Para terminar, importa el archivo de respuesta en «${review.plan.offer.from.name}» (Sincronización → Importar archivo) con la misma contraseña.`,
+      });
       setReview(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e), { duration: 8000 });
     } finally {
       setBusy(false);
-      setStep(null);
       void reload();
     }
   }
 
   function cancelReview() {
-    if (review?.kind === "network") review.session.cancel();
     setReview(null);
   }
 
   return (
     <>
-      <PageHeader title="Sincronización" description="Tus datos viven en este dispositivo. Sincroniza con tu otro dispositivo solo cuando tú quieras." />
+      <PageHeader title="Sincronización" description="Tus datos viven en este dispositivo. Pásalos a otro dispositivo con un archivo cifrado, solo cuando tú quieras." />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Estado */}
@@ -186,44 +154,7 @@ export function SyncCenter() {
           </CardContent>
         </Card>
 
-        {/* Sincronizar ahora */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wifi size={16} /> Sincronizar por Wi‑Fi
-            </CardTitle>
-            <CardDescription>Con el PC encendido, el servicio local arrancado y en la misma red.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {networkDevices.length === 0 ? (
-              <p className="text-sm text-subtle">Aún no has emparejado ningún dispositivo por red. Hazlo en «Emparejar» (abajo).</p>
-            ) : (
-              networkDevices.map((d) => (
-                <div key={d.deviceId} className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    {/iphone|móvil|ipad/i.test(d.name) ? <Smartphone size={18} /> : <Laptop size={18} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{d.name}</div>
-                    <div className="text-xs text-subtle truncate">Última: {when(d.lastSyncAt)}</div>
-                  </div>
-                  <Button onClick={() => syncNow(d)} loading={busy && !review} disabled={busy} className="h-11">
-                    <RefreshCw size={15} /> Sincronizar ahora
-                  </Button>
-                </div>
-              ))
-            )}
-            {step && (
-              <p className="text-sm text-subtle flex items-center gap-2" aria-live="polite">
-                <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> {step}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <FileSync devices={devices} onPlan={(plan, password) => setReview({ kind: "file", plan, password })} onDone={reload} onResult={setResult} />
-
-        <Pairing service={service} listening={listening} listenError={listenError} peers={peers} onToggle={setListening} onPaired={reload} />
+        <FileSync devices={devices} onPlan={(plan, password) => setReview({ plan, password })} onDone={reload} onResult={setResult} />
 
         <Devices devices={devices} onChanged={reload} />
 
@@ -247,7 +178,7 @@ export function SyncCenter() {
                     {l.status === "ok" ? <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" /> : <CloudOff size={15} className="text-danger mt-0.5 shrink-0" />}
                     <div className="min-w-0">
                       <div>
-                        {l.peerName} · {l.method === "red" ? "Wi‑Fi" : "archivo"}
+                        {l.peerName} · {l.method === "red" ? "Wi‑Fi (retirada)" : "archivo"}
                       </div>
                       <div className="text-xs text-subtle">
                         {when(l.at)}
@@ -266,8 +197,8 @@ export function SyncCenter() {
       <Dialog open={!!review} onClose={() => !busy && cancelReview()} title="Revisa la sincronización" description="Nada se aplica hasta que confirmes." size="lg">
         {review && self && (
           <PlanReview
-            plan={review.kind === "network" ? review.session.plan : review.plan}
-            peerName={review.kind === "network" ? review.session.peer.name : review.plan.offer.from.name}
+            plan={review.plan}
+            peerName={review.plan.offer.from.name}
             selfName={self.name}
             busy={busy}
             onConfirm={confirmReview}
@@ -427,7 +358,7 @@ function FileSync({
           <FileLock2 size={16} /> Sincronizar con archivo cifrado
         </CardTitle>
         <CardDescription>
-          Sin red: exporta un paquete aquí, ábrelo en el otro dispositivo (AirDrop, iCloud Drive, correo, USB…) y devuelve el archivo de respuesta.
+          Exporta un paquete aquí, ábrelo en el otro dispositivo (AirDrop, iCloud Drive, correo, USB…) y devuelve el archivo de respuesta.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -511,118 +442,6 @@ function FileSync({
   );
 }
 
-/* ------------------------------------------------------------ emparejar */
-
-function Pairing({
-  service,
-  listening,
-  listenError,
-  peers,
-  onToggle,
-  onPaired,
-}: {
-  service: ReturnType<typeof useSyncCenter.getState>["service"];
-  listening: boolean;
-  listenError: string | null;
-  peers: { deviceId: string; name: string }[];
-  onToggle: (on: boolean) => Promise<void>;
-  onPaired: () => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  if (service) {
-    // Esta app la sirve el servicio local del PC: vista de "PC".
-    const qr = `/qr.png?text=${encodeURIComponent(service.setupUrl)}`;
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Link2 size={16} /> Emparejar y recibir (PC)
-          </CardTitle>
-          <CardDescription>Mientras esta pantalla esté abierta y «Recibir» activado, tus dispositivos emparejados pueden sincronizar con este PC.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <label className="flex items-center justify-between gap-3 min-h-[44px]">
-            <span>
-              <span className="font-medium">Recibir sincronizaciones</span>
-              <span className="block text-xs text-subtle">
-                {listening ? `Escuchando · ${peers.length} dispositivo(s) conectados ahora` : listenError ?? "Desactivado"}
-              </span>
-            </span>
-            <input type="checkbox" className="h-6 w-6 accent-primary" checked={listening} onChange={(e) => void onToggle(e.target.checked)} />
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-[auto,1fr] gap-4 items-start">
-            <img src={qr} alt="Código QR de la página de configuración del iPhone" width={160} height={160} className="rounded-lg bg-white p-2" />
-            <ol className="list-decimal pl-5 space-y-2">
-              <li>
-                En el iPhone, escanea el QR (o abre <code className="gt-mono break-all">{service.setupUrl}</code>) e instala el certificado del PC (una sola vez).
-              </li>
-              <li>
-                Comprueba que su huella coincide: <code className="gt-mono text-[11px] break-all">{service.caFingerprint}</code>
-              </li>
-              <li>
-                En la app del iPhone: Sincronización → Emparejar, con la dirección{" "}
-                <code className="gt-mono break-all">{service.lanUrls[0]}</code> y este código:
-              </li>
-            </ol>
-          </div>
-          <div className="text-center gt-mono text-3xl tracking-widest font-semibold py-2" aria-label={`Código de emparejamiento ${service.code}`}>
-            {service.code}
-          </div>
-          <p className="text-xs text-subtle flex items-start gap-2">
-            <ShieldCheck size={14} className="shrink-0 mt-0.5" /> Solo quien vea esta pantalla conoce el código. Cada dispositivo emparejado recibe su propia clave; puedes revocarlo en «Dispositivos».
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Link2 size={16} /> Emparejar con el PC
-        </CardTitle>
-        <CardDescription>En el PC ejecuta «npm run sync», abre http://localhost:4181 → Sincronización y verás la dirección y el código.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="space-y-3"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            try {
-              const d = await pairWith(url.trim(), code);
-              toast.success(`Emparejado con «${d.name}»`);
-              setCode("");
-              onPaired();
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : String(err), { duration: 9000 });
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <Field label="Dirección del PC" hint="La que muestra el PC, p. ej. https://192.168.1.50:4180">
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" autoCapitalize="none" autoCorrect="off" placeholder="https://192.168.1.50:4180" required />
-          </Field>
-          <Field label="Código de emparejamiento">
-            <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} autoCapitalize="characters" autoCorrect="off" placeholder="XXXX-XXXX" className="gt-mono tracking-widest" required />
-          </Field>
-          <Button type="submit" loading={busy} className="w-full h-11">
-            <KeyRound size={15} /> Emparejar
-          </Button>
-          <p className="text-xs text-subtle">
-            Si no conecta, en el iPhone abre primero la página de configuración del PC (QR en la pantalla del PC) e instala su certificado. Siempre puedes sincronizar con archivos.
-          </p>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
 /* ---------------------------------------------------------- dispositivos */
 
 function Devices({ devices, onChanged }: { devices: PairedDevice[]; onChanged: () => void }) {
@@ -630,7 +449,7 @@ function Devices({ devices, onChanged }: { devices: PairedDevice[]; onChanged: (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ShieldCheck size={16} /> Dispositivos autorizados
+          <ShieldCheck size={16} /> Dispositivos sincronizados
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -643,16 +462,16 @@ function Devices({ devices, onChanged }: { devices: PairedDevice[]; onChanged: (
                 <div className="flex-1 min-w-0">
                   <div className="font-medium truncate">{d.name}</div>
                   <div className="text-xs text-subtle">
-                    {d.secret ? "Wi‑Fi y archivos" : "Solo archivos"} · emparejado {when(d.pairedAt)} · última {when(d.lastSyncAt)}
+                    Primera sincronización {when(d.pairedAt)} · última {when(d.lastSyncAt)}
                   </div>
                 </div>
                 <button
                   className="p-2.5 rounded-md text-subtle hover:text-danger hover:bg-muted"
-                  aria-label={`Revocar ${d.name}`}
+                  aria-label={`Olvidar ${d.name}`}
                   onClick={async () => {
-                    if (!confirm(`¿Revocar «${d.name}»? No podrá sincronizar por red con este dispositivo hasta volver a emparejarlo. Los datos no se borran.`)) return;
+                    if (!confirm(`¿Olvidar «${d.name}»? La próxima sincronización con él será completa. Los datos no se borran.`)) return;
                     await removeDevice(d.deviceId);
-                    toast.success("Dispositivo revocado");
+                    toast.success("Dispositivo olvidado");
                     onChanged();
                   }}
                 >
@@ -688,7 +507,7 @@ function Pending({ devices }: { devices: PairedDevice[] }) {
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         {devices.length === 0 ? (
-          <p className="text-subtle">Empareja o sincroniza con un dispositivo para ver qué falta por enviarle.</p>
+          <p className="text-subtle">Sincroniza por archivo con un dispositivo para ver qué falta por enviarle.</p>
         ) : (
           <>
             <Select aria-label="Respecto a" value={peer} onChange={(e) => setPeer(e.target.value)}>

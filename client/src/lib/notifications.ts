@@ -9,8 +9,7 @@
  *    solo se cae al constructor si no hay SW (escritorio, pestaña suelta).
  *
  * 2. La API solo existe en contextos seguros: https o localhost. Servida por
- *    IP de red local sobre http, `window.Notification` es `undefined`. De ahí
- *    que el servidor de sincronización ofrezca https (ver `sync/server.mjs`).
+ *    IP de red local sobre http, `window.Notification` es `undefined`.
  *
  * 3. En la app de escritorio (Tauri) la WebView2 deniega la Notification API:
  *    allí se usan notificaciones nativas de Windows (plugin `notification`).

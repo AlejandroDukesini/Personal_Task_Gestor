@@ -35,7 +35,6 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 | 🌐 **Web** | [task-gestor.netlify.app](https://task-gestor.netlify.app/) (sitio estático en Netlify) |
 | 📱 **iPhone / Android** | PWA instalable desde el navegador («Añadir a pantalla de inicio») |
 | 🖥️ **Windows** | App de escritorio (Tauri 2): instalador en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest) — ver [Descargar e instalar](#-descargar-e-instalar) |
-| 💻 **PC en red local** | `npm run pc` sirve la app y el relé de sincronización — ver [`sync/README.md`](sync/README.md) |
 
 ---
 
@@ -95,7 +94,7 @@ Los instaladores aún no están firmados: si Windows muestra **«Windows protegi
 | 🗂️ **Proyectos** | Proyectos con icono, color, etiqueta, fechas, objetivos y **etapas** con porcentaje manual. El **progreso general se calcula solo** (media de las etapas), con estados Activo / Inactivo / Finalizado, avisos de plazo y papelera. |
 | 📈 **Estadísticas** | Gráficos (*Recharts*) de tareas por prioridad, hábitos completados en el tiempo e índices de productividad. |
 | 🗂️ **Categorías y etiquetas** | Carpetas jerárquicas con color e icono, y etiquetas globales para organización cruzada. |
-| 🔄 **Sincronización** | Manual iPhone ↔ PC por Wi‑Fi (cifrada de extremo a extremo) o con archivos cifrados. Motor a tres bandas con revisión de conflictos (los financieros siempre los decides tú). |
+| 🔄 **Sincronización** | Manual con archivos cifrados. Motor a tres bandas con revisión de conflictos (los financieros siempre los decides tú). |
 | ⚙️ **Configuración** | Tema claro/oscuro/sistema, color de acento, escala de fuente, **bloqueo por PIN**, copias de seguridad automáticas y cifradas, y paleta de comandos (`Ctrl+K`). |
 
 ---
@@ -113,7 +112,7 @@ Los instaladores aún no están firmados: si Windows muestra **«Windows protegi
 git clone https://github.com/AlejandroDukesini/Personal_Task_Gestor.git
 cd Personal_Task_Gestor
 
-# 2. Instalar dependencias exactas del package-lock (npm workspaces: client, server y sync)
+# 2. Instalar dependencias exactas del package-lock (npm workspaces: client y server)
 npm ci
 
 # 3. Arrancar la app en modo desarrollo
@@ -126,7 +125,6 @@ Abre `http://localhost:5173`. No hace falta base de datos ni backend: los datos 
 
 ```bash
 npm run build && npm run preview   # build de producción servido localmente
-npm run pc                         # build + relé de sincronización en http://localhost:4181
 npm run desktop:dev                # app de escritorio (Tauri) con recarga en caliente
 ```
 
@@ -148,7 +146,7 @@ graph TD
     API -->|copia previa en operaciones destructivas| BK[Copias de seguridad]
     API -->|handleRequest método + ruta| LAPI[services/localApi.ts<br/>rutas tipo REST en el navegador]
     LAPI --> DB[(localDb · IndexedDB<br/>+ espejo en localStorage)]
-    DB <-->|manual y cifrada| SYNC[Relé sync/ · archivos cifrados]
+    DB <-->|manual y cifrada| SYNC[Archivos cifrados]
     DB <-->|opcional| GCAL[Google Calendar API]
 ```
 
@@ -196,7 +194,6 @@ Gestion_tareas/
 ├── server/                     # Backend de referencia (Express + Prisma + SQLite)
 │   ├── prisma/schema.prisma
 │   └── src/routes/             # tasks, habits, goals, events, stats, backup…
-├── sync/                       # Relé de sincronización PC ↔ móvil
 ├── .github/workflows/          # CI (pruebas + instalador de prueba) y releases por tag
 ├── scripts/version.mjs         # Comprobar / fijar la versión en todos los archivos
 ├── DESKTOP.md                  # Escritorio: compilar, CI y publicar versiones
@@ -215,7 +212,7 @@ Gestion_tareas/
 | **Estado y datos** | Zustand, IndexedDB, Web Crypto (AES-256-GCM, PBKDF2, SHA-256) |
 | **Vistas especializadas** | FullCalendar (calendario), Recharts (estadísticas), @hello-pangea/dnd (Kanban), TipTap / ProseMirror (notas), Tesseract.js (OCR local) |
 | **Escritorio** | Tauri 2 (WebView2, instalador NSIS) |
-| **Pruebas** | Vitest (cliente), `node:test` (relé de sincronización) |
+| **Pruebas** | Vitest (cliente) |
 | **Backend de referencia** | Node.js, Express, Prisma ORM, SQLite, Zod |
 | **Despliegue** | Netlify (sitio estático con CSP y cabeceras de seguridad) |
 
@@ -524,14 +521,13 @@ Añadir o borrar etapas lo recalcula; editar descripciones o reordenar no lo cam
 *   *Límite honesto*: ningún navegador garantiza conservar sus datos (limpieza del sitio, modo incógnito, falta de espacio o, en Safari fuera de la app instalada, 7 días sin uso). La protección real es instalar la app y descargar copias con regularidad.
 *   **Puntos de restauración automáticos** antes de migrar, sincronizar o restaurar; **copias de seguridad cifradas** exportables e importables (Sincronización → Copias de seguridad).
 *   **Actualizaciones**: el Service Worker precarga todos los ficheros (offline completo). Una versión nueva no se activa sola: la app muestra «Hay una versión nueva» y al aceptar guarda los datos pendientes y recarga. Actualizar el código no toca los datos; si su formato cambia, se migran con copia previa.
-*   **PC**: `npm run pc` compila y sirve la app en `http://localhost:4181` con sus propios datos. Instrucciones completas de instalación, emparejamiento y sincronización en [`sync/README.md`](sync/README.md).
 
 ---
 
 ## 🧪 Pruebas
 
 ```bash
-npm test                 # cliente (Vitest) + relé de sincronización (node:test)
+npm test                 # cliente (Vitest)
 npm run test -w client   # solo el cliente
 ```
 
@@ -548,9 +544,7 @@ Todos se ejecutan desde la **raíz del proyecto**:
 | `npm run dev` | Servidor de desarrollo de Vite en `http://localhost:5173`. |
 | `npm run build` | Compila y empaqueta el cliente para producción (`client/dist`). |
 | `npm run preview` | Sirve localmente el build de producción. |
-| `npm test` | Pruebas del cliente y del relé de sincronización. |
-| `npm run pc` | Compila la app y la sirve junto al relé de sincronización en `http://localhost:4181`. |
-| `npm run sync` | Arranca solo el relé de sincronización PC ↔ móvil. |
+| `npm test` | Pruebas del cliente. |
 | `npm run desktop:dev` | App de escritorio (Tauri) con recarga en caliente. |
 | `npm run desktop:build` | Build de escritorio + instalador NSIS (online) para Windows. |
 | `npm run desktop:build:offline` | Ídem, con WebView2 incluido (instalador offline). |
@@ -612,4 +606,3 @@ Copy-Item "server/prisma/dev.db" -Destination "backup-$(Get-Date -Format 'yyyy-M
 | :--- | :--- |
 | [`INSTALL.md`](INSTALL.md) | Instalación para usuarios: qué archivo descargar, advertencias de Windows, desinstalación y problemas habituales. |
 | [`DESKTOP.md`](DESKTOP.md) | Compilación de la app de escritorio (Tauri 2), CI y cómo publicar una versión con tags. |
-| [`sync/README.md`](sync/README.md) | Instalación en PC, emparejamiento y sincronización manual con el iPhone. |

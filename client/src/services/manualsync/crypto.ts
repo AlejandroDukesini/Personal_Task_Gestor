@@ -1,26 +1,24 @@
 /**
- * Cifrado de lo que sale del dispositivo: archivos de sincronización, copias
- * de seguridad y mensajes por red.
+ * Cifrado de lo que sale del dispositivo: archivos de sincronización y copias
+ * de seguridad.
  *
  * AES-256-GCM (confidencialidad + integridad: un byte alterado hace fallar el
  * descifrado) con clave derivada por PBKDF2-SHA256. Todo con Web Crypto, que
  * existe en Safari/iOS y en Node; requiere contexto seguro (https o
  * localhost), igual que la instalación como PWA.
  *
- * La contraseña o el secreto de emparejamiento nunca se guardan en el
- * archivo: sin ellos, el contenido es ilegible.
+ * La contraseña nunca se guarda en el archivo: sin ella, el contenido es
+ * ilegible.
  */
 
 export const ENVELOPE_FORMAT = "gestion-tareas/sealed";
 const ITERATIONS_PASSWORD = 310_000;
-/** Los secretos de emparejamiento son aleatorios de 256 bits: basta con menos iteraciones. */
-const ITERATIONS_SECRET = 10_000;
 
 export interface Envelope {
   format: typeof ENVELOPE_FORMAT;
   v: 1;
   /** Qué hay dentro (visible sin descifrar, para mensajes de error útiles). */
-  content: "backup" | "offer" | "answer" | "message";
+  content: "backup" | "offer" | "answer";
   alg: "AES-GCM";
   kdf: "PBKDF2-SHA256";
   iterations: number;
@@ -50,10 +48,6 @@ export function fromB64(b64: string): Uint8Array {
   return out;
 }
 
-export function randomSecret(bytes = 32): string {
-  return toB64(crypto.getRandomValues(new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
 const keyCache = new Map<string, Promise<CryptoKey>>();
 
 function deriveKey(secret: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
@@ -76,17 +70,13 @@ function deriveKey(secret: string, salt: Uint8Array, iterations: number): Promis
   return k;
 }
 
-/** Cifra un objeto. `kind` = "password" (lo escribe el usuario) o "secret" (emparejamiento). */
-export async function seal(
-  value: unknown,
-  secret: string,
-  content: Envelope["content"],
-  kind: "password" | "secret" = "password"
-): Promise<Envelope> {
+/** Cifra un objeto con una contraseña escrita por el usuario. */
+export async function seal(value: unknown, secret: string, content: Envelope["content"]): Promise<Envelope> {
   if (!secret) throw new Error("Falta la contraseña");
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const iterations = kind === "password" ? ITERATIONS_PASSWORD : ITERATIONS_SECRET;
+  // `open` lee las iteraciones del propio sobre: los archivos antiguos se siguen abriendo.
+  const iterations = ITERATIONS_PASSWORD;
   const key = await deriveKey(secret, salt, iterations);
   const plain = new TextEncoder().encode(JSON.stringify(value));
   // El tipo de contenido entra como dato autenticado: no se puede cambiar

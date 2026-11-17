@@ -150,7 +150,6 @@ salvo que se marque la casilla de borrar datos. Pasos para el usuario en
 | Fuente Inter | Sí | Incluida con `@fontsource/inter` (antes Google Fonts). |
 | Importar hábitos desde una captura (OCR) | Sí | Motor y datos de idioma incluidos (ver abajo). |
 | Google Calendar | **No disponible en escritorio** | Ver «Google Calendar». Sigue disponible en la web. |
-| Sincronización manual con el móvil | Requiere red local | Depende del servicio `sync/` (Node). En escritorio, el modo «este PC escucha» no se activa porque la app no la sirve ese servicio; el resto de la app no se ve afectado. |
 
 ### OCR incluido
 

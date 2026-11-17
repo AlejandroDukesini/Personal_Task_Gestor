@@ -19,7 +19,7 @@
  *
  * Además aquí viven:
  *  - un almacén clave-valor para metadatos locales del dispositivo
- *    (dispositivos emparejados, bases de sincronización, historial), que
+ *    (dispositivos sincronizados, bases de sincronización, historial), que
  *    NUNCA se sincronizan ni se exportan en las copias de datos;
  *  - el estado de guardado que muestra la interfaz.
  */

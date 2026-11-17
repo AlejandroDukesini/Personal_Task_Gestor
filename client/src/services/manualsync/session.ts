@@ -25,7 +25,7 @@ import {
   type Resolution,
   type SyncSummary,
 } from "./engine";
-import { isEnvelope, open, randomSecret, seal, type Envelope } from "./crypto";
+import { isEnvelope, open, seal, type Envelope } from "./crypto";
 
 const DEVICE_KEY = "gestion-tareas:device";
 const MAX_BASES = 5;
@@ -35,11 +35,6 @@ export interface PairedDevice {
   deviceId: string;
   name: string;
   pairedAt: string;
-  /** Secreto compartido para cifrar los mensajes por red (no para archivos). */
-  secret: string | null;
-  /** Dónde está su servicio de sincronización (solo si es el PC). */
-  relayUrl: string | null;
-  relayToken: string | null;
   lastSyncAt: string | null;
 }
 
@@ -48,6 +43,7 @@ export interface SyncLogEntry {
   at: string;
   peer: string;
   peerName: string;
+  /** "red": registros antiguos de la sincronización por Wi‑Fi, ya retirada. */
   method: "red" | "archivo";
   status: "ok" | "error" | "cancelado";
   summary?: SyncSummary;
@@ -104,9 +100,6 @@ export async function upsertDevice(d: Partial<PairedDevice> & { deviceId: string
   const prev = all.find((x) => x.deviceId === d.deviceId);
   const next: PairedDevice = {
     pairedAt: new Date().toISOString(),
-    secret: null,
-    relayUrl: null,
-    relayToken: null,
     lastSyncAt: null,
     ...prev,
     ...d,
@@ -115,7 +108,7 @@ export async function upsertDevice(d: Partial<PairedDevice> & { deviceId: string
   return next;
 }
 
-/** Revoca un dispositivo: deja de poder sincronizar por red y se olvida su base. */
+/** Olvida un dispositivo y su base común (la próxima sincronización será completa). */
 export async function removeDevice(id: string): Promise<void> {
   await kvSet("sync:devices", (await listDevices()).filter((d) => d.deviceId !== id));
   const bases = await kvGet<Record<string, Base[]>>("sync:bases", {});
@@ -340,4 +333,3 @@ export async function rollbackTo(id: number): Promise<void> {
   notifyApplied();
 }
 
-export { randomSecret };

@@ -128,30 +128,87 @@ tres plataformas, salvo donde se indica.
 | :--- | :--- |
 | Versión | 1.4.0 (`versionCode` 1004000) |
 | Android mínimo | 7.0 (API 24), declarado en el APK; probado en un emulador con Android 14 (API 34) |
-| Arquitecturas | arm64-v8a, armeabi-v7a, x86, x86_64 (APK universal) |
+| Arquitecturas | arm64-v8a, armeabi-v7a, x86, x86_64 (APK universal: sirve para cualquier teléfono) |
 | Tamaño | 61,2 MiB (64,2 MB) |
 | Firma | Firmado con la clave de release del proyecto (APK Signature Scheme v2) |
 | Identificador | `com.alejandrodukesini.gestortareas` |
 | Permisos | Internet (no se usa para tus datos) y notificaciones (se piden al activar los recordatorios) |
-| Descarga | **Todavía no hay un APK publicado.** Cuando se publique, estará en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases). |
+| Descarga | **Todavía no hay un APK publicado.** Cuando se publique, estará en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases) como `PlanTaskGestor_<versión>_android.apk`. |
 
-**Instalar:**
+La app no está en Google Play: se instala directamente desde el archivo
+`.apk`. No necesitas cuenta ni conexión para usarla.
 
-1. Descarga el archivo `.apk` desde la página de Releases del proyecto.
-2. Ábrelo en el teléfono (desde *Archivos* o la notificación de descarga).
-3. Si Android lo pide, permite **«Instalar apps desconocidas»** solo para la
-   app desde la que lo abriste (navegador o *Archivos*).
-4. Pulsa **Instalar**. Si Play Protect avisa de que la app es desconocida
-   (no viene de Play Store), elige *Más detalles › Instalar de todas formas*.
-5. Abre **Plan Task Gestor** desde el cajón de aplicaciones.
+#### Paso 1 · Conseguir el APK en el teléfono
 
-**Actualizar:** instala el APK nuevo **encima** del anterior, sin desinstalar:
-tus datos se conservan. Android solo acepta la actualización si el APK nuevo
-tiene **el mismo identificador y la misma clave de firma**, y un número de
-versión mayor.
+Elige **una** de estas opciones:
 
-> Desinstalar la app borra sus datos. Antes de desinstalar o cambiar de
-> teléfono, exporta una copia en *Configuración › Copias de seguridad*.
+- **Desde el teléfono (lo más fácil):** abre
+  [Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases)
+  en el navegador del teléfono, busca la versión más reciente, despliega
+  **Assets** y toca el archivo que termina en **`.apk`**. Si el navegador
+  avisa de que «este tipo de archivo puede ser dañino», toca **Descargar de
+  todas formas**.
+- **Desde el PC con cable USB:** descarga el `.apk` en el PC, conecta el
+  teléfono, elige **Transferencia de archivos** en la notificación USB del
+  teléfono y copia el archivo a la carpeta **Download** del teléfono.
+- **Desde el PC sin cable:** súbelo a Google Drive (o envíatelo por correo o
+  Telegram) y descárgalo en el teléfono desde ahí.
+
+#### Paso 2 · Abrir el archivo
+
+Toca la notificación de descarga, o abre la app **Archivos** (o *Mis
+archivos*), entra en **Descargas** y toca el `.apk`.
+
+#### Paso 3 · Permitir la instalación (solo la primera vez)
+
+Android bloquea por defecto las apps que no vienen de Play Store. La primera
+vez verás un aviso como *«Por tu seguridad, tu teléfono no puede instalar
+apps desconocidas de esta fuente»*:
+
+1. Toca **Configuración** en ese aviso.
+2. Activa **Permitir desde esta fuente**. El permiso se da solo a la app con
+   la que abriste el APK (el navegador o *Archivos*).
+3. Pulsa **atrás** (←) para volver a la instalación.
+
+> Si no aparece el aviso, el permiso está en *Ajustes › Aplicaciones ›
+> Acceso especial › Instalar apps desconocidas*. El nombre exacto cambia
+> según la marca del teléfono.
+
+#### Paso 4 · Instalar
+
+1. Toca **Instalar** y espera unos segundos.
+2. Si **Play Protect** muestra un aviso de *app desconocida* o *app no
+   segura*, toca **Más detalles › Instalar de todas formas**. Aparece porque
+   la app no está publicada en Play Store, no porque se haya detectado algo.
+3. Toca **Abrir**, o búscala como **Plan Task Gestor** en el cajón de
+   aplicaciones.
+
+Puedes empezar a usarla directamente. Si activas recordatorios, Android te
+pedirá permiso para enviar notificaciones.
+
+Opcional, por seguridad: después de instalar, vuelve a desactivar *Instalar
+apps desconocidas* para el navegador o *Archivos*.
+
+#### Actualizar a una versión nueva
+
+Descarga el APK nuevo y repite los pasos 2 y 4 **sin desinstalar** la
+versión actual: Android la reemplaza y **tus datos se conservan**. Android
+solo acepta la actualización si el APK nuevo tiene el mismo identificador,
+la misma clave de firma y un número de versión mayor. Por precaución,
+exporta antes una copia en *Configuración › Copias de seguridad*.
+
+#### Problemas frecuentes
+
+| Mensaje | Qué hacer |
+| :--- | :--- |
+| «No se instaló la app» o «conflicto con un paquete existente» | Tienes instalado un APK firmado con otra clave (por ejemplo, una compilación de prueba) o una versión más nueva. Exporta una copia de seguridad, desinstala la app, instala el APK nuevo e importa la copia. |
+| «Error al analizar el paquete» | La descarga se cortó o el teléfono tiene una versión anterior a Android 7.0. Descarga el archivo de nuevo. |
+| No hay botón **Instalar** | Falta el permiso del paso 3, o el gestor de archivos no puede instalar APK: ábrelo desde la notificación de descarga del navegador. |
+
+> **Desinstalar la app borra sus datos.** Antes de desinstalar o cambiar de
+> teléfono, exporta una copia en *Configuración › Copias de seguridad* y
+> guárdala fuera del teléfono (Drive, PC, correo). En el teléfono nuevo,
+> instala la app e importa esa copia.
 
 ### Windows
 
@@ -164,28 +221,64 @@ versión mayor.
 | Firma | **Sin firmar**: Windows SmartScreen puede mostrar «Windows protegió su PC» |
 | Descarga | **Todavía no hay instaladores publicados para la 1.4.0.** Las releases existentes ([`v1.1.0 BETA`](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases)) no incluyen archivos. Se publicarán en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases) (ver [Publicar una versión](#publicar-una-versión)). |
 
-**Instalar:**
+#### Paso 1 · Elegir y descargar el instalador
 
-1. Descarga `PlanTaskGestor_<versión>_x64-setup.exe` desde Releases.
-2. Haz doble clic sobre él. Si aparece «Windows protegió su PC», pulsa
-   **Más información › Ejecutar de todas formas** (pasa porque el instalador
-   aún no tiene firma de código).
-3. Sigue el asistente: *Siguiente › Instalar › Finalizar*.
-4. Abre **Plan Task Gestor** desde el menú Inicio o el acceso directo. La
-   ventana se abre maximizada.
+Abre [Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases),
+busca la versión más reciente y despliega **Assets**:
 
-**Verificar la descarga (opcional):** cada release incluye `SHA256SUMS.txt`
-y una atestación de procedencia de GitHub.
+| Archivo | Cuándo usarlo |
+| :--- | :--- |
+| **`PlanTaskGestor_<versión>_x64-setup.exe`** | **Recomendado.** Instalador normal (~12 MB). Solo necesita Internet si al equipo le falta WebView2 (Windows 11 ya lo trae). |
+| `PlanTaskGestor_<versión>_x64-offline-setup.exe` | Equipos sin Internet (~220 MB, incluye WebView2). |
+
+Si el navegador avisa de que el archivo «no se descarga habitualmente»,
+abre el menú de esa descarga (**⋯**) y elige **Conservar** (en Edge:
+*Conservar › Mostrar más › Conservar de todas formas*).
+
+#### Paso 2 · Ejecutar el instalador
+
+1. Abre la carpeta **Descargas** y haz doble clic en el `.exe`.
+2. Si aparece **«Windows protegió su PC»** (SmartScreen), pulsa **Más
+   información** y después **Ejecutar de todas formas**. Aparece porque el
+   instalador todavía no tiene firma de código.
+3. No pide permisos de administrador: se instala solo para tu usuario.
+
+#### Paso 3 · Seguir el asistente
+
+1. Pulsa **Siguiente**.
+2. Deja la carpeta de instalación propuesta (o elige otra) y pulsa
+   **Instalar**.
+3. Si falta WebView2, el instalador lo descarga e instala solo: espera a que
+   termine.
+4. Pulsa **Finalizar**.
+
+#### Paso 4 · Abrir la app
+
+Búscala como **Plan Task Gestor** en el menú Inicio o usa el acceso directo.
+La ventana se abre maximizada. Para tenerla a mano: clic derecho en su icono
+de la barra de tareas › **Anclar a la barra de tareas**.
+
+#### Actualizar a una versión nueva
+
+Cierra la app, descarga el instalador nuevo y ejecútalo **sin desinstalar**
+la versión actual: la reemplaza y **tus datos se conservan**.
+
+#### Verificar la descarga (opcional)
+
+Cada release incluye `SHA256SUMS.txt` y una atestación de procedencia de
+GitHub. En PowerShell, dentro de la carpeta de descargas:
 
 ```powershell
 Get-FileHash .\PlanTaskGestor_<versión>_x64-setup.exe        # compárala con SHA256SUMS.txt
 gh attestation verify PlanTaskGestor_<versión>_x64-setup.exe -R AlejandroDukesini/Personal_Task_Gestor
 ```
 
-**Desinstalar:** *Configuración de Windows › Aplicaciones › Plan Task Gestor ›
-Desinstalar*. Si no marcas la casilla de borrar datos, se conservan en
-`%LOCALAPPDATA%\com.alejandrodukesini.gestortareas` y una reinstalación los
-vuelve a ver.
+#### Desinstalar
+
+*Configuración de Windows › Aplicaciones › Aplicaciones instaladas › Plan
+Task Gestor › Desinstalar*. Si no marcas la casilla de borrar datos, se
+conservan en `%LOCALAPPDATA%\com.alejandrodukesini.gestortareas` y una
+reinstalación los vuelve a ver.
 
 > **Si tenías la app con su nombre anterior, «Plan Gestor Task»:** el
 > instalador nuevo se instala aparte y **ve los mismos datos**. Puedes
@@ -316,8 +409,9 @@ podrán publicar actualizaciones que se instalen encima. Detalles en
    Windows (online y offline), genera `SHA256SUMS.txt` y la atestación, y crea
    la release. Nunca sobrescribe una release existente.
 5. **El APK no se compila en CI** (la clave de firma no está en GitHub): hay
-   que generarlo en local con `npm run android:build` y adjuntarlo a la
-   release a mano (`gh release upload vX.Y.Z <apk>`).
+   que generarlo en local con `npm run android:build`, renombrarlo a
+   `PlanTaskGestor_X.Y.Z_android.apk` y adjuntarlo a la release a mano
+   (`gh release upload vX.Y.Z PlanTaskGestor_X.Y.Z_android.apk`).
 
 ---
 

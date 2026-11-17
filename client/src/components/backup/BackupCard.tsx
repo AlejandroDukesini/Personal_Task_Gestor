@@ -3,7 +3,6 @@ import toast from "react-hot-toast";
 import { ArchiveRestore, CheckCircle2, DatabaseBackup, Download, HardDrive, History, Info, Lock, ShieldCheck, Smartphone, Trash2, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { useSaveStatus } from "./SaveIndicator";

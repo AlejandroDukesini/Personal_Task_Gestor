@@ -8,7 +8,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Empty } from "@/components/ui/Empty";
 import { api } from "@/services/api";
-import { loadDb, type NoteAttachment, type NoteRow } from "@/services/localDb";
+import type { NoteAttachment, NoteRow } from "@/services/localDb";
 import { docToHtml, docToMarkdown, docToText, withCalculatedResults, type DocNode } from "@/services/notes/content";
 import { clearDraft, draftIsNewer, readDraft, writeDraft, type NoteDraft } from "@/services/notes/drafts";
 import { flushStorage } from "@/services/storage";

@@ -99,11 +99,6 @@ body {
     box-shadow: var(--shadow-2);
   }
 
-  /* Reacciona al puntero: el glass levanta, el brutalismo no se mueve. */
-  .gt-interactive:hover {
-    transform: translateY(calc(-1 * var(--hover-lift, 0px)));
-  }
-
   /* Geometría de control (botones). El color lo sigue poniendo Tailwind. */
   .gt-control {
     border-radius: var(--radius-md);
@@ -253,7 +248,6 @@ body {
   input,
   textarea,
   [contenteditable],
-  .gt-selectable,
   p,
   li,
   td,

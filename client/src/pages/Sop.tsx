@@ -69,7 +69,6 @@ function SopList() {
   };
 
   const act = (fn: () => Promise<unknown>, msg: string) => runAction(fn, msg, load);
-  const noun = kind === "template" ? "plantilla" : "SOP";
 
   return (
     <>

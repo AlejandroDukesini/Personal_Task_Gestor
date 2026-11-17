@@ -1,4 +1,4 @@
-# Release oficial: solo al publicar un tag vX.Y.Z (ver DESKTOP.md › Publicar
+# Release oficial: solo al publicar un tag vX.Y.Z (ver README.md › Publicar
 # una versión). Valida tag y versiones, compila con ci.yml y crea la release
 # con los instaladores, SHA256SUMS.txt y atestación de procedencia.
 # Nunca sobrescribe una release existente.
@@ -95,7 +95,7 @@ jobs:
 
           No hace falta instalar Node.js ni Rust. Los instaladores no están firmados:
           si Windows muestra «Windows protegió su PC», pulsa **Más información › Ejecutar de todas formas**.
-          Guía completa: [INSTALL.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/INSTALL.md).
+          Guía completa: [README › Instalación](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/README.md#instalación).
           EOF
           gh release create "$TAG" installers/*.exe installers/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \

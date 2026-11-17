@@ -45,7 +45,7 @@ function fromSettings(s: Settings) {
   };
 }
 
-export const useConfig = create<ConfigState>((set, get) => ({
+export const useConfig = create<ConfigState>((set) => ({
   loaded: false,
   ...DEFAULTS,
   dateFormat: "dd/MM/yyyy",

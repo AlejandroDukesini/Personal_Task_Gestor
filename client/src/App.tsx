@@ -43,8 +43,8 @@ export default function App() {
   useEffect(() => {
     applyDom();
     loadConfig().catch(() => {});
-    // Solo observa (cambios pendientes) y, en el PC, escucha si el usuario lo
-    // activó. Nunca sincroniza por su cuenta.
+    // Solo observa los cambios pendientes de sincronizar; nunca sincroniza
+    // por su cuenta.
     startSyncCenter();
   }, [applyDom, loadConfig]);
 

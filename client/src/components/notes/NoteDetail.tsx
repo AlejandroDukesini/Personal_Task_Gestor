@@ -217,8 +217,8 @@ export function NoteDetail({ id, categories, startEditing, onChanged, paths = DE
         setMissing(true);
       }
     };
-    window.addEventListener("gt:sync-applied", onSync);
-    return () => window.removeEventListener("gt:sync-applied", onSync);
+    window.addEventListener("gt:data-replaced", onSync);
+    return () => window.removeEventListener("gt:data-replaced", onSync);
   }, [id]);
 
   async function saveAttachments(next: NoteAttachment[]) {

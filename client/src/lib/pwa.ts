@@ -149,8 +149,7 @@ export function isStandalone(): boolean {
 
 /**
  * Las notificaciones y el Service Worker exigen contexto seguro. Servida por
- * IP de red local sobre http, la PWA no se instala ni avisa: por eso el
- * servidor de sincronización sirve https.
+ * IP de red local sobre http, la PWA no se instala ni avisa.
  */
 export function isSecureContextForPwa(): boolean {
   return typeof window !== "undefined" && window.isSecureContext;

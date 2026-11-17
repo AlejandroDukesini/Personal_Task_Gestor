@@ -101,7 +101,7 @@ export function RestoreWizard() {
     if (kind.status === "sync-package") {
       setPhase({
         name: "failed",
-        message: "Este archivo es un paquete de sincronización (no una copia de seguridad). Ábrelo en Sincronización › Sincronizar con archivo cifrado.",
+        message: "Es un paquete de sincronización entre dispositivos, una función que ya no existe: no es una copia de seguridad. Exporta una copia en el otro dispositivo (Configuración › Copias de seguridad) y restáurala aquí.",
         canRetry: false,
       });
       return;

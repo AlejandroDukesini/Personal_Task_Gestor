@@ -59,7 +59,7 @@ vida personal sin depender de una cuenta en la nube.
   de ahorro se reflejan en los objetivos.
 - Es **local-first**: no hay registro, servidor ni telemetría. Todo funciona
   sin Internet y los datos no salen del dispositivo salvo que tú exportes una
-  copia o un paquete de sincronización.
+  copia de seguridad.
 - La **misma app** se instala en Windows (Tauri), en Android (APK) y se usa
   desde el navegador (PWA).
 
@@ -77,8 +77,8 @@ app crea en una instalación nueva (sin datos personales).
 | <img src="docs/assets/screenshots/tasks-desktop.png" alt="Gestión de tareas" width="440"> | <img src="docs/assets/screenshots/calendar-desktop.png" alt="Calendario mensual con tareas y eventos" width="440"> |
 | **Proyectos (profesional y personal)** | **Hábitos** |
 | <img src="docs/assets/screenshots/projects-desktop.png" alt="Gestión de proyectos" width="440"> | <img src="docs/assets/screenshots/habits-desktop.png" alt="Seguimiento de hábitos" width="440"> |
-| **Finanzas** | **Panel principal** |
-| <img src="docs/assets/screenshots/finance-desktop.png" alt="Módulo de finanzas" width="440"> | <img src="docs/assets/screenshots/dashboard-desktop.png" alt="Panel principal" width="440"> |
+| **Finanzas** | **Copias de seguridad** |
+| <img src="docs/assets/screenshots/finance-desktop.png" alt="Módulo de finanzas" width="440"> | <img src="docs/assets/screenshots/backups-desktop.png" alt="Copias de seguridad: crear, descargar, restaurar e importar" width="440"> |
 
 La barra lateral de la izquierda es el **panel de navegación** de escritorio;
 en el móvil se convierte en una barra inferior con las secciones principales
@@ -114,8 +114,7 @@ tres plataformas, salvo donde se indica.
 | **Finanzas** | Cuentas, movimientos, transferencias, presupuestos, metas de ahorro, finalidades, recurrentes, análisis, notas financieras e importación de CSV, Excel, JSON, SQL, SQLite y Cashew. |
 | **Estadísticas** | Gráficos de tareas por prioridad, hábitos en el tiempo e índices de productividad. |
 | **Categorías y etiquetas** | Organización jerárquica con color e icono, y etiquetas globales. |
-| **Sincronización** | Pasar datos entre dispositivos con un **archivo cifrado** (`.gtsync`): revisión de cambios y conflictos antes de aplicar nada. |
-| **Copias de seguridad** | Exportación completa (opcionalmente cifrada), asistente de restauración y puntos de restauración automáticos. |
+| **Copias de seguridad** | En *Configuración › Copias de seguridad*: crear y **exportar** una copia completa (opcionalmente cifrada), **importar** o restaurar una copia (también la de otro dispositivo) con un asistente que muestra su contenido antes de aplicarla, y lista de las **copias encontradas** en la app (automáticas y manuales) para restaurarlas, descargarlas o borrarlas. |
 | **Configuración** | Tema claro/oscuro, apariencias, color de acento, tamaño de letra, bloqueo por PIN, recordatorios y paleta de comandos (`Ctrl+K`). |
 | **Google Calendar** | Sincronización de hábitos con Google Calendar. **Solo en la versión web**: Google no permite su inicio de sesión dentro de la app instalada. |
 
@@ -221,9 +220,9 @@ y no está publicada en Google Play ni en Microsoft Store.
   almacenamiento principal, una copia espejo en `localStorage` y puntos de
   restauración automáticos.
 - Sobreviven a cerrar la app, reiniciar y actualizar.
-- Cada plataforma tiene **sus propios datos**. Para pasarlos de un
-  dispositivo a otro hay dos formas: exportar una **copia de seguridad** y
-  restaurarla en el otro, o usar **Sincronización › archivo cifrado**.
+- Cada plataforma tiene **sus propios datos** y no hay sincronización entre
+  dispositivos. Para pasarlos de uno a otro: exporta una **copia de
+  seguridad** en el primero e impórtala en el segundo.
 - Haz copias periódicas (*Configuración › Copias de seguridad*): son la única
   protección frente a una desinstalación o la pérdida del dispositivo.
 
@@ -354,7 +353,7 @@ Personal_Task_Gestor/
 
 - Sin cuentas, sin servidor y sin telemetría: los datos no salen del
   dispositivo salvo que los exportes.
-- Copias de seguridad y paquetes de sincronización cifrables con AES-256-GCM
+- Copias de seguridad cifrables con AES-256-GCM
   (clave derivada con PBKDF2-SHA256); la contraseña nunca se guarda.
 - Bloqueo opcional por PIN.
 - Política de seguridad de contenido (CSP) estricta en las apps nativas y en la web.
@@ -379,6 +378,6 @@ Personal_Task_Gestor/
   pantalla, en lugar de cerrarse solo el panel.
 - El APK se ha probado en un emulador (Android 14), todavía no en un
   teléfono físico.
-- Los **adjuntos de las notas** no viajan en las copias JSON ni en la
-  sincronización (solo sus datos descriptivos).
+- Los **adjuntos de las notas** entran en la copia descargada mientras esté
+  marcada «Incluir los archivos adjuntos» (opción activada por defecto).
 - El proyecto **no tiene licencia definida** todavía.

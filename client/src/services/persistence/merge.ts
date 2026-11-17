@@ -8,9 +8,46 @@
 // se fusiona fila a fila: se toma lo que cambió cada lado respecto a la base
 // común y, solo si ambos cambiaron la MISMA fila, gana la edición más reciente.
 
-import type { Db } from "@/services/localDb";
-import { entriesOf, norm, DELETED, type Entry } from "@/services/manualsync/keyspace";
-import { writeEntry } from "@/services/manualsync/engine";
+import { nowIso, type Db } from "@/services/localDb";
+import { stripDangerousKeys } from "@/services/routeKit";
+import { entriesOf, norm, splitKey, DELETED, type Entry } from "./keyspace";
+
+/** Escribe una entrada en la base (fila, conjunto de etiquetas, ajustes o borrado). */
+export function writeEntry(db: Db, key: string, row: Record<string, unknown> | null, deletedAt?: string): void {
+  const { collection, id } = splitKey(key);
+  if (collection === "settings") {
+    if (row) {
+      // Un valor ausente en la otra versión no borra el propio: solo se
+      // copian valores definidos.
+      for (const [k, v] of Object.entries(row)) {
+        if (k === "id") continue;
+        if (v === null && (k === "appName" || k === "language" || k === "timezone" || k === "currency" || k === "dateFormat")) continue;
+        (db.settings as unknown as Record<string, unknown>)[k] = v;
+      }
+    }
+    return;
+  }
+  if (collection === "taskTags") {
+    db.taskTags = db.taskTags.filter((t) => t.taskId !== id);
+    if (row && Array.isArray(row.tagIds)) for (const tagId of row.tagIds) db.taskTags.push({ taskId: id, tagId: String(tagId) });
+    return;
+  }
+  const list = db[collection as keyof Db] as unknown as Record<string, unknown>[];
+  if (!Array.isArray(list)) return;
+  const i = list.findIndex((r) => r.id === id);
+  if (row) {
+    const clean = stripDangerousKeys(row);
+    if (i >= 0) list[i] = clean;
+    else list.push(clean);
+    db.tombstones = db.tombstones.filter((t) => !(t.collection === collection && t.id === id));
+  } else {
+    if (i >= 0) list.splice(i, 1);
+    const at = deletedAt ?? nowIso();
+    const t = db.tombstones.find((x) => x.collection === collection && x.id === id);
+    if (t) t.deletedAt = at;
+    else db.tombstones.push({ collection, id, deletedAt: at });
+  }
+}
 
 export interface MergeStats {
   fromOurs: number;

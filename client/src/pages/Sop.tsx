@@ -55,10 +55,10 @@ function SopList() {
 
   useEffect(() => {
     const t = setTimeout(load, q ? 200 : 0);
-    window.addEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
     return () => {
       clearTimeout(t);
-      window.removeEventListener("gt:sync-applied", load);
+      window.removeEventListener("gt:data-replaced", load);
     };
   }, [load, q]);
 
@@ -193,8 +193,8 @@ function SopDetail({ id }: { id: string }) {
   useEffect(() => {
     load();
     api.get<ListResult>("/sops?status=all").then((r) => setCategories(r.categories)).catch(() => undefined);
-    window.addEventListener("gt:sync-applied", load);
-    return () => window.removeEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
+    return () => window.removeEventListener("gt:data-replaced", load);
   }, [load]);
 
   const runOp: OpRunner = useCallback(

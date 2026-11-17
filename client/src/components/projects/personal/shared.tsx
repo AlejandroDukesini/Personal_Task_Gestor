@@ -13,7 +13,7 @@ export interface GoalsResult {
   counts: { active: number; archived: number };
 }
 
-/** Metas personales (activas o archivadas). Se releen tras cada cambio y al sincronizar. */
+/** Metas personales (activas o archivadas). Se releen tras cada cambio y al restaurar una copia. */
 export function usePersonalGoals(archived: boolean) {
   const [data, setData] = useState<GoalsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +27,8 @@ export function usePersonalGoals(archived: boolean) {
   }, [archived]);
   useEffect(() => {
     load();
-    window.addEventListener("gt:sync-applied", load);
-    return () => window.removeEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
+    return () => window.removeEventListener("gt:data-replaced", load);
   }, [load]);
   return { data, error, reload: load };
 }

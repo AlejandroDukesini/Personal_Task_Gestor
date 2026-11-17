@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -20,7 +20,6 @@ import {
   FolderKanban,
   GraduationCap,
   Workflow,
-  RefreshCw,
   MoreHorizontal,
   X,
   type LucideIcon,
@@ -28,7 +27,6 @@ import {
 import { useTheme } from "@/store/theme";
 import { useConfig } from "@/store/config";
 import { usePalette } from "@/store/palette";
-import { useSyncCenter } from "@/store/syncCenter";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { SaveIndicator } from "@/components/backup/SaveIndicator";
 import { StorageAlerts } from "@/components/backup/StorageAlerts";
@@ -58,7 +56,6 @@ const nav: NavItem[] = [
   { to: "/objetivos", icon: Target, label: "nav.goals" },
   { to: "/finanzas", icon: Wallet, label: "nav.finance" },
   { to: "/estadisticas", icon: BarChart3, label: "nav.stats" },
-  { to: "/sincronizacion", icon: RefreshCw, label: "nav.sync" },
   { to: "/configuracion", icon: SettingsIcon, label: "nav.settings" },
 ];
 
@@ -143,16 +140,6 @@ function Brand() {
   );
 }
 
-function SyncCount() {
-  const pending = useSyncCenter((s) => s.pending);
-  if (!pending) return null;
-  return (
-    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-warning/20 text-warning text-[11px] font-semibold flex items-center justify-center tabular-nums" aria-label={`${pending} cambios sin sincronizar`}>
-      {pending > 99 ? "99+" : pending}
-    </span>
-  );
-}
-
 function SidebarContent() {
   const t = useT();
   return (
@@ -175,7 +162,6 @@ function SidebarContent() {
           >
             <it.icon size={18} />
             {t(it.label)}
-            {it.to === "/sincronizacion" && <SyncCount />}
           </NavLink>
         ))}
       </nav>
@@ -189,7 +175,6 @@ function SidebarContent() {
 function Topbar() {
   const { theme, setTheme } = useTheme();
   const openPalette = usePalette((s) => s.setOpen);
-  const pending = useSyncCenter((s) => s.pending);
   const t = useT();
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Laptop;
@@ -219,15 +204,6 @@ function Topbar() {
 
         <div className="flex-1 hidden md:block" />
         <SaveIndicator />
-        <Link
-          to="/sincronizacion"
-          className="relative h-11 w-11 flex items-center justify-center rounded-md text-subtle hover:bg-muted"
-          aria-label={pending ? `Sincronización: ${pending} cambios pendientes` : "Sincronización"}
-          title={pending ? `${pending} cambios sin sincronizar` : "Sincronización"}
-        >
-          <RefreshCw size={19} />
-          {!!pending && <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-warning ring-2 ring-surface" aria-hidden />}
-        </Link>
         <button onClick={cycle} className="h-11 w-11 flex items-center justify-center rounded-md hover:bg-muted text-subtle" title={`Tema: ${theme}`} aria-label={`Tema: ${theme}`}>
           <Icon size={19} />
         </button>
@@ -239,7 +215,6 @@ function Topbar() {
 function TabBar({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean }) {
   const t = useT();
   const loc = useLocation();
-  const pending = useSyncCenter((s) => s.pending);
   const inMore = MORE.some((m) => loc.pathname.startsWith(m.to));
   return (
     <nav
@@ -269,7 +244,6 @@ function TabBar({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean })
           >
             <MoreHorizontal size={22} aria-hidden />
             {t("nav.more")}
-            {!!pending && <span className="absolute top-2 right-[calc(50%-18px)] h-2.5 w-2.5 rounded-full bg-warning" aria-hidden />}
           </button>
         </li>
       </ul>
@@ -312,11 +286,6 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
                   >
                     <it.icon size={22} aria-hidden />
                     {t(it.label)}
-                    {it.to === "/sincronizacion" && (
-                      <span className="absolute top-2 right-2">
-                        <SyncCount />
-                      </span>
-                    )}
                   </NavLink>
                 </li>
               ))}

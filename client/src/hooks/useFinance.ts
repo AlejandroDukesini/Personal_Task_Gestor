@@ -31,8 +31,8 @@ export interface FinanceData {
 
 /**
  * Estado completo de finanzas + adaptador para el motor de cálculo. Se relee
- * solo tras escrituras propias (`reload`) o cuando la sincronización aplica
- * datos de otro dispositivo (evento `gt:sync-applied`, vía useResource).
+ * solo tras escrituras propias (`reload`) o cuando se restauran
+ * datos desde una copia (evento `gt:data-replaced`, vía useResource).
  */
 export function useFinance() {
   const res = useResource(() => api.get<FinanceData>("/finance/state"));

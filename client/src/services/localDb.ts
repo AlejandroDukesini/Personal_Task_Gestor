@@ -1477,9 +1477,9 @@ configureStorage({
         /* ignorado a propósito */
       }
     }
-    // Las vistas releen (mismo evento que la sincronización entre dispositivos).
+    // Las vistas releen los datos (mismo evento que al restaurar una copia).
     if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
-      window.dispatchEvent(new CustomEvent("gt:sync-applied"));
+      window.dispatchEvent(new CustomEvent("gt:data-replaced"));
     }
   },
 });

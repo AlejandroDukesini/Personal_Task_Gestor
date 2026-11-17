@@ -171,8 +171,7 @@ menor o igual que el instalado.
 - **Se borran** al desinstalar la app o al usar *Ajustes › Apps › Plan Task
   Gestor › Borrar datos*.
 - Los datos del PC **no pasan solos** al teléfono: usa *Configuración ›
-  Copias de seguridad* (exportar en uno, restaurar en el otro) o el
-  *Centro de sincronización*.
+  Copias de seguridad* (exportar en uno, importar en el otro).
 - En Android, «Descargar copia» abre el selector **Guardar como** del sistema
   (elige Descargas, Drive…). Haz copias periódicas: son la única protección
   frente a una desinstalación.

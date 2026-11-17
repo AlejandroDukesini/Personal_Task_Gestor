@@ -4,7 +4,6 @@ import { IDBFactory } from "fake-indexeddb";
 import { bootDb, DB_VERSION, dropCache, loadDb, migrate } from "@/services/localDb";
 import { __resetStorageForTests, flushStorage } from "@/services/storage";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { formatPercent, normalizePercent, projectProgress, stageState } from "./progress";
 import { deadlineOf } from "./query";
 
@@ -317,16 +316,5 @@ describe("persistencia, copias y sincronización", () => {
     const { projects: _p, ...old } = backup.data;
     await call("POST", "/backup/import", { data: old });
     expect(loadDb().projects).toHaveLength(1);
-  });
-
-  it("viajan en la sincronización y se valida lo recibido", async () => {
-    const p = await newProject({ stages: [{ title: "A" }] });
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    const entry = offer.entries.find((e: any) => e.key === `projects:${p.id}`);
-    expect(entry).toBeTruthy();
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    (tampered.entries.find((e: any) => e.key === `projects:${p.id}`)!.row as any).stages[0].progress = -3;
-    expect(validateOffer(tampered).errors.join(" ")).toMatch(/proyecto no válido/);
   });
 });

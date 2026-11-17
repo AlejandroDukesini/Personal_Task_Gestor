@@ -4,8 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { bootDb, dropCache, loadDb } from "@/services/localDb";
 import { __resetStorageForTests, __tuneForTests, flushStorage, listRestorePoints } from "@/services/storage";
 import { __resetFilesForTests, getFile, putFile } from "@/services/notes/files";
-import { seal } from "@/services/manualsync/crypto";
-import { openFile } from "@/services/manualsync/session";
+import { seal } from "./crypto";
 import { call } from "@/test/helpers";
 import {
   BACKUP_FORMAT,
@@ -113,13 +112,6 @@ describe("copia CIFRADA (caso B)", () => {
     await restoreParsed(await parseBackupText(text, "clave-segura-123"), "replace");
     expect(loadDb().tasks.some((t) => t.title === "Tarea del PC")).toBe(true);
   });
-
-  it("Sincronización (versión anterior) también reconoce el nuevo formato cifrado", async () => {
-    await sampleData();
-    const text = await serializeBackup(await buildBackupFile(), "clave-segura-123");
-    const { kind } = await openFile(text, "clave-segura-123");
-    expect(kind).toBe("backup");
-  });
 });
 
 describe("copias antiguas (caso C)", () => {
@@ -187,7 +179,7 @@ describe("archivos dañados o no admitidos (caso D)", () => {
   it("los paquetes de sincronización se reconocen y se indica dónde abrirlos", async () => {
     const pkg = JSON.stringify({ envelope: await seal({ kind: "offer" }, "x", "offer"), meta: { content: "offer" } });
     expect(inspectBackupText(pkg)).toMatchObject({ status: "sync-package", encrypted: true });
-    await expect(parseBackupText(pkg)).rejects.toThrow(/Sincronización/);
+    await expect(parseBackupText(pkg)).rejects.toThrow(/ya no existe/);
   });
 
   it("la detección nunca ejecuta nada del archivo (claves peligrosas descartadas)", async () => {

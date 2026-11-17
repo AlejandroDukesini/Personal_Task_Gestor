@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { DB_VERSION, loadDb, migrate, mutate } from "@/services/localDb";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { phaseOf, timeLeftLabel } from "./logic";
 
 const goal = (over: Record<string, unknown> = {}) => call("POST", "/personal-goals", { title: "Comprar una motocicleta", targetDate: "2027-10-18", ...over });
@@ -126,16 +125,5 @@ describe("recuperar proyectos convertidos con la versión anterior", () => {
     expect(loadDb().personalGoals.find((x) => x.id === g.id)!.archived).toBe(false);
     const plain = await goal();
     await expectStatus(400, call("POST", `/personal-goals/${plain.id}/recover-project`));
-  });
-});
-
-describe("sincronización", () => {
-  it("las metas viajan validadas", async () => {
-    const m = await goal();
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    (tampered.entries.find((e: any) => e.key === `personalGoals:${m.id}`)!.row as any).targetDate = "mañana";
-    expect(validateOffer(tampered).errors.join(" ")).toMatch(/datos no válidos/);
   });
 });

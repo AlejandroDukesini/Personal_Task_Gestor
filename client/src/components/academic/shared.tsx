@@ -19,7 +19,7 @@ export interface AcademicState {
   overview: AcademicOverview | null;
 }
 
-/** Estado del módulo para un semestre. Se relee tras cada cambio y al sincronizar. */
+/** Estado del módulo para un semestre. Se relee tras cada cambio y al restaurar una copia. */
 export function useAcademic(semesterId: string | null) {
   const [data, setData] = useState<AcademicState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +33,8 @@ export function useAcademic(semesterId: string | null) {
   }, [semesterId]);
   useEffect(() => {
     load();
-    window.addEventListener("gt:sync-applied", load);
-    return () => window.removeEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
+    return () => window.removeEventListener("gt:data-replaced", load);
   }, [load]);
   return { data, error, reload: load };
 }

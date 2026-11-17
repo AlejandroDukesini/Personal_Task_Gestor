@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DB_VERSION, loadDb, migrate } from "@/services/localDb";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { docToHtml, docToMarkdown, docToText, isSafeDoc, safeColor, safeHref, sanitizeDoc, textToDoc, type DocNode } from "./content";
 import { __resetFilesForTests, collectGarbage, getFile, hasFile, inspectAttachment, putFile, releaseFiles, safeFileName } from "./files";
 import { contrastRatio, readableOn } from "./icons";
@@ -236,16 +235,6 @@ describe("categorías y subcategorías", () => {
 });
 
 describe("sincronización y copias", () => {
-  it("las notas viajan en la sincronización y se validan al llegar", async () => {
-    const n = await newNote({ title: "Sincronizada" });
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(offer.entries.some((e) => e.key === `notes:${n.id}`)).toBe(true);
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    const entry = tampered.entries.find((e) => e.key === `notes:${n.id}`)!;
-    (entry.row as any).content = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "x", marks: [{ type: "link", attrs: { href: "javascript:alert(1)" } }] }] }] };
-    expect(validateOffer(tampered).errors.join()).toMatch(/nota no válida/);
-  });
 
   it("copia de seguridad: exporta e importa notas y categorías, rechaza contenido inseguro", async () => {
     const n = await newNote({ title: "En la copia" });

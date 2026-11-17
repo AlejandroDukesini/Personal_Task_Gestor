@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { DB_VERSION, loadDb, migrate } from "@/services/localDb";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { blockersOf, cloneStages, createsCycle, stageProgressOf, stageStatusOf } from "@/services/workflow/logic";
 
 const sop = (over: Record<string, unknown> = {}) => call("POST", "/sops", { name: `SOP ${Math.random().toString(36).slice(2, 7)}`, ...over });
@@ -235,18 +234,5 @@ describe("lógica pura", () => {
     expect(copy.activities[1].dependsOn).toEqual([copy.activities[0].id]);
     expect(copy.activities[0]).toMatchObject({ status: "pending", completedAt: null, checklist: [{ text: "x", done: false }] });
     expect(copy.activities[1].progress).toBe(0);
-  });
-});
-
-describe("sincronización", () => {
-  it("las filas de SOP viajan validadas", async () => {
-    const s = await sop();
-    await op(s.id, { op: "stage.add", data: { title: "E" } });
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(offer.entries.some((e: any) => e.key === `sops:${s.id}`)).toBe(true);
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    (tampered.entries.find((e: any) => e.key === `sops:${s.id}`)!.row as any).stages[0].progress = 300;
-    expect(validateOffer(tampered).errors.join(" ")).toMatch(/datos no válidos/);
   });
 });

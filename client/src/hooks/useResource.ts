@@ -23,13 +23,12 @@ export function useResource<T>(loader: () => Promise<T>, deps: unknown[] = []) {
     reload();
   }, [reload]);
 
-  // Cuando la sincronización aplica datos de otro dispositivo, el
-  // almacenamiento cambia por debajo sin que la vista lo sepa: este evento la
-  // obliga a releer, así el móvil refleja lo que se acaba de escribir en el PC.
+  // Al restaurar una copia o un punto de restauración, el almacenamiento
+  // cambia por debajo sin que la vista lo sepa: este evento la obliga a releer.
   useEffect(() => {
     const onSync = () => reload();
-    window.addEventListener("gt:sync-applied", onSync);
-    return () => window.removeEventListener("gt:sync-applied", onSync);
+    window.addEventListener("gt:data-replaced", onSync);
+    return () => window.removeEventListener("gt:data-replaced", onSync);
   }, [reload]);
 
   return { data, loading, error, reload, setData };

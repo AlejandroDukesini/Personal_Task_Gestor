@@ -1,6 +1,5 @@
 /**
- * Cifrado de lo que sale del dispositivo: archivos de sincronización y copias
- * de seguridad.
+ * Cifrado de las copias de seguridad que salen del dispositivo.
  *
  * AES-256-GCM (confidencialidad + integridad: un byte alterado hace fallar el
  * descifrado) con clave derivada por PBKDF2-SHA256. Todo con Web Crypto, que

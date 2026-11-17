@@ -23,7 +23,6 @@ import {
   Sun,
   Tag,
   Target,
-  RefreshCw,
   Wallet,
   ArrowUpRight,
   ArrowDownLeft,
@@ -237,14 +236,6 @@ export function CommandPalette() {
             toast.error("Permiso denegado por el navegador");
           }
         },
-      },
-      {
-        id: "sync",
-        group: "Acciones",
-        label: "Sincronizar con archivo cifrado",
-        icon: RefreshCw,
-        keywords: "sincronizar archivo paquete movil telefono sync",
-        run: () => navigate("/sincronizacion"),
       },
       {
         id: "install",

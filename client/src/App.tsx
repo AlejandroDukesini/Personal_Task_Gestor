@@ -5,7 +5,6 @@ import { Notifier } from "./components/Notifier";
 import { CommandPalette } from "./components/CommandPalette";
 import { useTheme } from "./store/theme";
 import { useConfig } from "./store/config";
-import { startSyncCenter } from "./store/syncCenter";
 import { PinGate } from "./components/PinGate";
 
 // Code splitting por ruta: cada vista se carga bajo demanda (dynamic import).
@@ -25,7 +24,6 @@ const Academic = lazy(() => import("./pages/Academic").then((m) => ({ default: m
 const Finance = lazy(() => import("./pages/Finance").then((m) => ({ default: m.Finance })));
 const Goals = lazy(() => import("./pages/Goals").then((m) => ({ default: m.Goals })));
 const Stats = lazy(() => import("./pages/Stats").then((m) => ({ default: m.Stats })));
-const SyncCenter = lazy(() => import("./pages/SyncCenter").then((m) => ({ default: m.SyncCenter })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 
 function RouteFallback() {
@@ -43,9 +41,6 @@ export default function App() {
   useEffect(() => {
     applyDom();
     loadConfig().catch(() => {});
-    // Solo observa los cambios pendientes de sincronizar; nunca sincroniza
-    // por su cuenta.
-    startSyncCenter();
   }, [applyDom, loadConfig]);
 
   return (
@@ -72,7 +67,6 @@ export default function App() {
             <Route path="/finanzas" element={<Finance />} />
             <Route path="/finanzas/notas/:id" element={<FinanceNotePage />} />
             <Route path="/estadisticas" element={<Stats />} />
-            <Route path="/sincronizacion" element={<SyncCenter />} />
             <Route path="/configuracion" element={<SettingsPage />} />
           </Route>
         </Routes>

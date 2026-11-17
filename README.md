@@ -21,6 +21,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest"><img alt="Descargar para Windows" src="https://img.shields.io/badge/Descargar-Windows_(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white"></a>
+  <a href="https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest"><img alt="Descargar para Android" src="https://img.shields.io/badge/Descargar-Android_(.apk)-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://task-gestor.netlify.app/"><img alt="Abrir la versión web" src="https://img.shields.io/badge/Abrir-Versión_web-6366f1?style=for-the-badge&logo=googlechrome&logoColor=white"></a>
+  <br>
+  <a href="https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest"><img alt="Última release" src="https://img.shields.io/github/v/release/AlejandroDukesini/Personal_Task_Gestor?label=última%20release&color=6366f1"></a>
+  <a href="https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases"><img alt="Descargas" src="https://img.shields.io/github/downloads/AlejandroDukesini/Personal_Task_Gestor/total?label=descargas&color=0ea5e9"></a>
+</p>
+
+<p align="center">
   <img src="docs/assets/screenshots/dashboard-desktop.png" alt="Panel principal de Plan Task Gestor en escritorio" width="900">
 </p>
 
@@ -129,11 +138,11 @@ tres plataformas, salvo donde se indica.
 | Versión | 1.4.0 (`versionCode` 1004000) |
 | Android mínimo | 7.0 (API 24), declarado en el APK; probado en un emulador con Android 14 (API 34) |
 | Arquitecturas | arm64-v8a, armeabi-v7a, x86, x86_64 (APK universal: sirve para cualquier teléfono) |
-| Tamaño | 61,2 MiB (64,2 MB) |
+| Tamaño | 61,1 MiB (64,1 MB) |
 | Firma | Firmado con la clave de release del proyecto (APK Signature Scheme v2) |
 | Identificador | `com.alejandrodukesini.gestortareas` |
 | Permisos | Internet (no se usa para tus datos) y notificaciones (se piden al activar los recordatorios) |
-| Descarga | **Todavía no hay un APK publicado.** Cuando se publique, estará en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases) como `PlanTaskGestor_<versión>_android.apk`. |
+| Descarga | `PlanTaskGestor_<versión>_android.apk` en la **[última release](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest)** |
 
 La app no está en Google Play: se instala directamente desde el archivo
 `.apk`. No necesitas cuenta ni conexión para usarla.
@@ -143,8 +152,8 @@ La app no está en Google Play: se instala directamente desde el archivo
 Elige **una** de estas opciones:
 
 - **Desde el teléfono (lo más fácil):** abre
-  [Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases)
-  en el navegador del teléfono, busca la versión más reciente, despliega
+  la [última release](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest)
+  en el navegador del teléfono, baja hasta
   **Assets** y toca el archivo que termina en **`.apk`**. Si el navegador
   avisa de que «este tipo de archivo puede ser dañino», toca **Descargar de
   todas formas**.
@@ -219,12 +228,11 @@ exporta antes una copia en *Configuración › Copias de seguridad*.
 | Formato | Instalador NSIS (`.exe`), por usuario, sin permisos de administrador |
 | Tamaño | 11,6 MiB (instalador online; descarga WebView2 solo si falta). Existe una variante offline que incluye WebView2. |
 | Firma | **Sin firmar**: Windows SmartScreen puede mostrar «Windows protegió su PC» |
-| Descarga | **Todavía no hay instaladores publicados para la 1.4.0.** Las releases existentes ([`v1.1.0 BETA`](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases)) no incluyen archivos. Se publicarán en [GitHub Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases) (ver [Publicar una versión](#publicar-una-versión)). |
+| Descarga | `PlanTaskGestor_<versión>_x64-setup.exe` en la **[última release](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest)** |
 
 #### Paso 1 · Elegir y descargar el instalador
 
-Abre [Releases](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases),
-busca la versión más reciente y despliega **Assets**:
+Abre la [última release](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest) y baja hasta **Assets**:
 
 | Archivo | Cuándo usarlo |
 | :--- | :--- |
@@ -461,8 +469,8 @@ Personal_Task_Gestor/
 
 ## Estado y limitaciones conocidas
 
-- **En desarrollo activo** (versión 1.4.0, rama `Beta`).
-- No hay instaladores ni APK publicados todavía para la 1.4.0.
+- **En desarrollo activo** (versión 1.4.0). El desarrollo ocurre en `Beta` y
+  las versiones estables se publican desde `Principal`.
 - El instalador de Windows **no está firmado** con un certificado de código.
 - Los **recordatorios** solo se lanzan con la app abierta: no hay servicio en
   segundo plano.

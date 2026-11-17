@@ -10,7 +10,7 @@ del ejecutable.
 
 | Dato | Valor |
 |---|---|
-| Nombre | Plan Gestor Task |
+| Nombre | Plan Task Gestor |
 | Identificador | `com.alejandrodukesini.gestortareas` (**no cambiar nunca**, ver «Datos») |
 | Versión | la de `client/package.json` (`tauri.conf.json` la lee de ahí); `npm run version:check` comprueba que el resto coincide |
 | Instaladores | NSIS (`.exe`), por usuario (sin permisos de administrador), x64: online y offline |
@@ -47,12 +47,12 @@ El flujo web de siempre (`npm run dev`, `npm run build`, Netlify) no cambia.
 ### Dónde queda el instalador
 
 ```
-client/src-tauri/target/release/bundle/nsis/Plan Gestor Task_<versión>_x64-setup.exe
+client/src-tauri/target/release/bundle/nsis/Plan Task Gestor_<versión>_x64-setup.exe
 ```
 
 Las dos variantes generan **el mismo nombre de archivo**: renombra el primero
 antes de compilar el segundo (CI los renombra a
-`PlanGestorTask_<versión>_x64-setup.exe` y `…_x64-offline-setup.exe`).
+`PlanTaskGestor_<versión>_x64-setup.exe` y `…_x64-offline-setup.exe`).
 
 | Variante | `webviewInstallMode` | Tamaño (1.4.0) | Si falta WebView2 |
 |---|---|---|---|

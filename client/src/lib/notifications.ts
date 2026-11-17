@@ -16,22 +16,48 @@
  *    allí se usan notificaciones nativas de Windows (plugin `notification`).
  *    En Windows no hay permiso por app que pedir en tiempo de ejecución: el
  *    usuario las controla en Configuración › Sistema › Notificaciones.
+ *
+ * 4. En la app de Android (APK) también se usa el plugin, pero Android 13+
+ *    exige pedir el permiso POST_NOTIFICATIONS en tiempo de ejecución. Su
+ *    estado se consulta al plugin y se guarda en `androidPermission`.
  */
 
-import { isDesktop } from "@/lib/desktop";
+import { isAndroid, isTauri } from "@/lib/desktop";
+
+/** Último estado conocido del permiso en Android (se refresca al arrancar y al pedirlo). */
+let androidPermission: NotificationPermission = "default";
+if (isAndroid) {
+  void import("@tauri-apps/plugin-notification")
+    .then((m) => m.isPermissionGranted())
+    .then((ok) => {
+      if (ok) androidPermission = "granted";
+    })
+    .catch(() => {});
+}
 
 export const notificationsSupported = (): boolean =>
-  isDesktop || (typeof window !== "undefined" && "Notification" in window);
+  isTauri || (typeof window !== "undefined" && "Notification" in window);
 
 export function notificationPermission(): NotificationPermission | "unsupported" {
-  if (isDesktop) return "granted";
+  if (isAndroid) return androidPermission;
+  if (isTauri) return "granted";
   if (!notificationsSupported()) return "unsupported";
   return Notification.permission;
 }
 
 /** Pide permiso. Debe invocarse desde un gesto del usuario (click). */
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (isDesktop) return true;
+  if (isAndroid) {
+    try {
+      const m = await import("@tauri-apps/plugin-notification");
+      const ok = (await m.isPermissionGranted()) || (await m.requestPermission()) === "granted";
+      androidPermission = ok ? "granted" : "denied";
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+  if (isTauri) return true;
   if (!notificationsSupported()) return false;
   if (Notification.permission === "granted") return true;
   if (Notification.permission === "denied") return false;
@@ -53,7 +79,7 @@ export interface NotifyOptions {
 
 /** Muestra una notificación. Devuelve false si no se pudo (sin permiso, etc.). */
 export async function notify(title: string, options: NotifyOptions = {}): Promise<boolean> {
-  if (isDesktop) {
+  if (isTauri) {
     try {
       const { sendNotification } = await import("@tauri-apps/plugin-notification");
       sendNotification({ title, body: options.body });

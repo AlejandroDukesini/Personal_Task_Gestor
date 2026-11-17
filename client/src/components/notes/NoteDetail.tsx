@@ -20,6 +20,7 @@ import { AttachmentsPanel } from "./AttachmentsPanel";
 import { ColorPicker, IconPicker, TagInput } from "./pickers";
 import { NoteIcon } from "./NoteIcon";
 import type { NoteCategory } from "./CategoryManager";
+import { saveBlob } from "@/lib/share";
 
 type Meta = Pick<NoteRow, "title" | "description" | "categoryId" | "subcategoryId" | "color" | "icon" | "mathEnabled" | "mathDecimals"> & {
   pinned: boolean;
@@ -64,12 +65,7 @@ async function release(_keys: string[]) {
 }
 
 function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  void saveBlob(name, content, type);
 }
 
 export function NoteDetail({ id, categories, startEditing, onChanged, paths = DEFAULT_PATHS }: { id: string; categories: NoteCategory[]; startEditing: boolean; onChanged: () => void; paths?: NoteDetailPaths }) {

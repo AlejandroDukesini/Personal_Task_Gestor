@@ -1,8 +1,8 @@
 <p align="center">
-  <img width="1919" alt="Captura del panel principal de Plan Gestor Task" src="https://github.com/user-attachments/assets/55da33d2-d56b-4b5d-ac0d-56b07cc35a46" />
+  <img width="1919" alt="Captura del panel principal de Plan Task Gestor" src="https://github.com/user-attachments/assets/55da33d2-d56b-4b5d-ac0d-56b07cc35a46" />
 </p>
 
-<h1 align="center">🚀 Plan Gestor Task — Sistema de Productividad Personal</h1>
+<h1 align="center">🚀 Plan Task Gestor — Sistema de Productividad Personal</h1>
 
 <p align="center">
   <b>Tareas · Hábitos · Calendario · Objetivos · Finanzas · Notas · Proyectos</b><br>
@@ -43,8 +43,8 @@ Una plataforma modular de productividad personal al estilo **Notion + Todoist + 
 
 | Quiero… | Qué hacer |
 | :--- | :--- |
-| **Solo usar la aplicación** (Windows 10/11, 64 bits) | Descarga **`PlanGestorTask_<versión>_x64-setup.exe`** de [Releases › última versión](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest) y ejecútalo. **No instales Node.js ni Rust.** |
-| **Instalarla sin Internet** | Descarga `PlanGestorTask_<versión>_x64-offline-setup.exe` (≈220 MB, incluye WebView2). |
+| **Solo usar la aplicación** (Windows 10/11, 64 bits) | Descarga **`PlanTaskGestor_<versión>_x64-setup.exe`** de [Releases › última versión](https://github.com/AlejandroDukesini/Personal_Task_Gestor/releases/latest) y ejecútalo. **No instales Node.js ni Rust.** |
+| **Instalarla sin Internet** | Descarga `PlanTaskGestor_<versión>_x64-offline-setup.exe` (≈220 MB, incluye WebView2). |
 | Usarla en macOS, Linux o el móvil | Usa la [versión web](https://task-gestor.netlify.app/); se puede instalar como app desde el navegador. |
 | **Desarrollar o compilar** | Ver [Inicio rápido](#-inicio-rápido) y [`DESKTOP.md`](DESKTOP.md). |
 

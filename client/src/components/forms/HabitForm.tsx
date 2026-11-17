@@ -7,7 +7,7 @@ import { ScheduleEditor, draftToInput, toDraft, validateDraft, type ScheduleDraf
 import { api } from "@/services/api";
 import { habitDaysError } from "@/services/rules";
 import { loadPrefs } from "@/services/gcal/prefs";
-import { isDesktop } from "@/lib/desktop";
+import { isTauri } from "@/lib/desktop";
 import type { GcalLinkRow } from "@/services/localDb";
 import type { Category, Habit, HabitFrequency } from "@/types";
 import { cn } from "@/lib/utils";
@@ -208,8 +208,8 @@ export function HabitForm({
           <span>
             Sincronizar con Google Calendar
             <span className="block text-xs text-subtle">
-              {isDesktop
-                ? "Google Calendar no está disponible en la versión de escritorio; se aplicará desde la versión web."
+              {isTauri
+                ? "Google Calendar no está disponible en la app instalada (Windows/Android); se aplicará desde la versión web."
                 : !gcal.connected
                 ? "Google Calendar no está conectado en este dispositivo (Configuración › Integraciones)."
                 : gcal.scope === "all"

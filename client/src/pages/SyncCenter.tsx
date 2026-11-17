@@ -28,7 +28,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { PlanReview } from "@/components/syncui/PlanReview";
 import { useSyncCenter } from "@/store/syncCenter";
-import { readPickedFile, saveFile, stampForFile } from "@/lib/share";
+import { readPickedFile, saveFile, stampForFile, wasSaved } from "@/lib/share";
 import { inspectBackupText, markDownloaded } from "@/services/backup/backup";
 import { useRestoreWizard } from "@/store/restoreWizard";
 import { storageEstimate, storageKind, listRestorePoints, type RestorePoint } from "@/services/storage";
@@ -119,7 +119,12 @@ export function SyncCenter() {
       } else {
         const { answer, warnings } = await commitPlan(review.plan, res, "archivo");
         const file = await sealFile(answer, review.password);
-        await saveFile(`respuesta-para-${slug(review.plan.offer.from.name)}-${stampForFile()}.gtsync`, JSON.stringify(file));
+        const answerName = `respuesta-para-${slug(review.plan.offer.from.name)}-${stampForFile()}.gtsync`;
+        // Los cambios ya se aplicaron aquí: el archivo de respuesta es imprescindible
+        // para el otro dispositivo, así que si se cancela se vuelve a pedir una vez.
+        if (!wasSaved(await saveFile(answerName, JSON.stringify(file))) && !wasSaved(await saveFile(answerName, JSON.stringify(file)))) {
+          toast.error("Los cambios se aplicaron, pero el archivo de respuesta no se guardó. Repite la sincronización desde el otro dispositivo.", { duration: 10000 });
+        }
         setResult({
           summary: answer.summary,
           warnings,
@@ -361,7 +366,7 @@ function FileSync({
       const offer = await createOffer(peer, { full: peer === null });
       const file = await sealFile(offer, password);
       const name = devices.find((d) => d.deviceId === peer)?.name ?? "nuevo-dispositivo";
-      await saveFile(`sincronizacion-para-${slug(name)}-${stampForFile()}.gtsync`, JSON.stringify(file));
+      if (!wasSaved(await saveFile(`sincronizacion-para-${slug(name)}-${stampForFile()}.gtsync`, JSON.stringify(file)))) return;
       toast.success(`Paquete creado (${offer.entries.length} elemento(s)). Impórtalo en el otro dispositivo.`, { duration: 6000 });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -724,7 +729,7 @@ function Backups({ points, onChanged }: { points: RestorePoint[]; onChanged: () 
   async function exportNow() {
     if (!plain && pw.length < 8) return toast.error("Contraseña de al menos 8 caracteres, o deja marcada «sin cifrar»");
     const text = await sealBackup(plain ? null : pw);
-    await saveFile(`copia-productividad-${stampForFile()}${plain ? "" : ".cifrada"}.json`, text);
+    if (!wasSaved(await saveFile(`copia-productividad-${stampForFile()}${plain ? "" : ".cifrada"}.json`, text))) return;
     markDownloaded(text.length);
     toast.success(plain ? "Copia exportada sin cifrar: se restaura sin contraseña" : "Copia cifrada exportada: necesitarás la contraseña para restaurarla");
   }

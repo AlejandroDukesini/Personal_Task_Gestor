@@ -1,6 +1,6 @@
 /* eslint-env serviceworker */
 /**
- * Service Worker de "Plan Gestor Task".
+ * Service Worker de "Plan Task Gestor".
  *
  * Offline completo: en el build se inyecta la lista de TODOS los ficheros
  * generados (`__PRECACHE__`), así la app abre sin conexión incluso en

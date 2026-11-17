@@ -30,3 +30,8 @@ sync/.state/
 
 # Informe de auditoría de seguridad (uso interno)
 cibersegurity.txt
+
+# Firma Android: nunca subir keystores ni sus credenciales.
+*.jks
+*.keystore
+keystore.properties

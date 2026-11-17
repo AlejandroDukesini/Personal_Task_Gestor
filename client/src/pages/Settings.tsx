@@ -33,6 +33,7 @@ import {
   requestNotificationPermission,
 } from "@/lib/notifications";
 import { isIos, isStandalone, onInstallAvailability, promptInstall } from "@/lib/pwa";
+import { saveBlob } from "@/lib/share";
 
 const TIMEZONES = [
   "America/Bogota",
@@ -535,13 +536,7 @@ export function SettingsPage() {
 }
 
 function downloadFile(name: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
+  void saveBlob(name, content, type);
 }
 
 // Redimensiona una imagen a un cuadrado max×max y devuelve un data URL liviano.

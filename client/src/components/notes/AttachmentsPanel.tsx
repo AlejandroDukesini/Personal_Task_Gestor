@@ -7,6 +7,8 @@ import { newId, type NoteAttachment } from "@/services/localDb";
 import { formatBytes, getFile, inspectAttachment, MAX_NOTE_BYTES, putFile, typeOf } from "@/services/notes/files";
 import { MAX_ATTACHMENTS } from "@/services/notes/schemas";
 import { cn } from "@/lib/utils";
+import { saveBlob } from "@/lib/share";
+import { isAndroid } from "@/lib/desktop";
 
 interface Props {
   attachments: NoteAttachment[];
@@ -28,10 +30,10 @@ async function toAttachment(file: File, total: number): Promise<{ att?: NoteAtta
 }
 
 /** URL temporal de un adjunto, con el MIME de nuestro registro (nunca el del archivo). */
-async function blobUrl(a: NoteAttachment, forDownload = false): Promise<string | null> {
+async function blobUrl(a: NoteAttachment): Promise<string | null> {
   const bytes = await getFile(a.fileKey);
   if (!bytes) return null;
-  const mime = forDownload ? "application/octet-stream" : typeOf(a.kind)?.mime ?? "application/octet-stream";
+  const mime = typeOf(a.kind)?.mime ?? "application/octet-stream";
   return URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
 }
 
@@ -103,7 +105,8 @@ export function AttachmentsPanel({ attachments, editable, onChange }: Props) {
       if (!bytes) return toast.error("Este archivo no está en este dispositivo (se adjuntó en otro)");
       // Se muestra como texto plano (nunca como HTML), y como mucho 200 KB.
       setPreview({ att: a, kind: "text", src: new TextDecoder().decode(bytes.subarray(0, 200_000)) });
-    } else if (type?.preview === "pdf") {
+    } else if (type?.preview === "pdf" && !isAndroid) {
+      // Android: la WebView no abre PDFs en otra pestaña; se guarda (rama final).
       const url = await blobUrl(a);
       if (!url) return toast.error("Este archivo no está en este dispositivo (se adjuntó en otro)");
       window.open(url, "_blank", "noopener,noreferrer");
@@ -112,13 +115,9 @@ export function AttachmentsPanel({ attachments, editable, onChange }: Props) {
   }
 
   async function download(a: NoteAttachment) {
-    const url = await blobUrl(a, true);
-    if (!url) return toast.error("Este archivo no está en este dispositivo (se adjuntó en otro)");
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = a.name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    const bytes = await getFile(a.fileKey);
+    if (!bytes) return toast.error("Este archivo no está en este dispositivo (se adjuntó en otro)");
+    await saveBlob(a.name, new Blob([bytes as BlobPart], { type: "application/octet-stream" }));
   }
 
   async function remove(a: NoteAttachment) {

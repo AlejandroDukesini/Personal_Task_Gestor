@@ -202,6 +202,7 @@ export function CommandPalette() {
         run: async () => {
           // Mismo formato que Configuración: se restaura sin contraseña en cualquier dispositivo.
           const size = await downloadBackup({ includeFiles: true });
+          if (size === null) return;
           toast.success(`Copia descargada (${Math.round(size / 1024)} KB). Guárdala en un lugar seguro.`);
         },
       },

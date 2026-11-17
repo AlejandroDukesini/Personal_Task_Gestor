@@ -1,4 +1,4 @@
-# Instalar Plan Gestor Task
+# Instalar Plan Task Gestor
 
 Guía para **usar** la aplicación. No necesitas instalar Node.js, Rust ni
 ninguna herramienta de programación. (Para desarrollar o compilar, ver
@@ -11,8 +11,8 @@ y, en la sección **Assets**, elige **un** archivo:
 
 | Tu caso | Archivo | Tamaño aprox. |
 | :--- | :--- | :--- |
-| **Solo quiero usar la aplicación** (lo normal) | `PlanGestorTask_<versión>_x64-setup.exe` | 12 MB |
-| **El equipo no tiene Internet** (o la conexión es muy mala) | `PlanGestorTask_<versión>_x64-offline-setup.exe` | 220 MB |
+| **Solo quiero usar la aplicación** (lo normal) | `PlanTaskGestor_<versión>_x64-setup.exe` | 12 MB |
+| **El equipo no tiene Internet** (o la conexión es muy mala) | `PlanTaskGestor_<versión>_x64-offline-setup.exe` | 220 MB |
 | No quiero instalar nada | Usa la [versión web](https://task-gestor.netlify.app/) en el navegador | — |
 
 `SHA256SUMS.txt` es opcional: sirve para comprobar que la descarga no está
@@ -53,7 +53,7 @@ hubiera que instalarlo).
 2. Haz doble clic sobre él.
 3. Si aparece **«Windows protegió su PC»**, mira el [punto 4](#4-windows-muestra-una-advertencia).
 4. Sigue el asistente (Siguiente › Instalar › Finalizar).
-5. Abre **Plan Gestor Task** desde el menú Inicio o el acceso directo del escritorio.
+5. Abre **Plan Task Gestor** desde el menú Inicio o el acceso directo del escritorio.
 
 ### Actualizar a una versión nueva
 
@@ -61,10 +61,16 @@ Descarga el instalador de la versión nueva y ejecútalo encima: reemplaza el
 programa y **conserva tus datos**. Por precaución, antes descarga una copia en
 **Configuración › Copias de seguridad**.
 
+> **Si tenías instalada la app con su nombre anterior, «Plan Gestor Task»:**
+> el instalador nuevo, «Plan Task Gestor», se instala aparte y **ve los mismos
+> datos** (la carpeta de datos no cambia). Después puedes desinstalar la
+> entrada antigua «Plan Gestor Task», pero **NO marques la casilla de borrar
+> los datos**: borraría también los de la app nueva, porque es la misma carpeta.
+
 ### Desinstalar
 
 **Configuración de Windows › Aplicaciones › Aplicaciones instaladas ›
-Plan Gestor Task › Desinstalar.** El desinstalador ofrece una casilla para
+Plan Task Gestor › Desinstalar.** El desinstalador ofrece una casilla para
 borrar también los datos; si no la marcas, se conservan en
 `%LOCALAPPDATA%\com.alejandrodukesini.gestortareas` y una reinstalación
 posterior los vuelve a ver.
@@ -91,7 +97,7 @@ Opcional, para comprobar que el archivo es exactamente el publicado. En
 PowerShell, dentro de la carpeta de descarga:
 
 ```powershell
-Get-FileHash .\PlanGestorTask_<versión>_x64-setup.exe
+Get-FileHash .\PlanTaskGestor_<versión>_x64-setup.exe
 ```
 
 El valor `Hash` debe coincidir (sin importar mayúsculas) con la línea de ese
@@ -102,7 +108,7 @@ Quien tenga [GitHub CLI](https://cli.github.com) puede comprobar además que
 el instalador lo compiló GitHub Actions a partir de este repositorio:
 
 ```bash
-gh attestation verify PlanGestorTask_<versión>_x64-setup.exe -R AlejandroDukesini/Personal_Task_Gestor
+gh attestation verify PlanTaskGestor_<versión>_x64-setup.exe -R AlejandroDukesini/Personal_Task_Gestor
 ```
 
 ## Problemas habituales

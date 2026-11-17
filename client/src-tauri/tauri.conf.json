@@ -1,6 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Plan Gestor Task",
+  "productName": "Plan Task Gestor",
+  "mainBinaryName": "Plan Task Gestor",
   "version": "../package.json",
   "identifier": "com.alejandrodukesini.gestortareas",
   "build": {
@@ -13,12 +14,13 @@
     "windows": [
       {
         "label": "main",
-        "title": "Plan Gestor Task",
+        "title": "Plan Task Gestor",
         "width": 1280,
         "height": 800,
         "minWidth": 480,
         "minHeight": 560,
         "center": true,
+        "maximized": true,
         "resizable": true,
         "dragDropEnabled": false,
         "useHttpsScheme": false

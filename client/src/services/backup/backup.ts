@@ -37,9 +37,9 @@ import { NOTE_ROW_SCHEMAS } from "@/services/notes/schemas";
 import { PROJECT_ROW_SCHEMAS } from "@/services/projects/schemas";
 import { MODULE_ROW_SCHEMAS } from "@/services/moduleSchemas";
 import { stripDangerousKeys } from "@/services/routeKit";
-import { ENVELOPE_FORMAT, fromB64, isEnvelope, open, seal, toB64 } from "@/services/manualsync/crypto";
+import { ENVELOPE_FORMAT, fromB64, isEnvelope, open, seal, toB64 } from "./crypto";
 import { getFile, putFile, sha256Hex } from "@/services/notes/files";
-import { canonical, hashString } from "@/services/manualsync/keyspace";
+import { canonical, hashString } from "@/services/persistence/keyspace";
 
 export const BACKUP_FORMAT = "gestion-tareas/backup";
 
@@ -333,7 +333,7 @@ export async function serializeBackup(file: BackupFileV2, password?: string | nu
     cipher: { alg: "AES-256-GCM", kdf: "PBKDF2-SHA256", iterations: envelope.iterations },
     createdAt: file.exportedAt,
     envelope,
-    // Compatibilidad con versiones anteriores de la app (Sincronización › Importar).
+    // Compatibilidad: las versiones anteriores de la app leen estos metadatos al importar.
     meta: { from: file.device?.deviceId ?? "", fromName: file.device?.name ?? "", to: null, createdAt: file.exportedAt, content: "backup" },
   });
 }
@@ -483,7 +483,7 @@ export async function parseBackupText(text: string, password?: string | null): P
   const kind = inspectBackupText(text);
   if (kind.status === "invalid" || kind.status === "uncertain") throw new BackupError("invalid", `${kind.reason} ${SUPPORTED_FORMATS_HELP}`);
   if (kind.status === "sync-package") {
-    throw new BackupError("invalid", "Es un paquete de sincronización, no una copia de seguridad: ábrelo en Sincronización › Sincronizar con archivo.");
+    throw new BackupError("invalid", "Es un paquete de sincronización entre dispositivos, una función que ya no existe: no es una copia de seguridad. Exporta una copia en el otro dispositivo (Configuración › Copias de seguridad) y restáurala aquí.");
   }
   let parsed: any = JSON.parse(text);
   if (kind.encrypted) {
@@ -692,7 +692,7 @@ export async function restoreParsed(
     true,
     mode === "replace" ? "Datos reemplazados por la copia" : `Combinada: ${stats.added} añadidos, ${stats.updated} actualizados`
   );
-  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") window.dispatchEvent(new CustomEvent("gt:sync-applied"));
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") window.dispatchEvent(new CustomEvent("gt:data-replaced"));
   return { mode, ...stats, filesRestored: files.restored, filesFailed: files.failed, safetyBackup };
 }
 

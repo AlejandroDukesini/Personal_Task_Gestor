@@ -11,7 +11,6 @@ import {
   Smartphone,
   Upload,
   UserCircle2,
-  Wifi,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -19,10 +18,10 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { ThemePicker } from "@/components/ThemePicker";
 import { GoogleCalendarCard } from "@/components/integrations/GoogleCalendarCard";
+import { isTauri } from "@/lib/desktop";
 import { BackupCard } from "@/components/backup/BackupCard";
 import { SUPPORTED_FORMATS_HELP, inspectBackupText } from "@/services/backup/backup";
 import { useRestoreWizard } from "@/store/restoreWizard";
-import { Link } from "react-router-dom";
 import { useConfig } from "@/store/config";
 import { useT } from "@/lib/i18n";
 import { api } from "@/services/api";
@@ -33,6 +32,7 @@ import {
   requestNotificationPermission,
 } from "@/lib/notifications";
 import { isIos, isStandalone, onInstallAvailability, promptInstall } from "@/lib/pwa";
+import { saveBlob } from "@/lib/share";
 
 const TIMEZONES = [
   "America/Bogota",
@@ -63,10 +63,10 @@ export function SettingsPage() {
 
   useEffect(() => onInstallAvailability(setInstallAvailable), []);
 
-  // La paleta de comandos enlaza a /configuracion#sync: se desplaza al panel.
+  // Enlaces directos a una sección (#integraciones); #copias lo gestiona BackupCard.
   useEffect(() => {
     const target = window.location.hash.slice(1);
-    if (target !== "sync" && target !== "integraciones") return;
+    if (target !== "integraciones") return;
     document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
@@ -187,7 +187,7 @@ export function SettingsPage() {
     }
     toast.error(
       kind.status === "sync-package"
-        ? "Es un paquete de sincronización: ábrelo en Sincronización › Sincronizar con archivo cifrado."
+        ? "Es un paquete de sincronización entre dispositivos, una función que ya no existe: no es una copia de seguridad."
         : `${kind.reason} ${SUPPORTED_FORMATS_HELP}`,
       { duration: 8000 }
     );
@@ -206,9 +206,6 @@ export function SettingsPage() {
         </a>
         <a href="#integraciones" onClick={jump("integraciones")} className="gt-pill inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-muted">
           Integraciones
-        </a>
-        <a href="#sync" onClick={jump("sync")} className="gt-pill inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-muted">
-          Sincronización
         </a>
       </nav>
 
@@ -358,26 +355,16 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Sincronización local + instalación */}
-        <Card className="lg:col-span-2" id="sync">
+        {/* Instalar la versión web como app (en Windows/Android ya está instalada). */}
+        {!isTauri && (
+        <Card className="lg:col-span-2" id="instalar">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Wifi size={16} /> {t("sync.title")}
+              <Smartphone size={16} /> {t("pwa.title")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <p className="text-sm text-subtle">
-              Tus datos se guardan en este dispositivo. La sincronización con tu otro dispositivo (Wi‑Fi o archivo cifrado), las
-              copias de seguridad y los dispositivos autorizados están en su propia sección.
-            </p>
-            <Link to="/sincronizacion" className="gt-control inline-flex items-center gap-2 h-11 px-4 bg-primary text-primary-fg font-medium">
-              <Wifi size={15} /> Abrir Sincronización
-            </Link>
-
-            <div className="pt-4 border-t border-t-theme border-border space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Smartphone size={15} /> {t("pwa.title")}
-              </div>
+          <CardContent>
+            <div className="space-y-2">
               {isStandalone() ? (
                 <p className="text-sm text-success">{t("pwa.installed")}</p>
               ) : isIos() ? (
@@ -415,6 +402,7 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Copias de seguridad y recuperación */}
         <BackupCard />
@@ -535,13 +523,7 @@ export function SettingsPage() {
 }
 
 function downloadFile(name: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
+  void saveBlob(name, content, type);
 }
 
 // Redimensiona una imagen a un cuadrado max×max y devuelve un data URL liviano.

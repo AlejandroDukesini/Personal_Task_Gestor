@@ -110,9 +110,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // `host: true` publica el dev server en la red local para poder abrirlo
-    // desde el móvil. Ojo: sobre http y por IP no hay contexto seguro, así que
-    // ni PWA ni notificaciones — para eso, `npm run sync` (sirve por https).
+    // `host: true` publica el dev server en la red local (solo en desarrollo):
+    // lo necesita `tauri android dev` para cargar la app en el móvil/emulador.
+    // Ojo: sobre http y por IP no hay contexto seguro (ni PWA ni notificaciones).
     host: true,
     proxy: { "/api": "http://localhost:4000" },
   },

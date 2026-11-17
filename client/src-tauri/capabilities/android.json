@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android",
+  "description": "Solo Android: pedir el permiso de notificaciones (Android 13+) y guardar archivos que el usuario elige con el selector del sistema (copias de seguridad y exportaciones). Sin acceso general al almacenamiento: fs solo escribe en la ruta que devuelve el diálogo de guardado.",
+  "platforms": ["android"],
+  "windows": ["main"],
+  "permissions": [
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "dialog:allow-save",
+    "fs:allow-write-file"
+  ]
+}

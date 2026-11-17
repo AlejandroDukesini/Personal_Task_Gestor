@@ -8,7 +8,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Empty } from "@/components/ui/Empty";
 import { api } from "@/services/api";
-import { loadDb, type NoteAttachment, type NoteRow } from "@/services/localDb";
+import type { NoteAttachment, NoteRow } from "@/services/localDb";
 import { docToHtml, docToMarkdown, docToText, withCalculatedResults, type DocNode } from "@/services/notes/content";
 import { clearDraft, draftIsNewer, readDraft, writeDraft, type NoteDraft } from "@/services/notes/drafts";
 import { flushStorage } from "@/services/storage";
@@ -20,6 +20,7 @@ import { AttachmentsPanel } from "./AttachmentsPanel";
 import { ColorPicker, IconPicker, TagInput } from "./pickers";
 import { NoteIcon } from "./NoteIcon";
 import type { NoteCategory } from "./CategoryManager";
+import { saveBlob } from "@/lib/share";
 
 type Meta = Pick<NoteRow, "title" | "description" | "categoryId" | "subcategoryId" | "color" | "icon" | "mathEnabled" | "mathDecimals"> & {
   pinned: boolean;
@@ -64,12 +65,7 @@ async function release(_keys: string[]) {
 }
 
 function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  void saveBlob(name, content, type);
 }
 
 export function NoteDetail({ id, categories, startEditing, onChanged, paths = DEFAULT_PATHS }: { id: string; categories: NoteCategory[]; startEditing: boolean; onChanged: () => void; paths?: NoteDetailPaths }) {
@@ -221,8 +217,8 @@ export function NoteDetail({ id, categories, startEditing, onChanged, paths = DE
         setMissing(true);
       }
     };
-    window.addEventListener("gt:sync-applied", onSync);
-    return () => window.removeEventListener("gt:sync-applied", onSync);
+    window.addEventListener("gt:data-replaced", onSync);
+    return () => window.removeEventListener("gt:data-replaced", onSync);
   }, [id]);
 
   async function saveAttachments(next: NoteAttachment[]) {

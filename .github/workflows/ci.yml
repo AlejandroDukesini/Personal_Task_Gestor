@@ -73,7 +73,7 @@ jobs:
           workspaces: client/src-tauri -> target
       - run: npm ci
 
-      # Tauri nombra ambos instaladores igual ("Plan Gestor Task_<v>_x64-setup.exe"):
+      # Tauri nombra ambos instaladores igual ("Plan Task Gestor_<v>_x64-setup.exe"):
       # se renombran a nombres sin espacios y distinguibles antes del siguiente build.
       - name: Instalador online (descarga WebView2 solo si falta)
         run: |
@@ -81,14 +81,14 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           npm run desktop:build
           mkdir -p installers
-          mv "client/src-tauri/target/release/bundle/nsis/Plan Gestor Task_${version}_x64-setup.exe" \
-             "installers/PlanGestorTask_${version}_x64-setup.exe"
+          mv "client/src-tauri/target/release/bundle/nsis/Plan Task Gestor_${version}_x64-setup.exe" \
+             "installers/PlanTaskGestor_${version}_x64-setup.exe"
       - name: Instalador offline (incluye WebView2)
         if: inputs.release
         run: |
           npm run desktop:build:offline
-          mv "client/src-tauri/target/release/bundle/nsis/Plan Gestor Task_${VERSION}_x64-setup.exe" \
-             "installers/PlanGestorTask_${VERSION}_x64-offline-setup.exe"
+          mv "client/src-tauri/target/release/bundle/nsis/Plan Task Gestor_${VERSION}_x64-setup.exe" \
+             "installers/PlanTaskGestor_${VERSION}_x64-offline-setup.exe"
       - run: ls -l installers
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

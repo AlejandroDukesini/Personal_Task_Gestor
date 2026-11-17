@@ -136,8 +136,8 @@ function ProjectsList({ kind }: { kind: ProjectKind }) {
 
   useEffect(() => {
     load();
-    window.addEventListener("gt:sync-applied", load);
-    return () => window.removeEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
+    return () => window.removeEventListener("gt:data-replaced", load);
   }, [load]);
 
   // Búsqueda con pequeño retardo: no se filtra en cada tecla.

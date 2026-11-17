@@ -4,7 +4,6 @@ import { IDBFactory } from "fake-indexeddb";
 import { bootDb, DB_VERSION, dropCache, loadDb, migrate } from "@/services/localDb";
 import { __resetStorageForTests, flushStorage } from "@/services/storage";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { activityState, conflictingIds, filterActivities, layoutDay, overlaps, overviewOf, weekOf, weeklyHours } from "./logic";
 
 const semester = (over: Record<string, unknown> = {}) => call("POST", "/academic/semesters", { name: `S-${Math.random().toString(36).slice(2, 7)}`, startDate: "2026-08-01", endDate: "2026-12-15", ...over });
@@ -264,16 +263,5 @@ describe("persistencia, copias y sincronización", () => {
     const { acadSemesters: _a, acadSubjects: _b, acadClasses: _c, acadActivities: _d, ...old } = backup.data;
     await call("POST", "/backup/import", { data: old });
     expect(loadDb().acadSemesters).toHaveLength(1);
-  });
-
-  it("viaja en la sincronización y se valida lo recibido", async () => {
-    const s = await semester();
-    const m = await subject(s.id);
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(offer.entries.some((e: any) => e.key === `acadSubjects:${m.id}`)).toBe(true);
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    (tampered.entries.find((e: any) => e.key === `acadSubjects:${m.id}`)!.row as any).color = "x";
-    expect(validateOffer(tampered).errors.join(" ")).toMatch(/datos no válidos/);
   });
 });

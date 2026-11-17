@@ -339,14 +339,15 @@ function Kpi({
 }) {
   return (
     <Card>
-      <CardContent className="flex items-center gap-3">
+      {/* Por debajo de 360 px el icono va encima: «COMPLETADAS» no cabía al lado. */}
+      <CardContent className="flex flex-col items-start gap-2 min-[360px]:flex-row min-[360px]:items-center min-[360px]:gap-3">
         <div
           className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
           style={{ background: `${color}1F`, color }}
         >
           <Icon size={20} />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-full">
           <div className="text-xs text-subtle uppercase tracking-wide">{label}</div>
           <div className="text-2xl font-semibold">{value}</div>
         </div>

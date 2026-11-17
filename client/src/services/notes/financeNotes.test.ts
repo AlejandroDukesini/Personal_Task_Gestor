@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { DB_VERSION, loadDb, migrate, mutate } from "@/services/localDb";
 import { call, expectStatus, makeAccount, makeTx } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { textToDoc } from "./content";
 
 const fin = (over: Record<string, unknown> = {}) => call("POST", "/notes", { space: "finance", title: "Nota financiera", content: textToDoc("Hola"), ...over });
@@ -113,15 +112,5 @@ describe("notas financieras: CRUD, búsqueda y organización", () => {
     });
     const item = (await list()).items[0];
     expect(item).toMatchObject({ title: "Vieja", space: "general", pinned: false, tags: [], date: null });
-  });
-
-  it("la sincronización acepta notas financieras válidas", async () => {
-    const n = await fin({ title: "Sync", tags: ["a"], date: "2026-11-30" });
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(offer.entries.some((e: any) => e.key === `notes:${n.id}`)).toBe(true);
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    (tampered.entries.find((e: any) => e.key === `notes:${n.id}`)!.row as any).space = "otro";
-    expect(validateOffer(tampered).errors.length).toBeGreaterThan(0);
   });
 });

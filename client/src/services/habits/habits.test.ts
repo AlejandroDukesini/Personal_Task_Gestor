@@ -187,16 +187,14 @@ describe("migración v6", () => {
   });
 });
 
-describe("sincronización PC ↔ móvil", () => {
-  it("horarios, vínculos e importaciones forman parte del espacio sincronizable", async () => {
-    const { entriesOf, referencesOf } = await import("@/services/manualsync/keyspace");
+describe("espacio de datos (copias y fusión entre pestañas)", () => {
+  it("horarios, vínculos e importaciones forman parte del espacio de datos", async () => {
+    const { entriesOf } = await import("@/services/persistence/keyspace");
     const h = await habit();
     const s = await call("POST", `/habits/${h.id}/schedules`, { kind: "once", startTime: "07:00", startDate: "2026-09-30" });
     await call("POST", "/habit-imports/apply", { items: [{ title: "Beber agua", date: "2026-09-29", habitId: h.id, action: "scheduled" }] });
     const keys = [...entriesOf(loadDb()).keys()];
     expect(keys).toContain(`habitSchedules:${s.id}`);
     expect(keys.some((k) => k.startsWith("habitImports:imp-"))).toBe(true);
-    // El horario arrastra a su hábito si se envía solo.
-    expect(referencesOf("habitSchedules", s)).toEqual([`habits:${h.id}`]);
   });
 });

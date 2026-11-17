@@ -3,11 +3,11 @@ import toast from "react-hot-toast";
 import { ArchiveRestore, CheckCircle2, DatabaseBackup, Download, HardDrive, History, Info, Lock, ShieldCheck, Smartphone, Trash2, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { useSaveStatus } from "./SaveIndicator";
 import { downloadBackup, downloadText } from "./download";
+import { wasSaved } from "@/lib/share";
 import {
   SUPPORTED_FORMATS_HELP,
   attachmentsInUse,
@@ -222,8 +222,7 @@ export function BackupCard() {
                     onClick={() =>
                       run(`dl-${p.id}`, async () => {
                         const text = await serializeBackup(await localBackupAsFile(p.id));
-                        downloadText(backupFileName(new Date(p.at)), text);
-                        markDownloaded(text.length);
+                        if (wasSaved(await downloadText(backupFileName(new Date(p.at)), text))) markDownloaded(text.length);
                       })
                     }
                   >
@@ -351,6 +350,7 @@ export function BackupCard() {
             if (dl.encrypt && dl.password !== dl.confirm) return toast.error("Las contraseñas no coinciden");
             run("download", async () => {
               const size = await downloadBackup({ includeFiles: dl.includeFiles, password: dl.encrypt ? dl.password : null });
+              if (size === null) return;
               toast.success(`Copia descargada (${fmtBytes(size)}). Guárdala fuera del navegador.`);
               setDl({ ...dl, open: false, password: "", confirm: "" });
             });

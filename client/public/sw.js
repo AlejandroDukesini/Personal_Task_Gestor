@@ -1,6 +1,6 @@
 /* eslint-env serviceworker */
 /**
- * Service Worker de "Plan Gestor Task".
+ * Service Worker de "Plan Task Gestor".
  *
  * Offline completo: en el build se inyecta la lista de TODOS los ficheros
  * generados (`__PRECACHE__`), así la app abre sin conexión incluso en
@@ -68,10 +68,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Resto de orígenes (p. ej. el WebSocket o el servicio del PC): sin tocar.
+  // Resto de orígenes: sin tocar.
   if (url.origin !== self.location.origin) return;
-  // Endpoints del servicio local del PC: siempre a la red.
-  if (url.pathname === "/pair" || url.pathname === "/qr.png" || url.pathname === "/ca.crt" || url.pathname === "/health") return;
 
   if (request.mode === "navigate") {
     // Shell de la SPA desde la caché de ESTA versión: abre al instante y sin

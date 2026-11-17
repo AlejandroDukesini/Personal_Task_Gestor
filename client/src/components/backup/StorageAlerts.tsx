@@ -44,7 +44,7 @@ export function StorageAlerts() {
 
   async function emergency() {
     try {
-      await downloadBackup({ includeFiles: false });
+      if ((await downloadBackup({ includeFiles: false })) === null) return;
       toast.success("Copia descargada. Guárdala en un lugar seguro.");
     } catch (e: any) {
       toast.error(e?.message ?? "No se pudo generar la copia");

@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { dropCache, loadDb, mutate, type ProjectRow } from "@/services/localDb";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { PROJECT_ROW_SCHEMAS } from "./schemas";
 import { projectProgress } from "./progress";
 
@@ -137,14 +136,11 @@ describe("reclasificar proyectos (profesional ⇄ personal)", () => {
     expect((await list("personal")).items.map((x: any) => x.id)).toEqual([p.id]);
   });
 
-  it("la clasificación sobrevive a la validación de copias de seguridad y sincronización", async () => {
+  it("la clasificación sobrevive a la validación de copias de seguridad", async () => {
     const p = await richProject();
     await move(p.id, "personal");
     const parsed = PROJECT_ROW_SCHEMAS.projects.parse(row(p.id));
     expect(parsed.kind).toBe("personal");
     expect(parsed).toEqual(row(p.id));
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(validateOffer(offer).errors).toEqual([]);
-    expect((offer.entries.find((e: any) => e.key === `projects:${p.id}`)!.row as any).kind).toBe("personal");
   });
 });

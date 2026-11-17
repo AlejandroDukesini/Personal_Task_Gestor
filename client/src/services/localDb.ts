@@ -1040,7 +1040,7 @@ export function observeStamp(stampMs: number): void {
 
 /**
  * Marca de las filas de ejemplo. Es antigua a propósito: si un móvil recién
- * instalado siembra sus datos de ejemplo y se empareja, cualquier edición o
+ * instalado siembra sus datos de ejemplo y se sincroniza, cualquier edición o
  * borrado real del PC gana siempre sobre ellos.
  */
 export const SEED_STAMP = "2000-01-01T00:00:00.000Z";
@@ -1477,9 +1477,9 @@ configureStorage({
         /* ignorado a propósito */
       }
     }
-    // Las vistas releen (mismo evento que la sincronización entre dispositivos).
+    // Las vistas releen los datos (mismo evento que al restaurar una copia).
     if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
-      window.dispatchEvent(new CustomEvent("gt:sync-applied"));
+      window.dispatchEvent(new CustomEvent("gt:data-replaced"));
     }
   },
 });
@@ -1637,7 +1637,7 @@ export function resetDb(): void {
 /** Datos de ejemplo: equivale al seed.ts que corría el servidor. */
 function seed(db: Db): Db {
   // Ids fijos + marca antigua: si un segundo dispositivo siembra lo mismo y se
-  // empareja, las filas coinciden en vez de duplicarse (ver SEED_STAMP).
+  // sincroniza, las filas coinciden en vez de duplicarse (ver SEED_STAMP).
   const ts = SEED_STAMP;
   let n = 0;
   const seedId = (kind: string) => `seed-${kind}-${++n}`;

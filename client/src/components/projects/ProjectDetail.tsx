@@ -145,8 +145,8 @@ export function ProjectDetail({ id }: { id: string }) {
     const onSync = () => {
       if (!pending.current.size && !saving.current) load();
     };
-    window.addEventListener("gt:sync-applied", onSync);
-    return () => window.removeEventListener("gt:sync-applied", onSync);
+    window.addEventListener("gt:data-replaced", onSync);
+    return () => window.removeEventListener("gt:data-replaced", onSync);
   }, [load]);
 
   /** Acción inmediata (añadir, borrar, reordenar, estado…): primero se guarda lo pendiente. */

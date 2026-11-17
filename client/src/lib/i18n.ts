@@ -16,7 +16,6 @@ const es: Dict = {
   "nav.tags": "Etiquetas",
   "nav.goals": "Objetivos",
   "nav.finance": "Finanzas",
-  "nav.sync": "Sincronización",
   "nav.more": "Más",
   "nav.home": "Inicio",
   "nav.stats": "Estadísticas",
@@ -143,9 +142,6 @@ const es: Dict = {
   "notif.digestTime": "Resumen diario de tareas",
   "notif.digestTimeHelp": "Cuántas tareas siguen abiertas. Vacío = desactivado.",
 
-  // Sincronización
-  "sync.title": "Sincronización y copias de seguridad",
-
   // PWA
   "pwa.title": "Instalar como aplicación",
   "pwa.help": "Instálala para abrirla como una app nativa, con su icono y sin barra del navegador.",
@@ -169,7 +165,6 @@ const en: Dict = {
   "nav.tags": "Tags",
   "nav.goals": "Goals",
   "nav.finance": "Finance",
-  "nav.sync": "Sync",
   "nav.more": "More",
   "nav.home": "Home",
   "nav.stats": "Statistics",
@@ -287,7 +282,6 @@ const en: Dict = {
   "notif.digestTime": "Daily task summary",
   "notif.digestTimeHelp": "How many tasks are still open. Empty = off.",
 
-  "sync.title": "Sync and backups",
 
   "pwa.title": "Install as an app",
   "pwa.help": "Install it to open it like a native app, with its own icon and no browser bar.",

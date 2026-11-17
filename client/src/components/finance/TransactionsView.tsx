@@ -12,6 +12,7 @@ import { KIND_LABEL } from "./shared";
 import { ownerOf } from "./purpose";
 import { allocationsOf, type FinState } from "@/services/finance/calc";
 import { TxList } from "./TxList";
+import { saveBlob } from "@/lib/share";
 
 type Sort = "date-desc" | "date-asc" | "amount-desc" | "amount-asc";
 const PAGE = 100;
@@ -94,12 +95,7 @@ export function TransactionsView({
 
   function exportCsv() {
     const blob = new Blob([transactionsToCsv({ finAccounts: data.accounts, finCategories: data.categories, tags: data.tags, finTags: data.finTags }, filtered)], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `movimientos-${range.from}_${range.to}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void saveBlob(`movimientos-${range.from}_${range.to}.csv`, blob);
   }
 
   const sorted = sort.startsWith("date");

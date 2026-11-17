@@ -23,7 +23,6 @@ import {
   Sun,
   Tag,
   Target,
-  Wifi,
   Wallet,
   ArrowUpRight,
   ArrowDownLeft,
@@ -202,6 +201,7 @@ export function CommandPalette() {
         run: async () => {
           // Mismo formato que Configuración: se restaura sin contraseña en cualquier dispositivo.
           const size = await downloadBackup({ includeFiles: true });
+          if (size === null) return;
           toast.success(`Copia descargada (${Math.round(size / 1024)} KB). Guárdala en un lugar seguro.`);
         },
       },
@@ -236,14 +236,6 @@ export function CommandPalette() {
             toast.error("Permiso denegado por el navegador");
           }
         },
-      },
-      {
-        id: "sync",
-        group: "Acciones",
-        label: "Sincronizar (Wi‑Fi o archivo)",
-        icon: Wifi,
-        keywords: "qr wifi lan movil telefono sync",
-        run: () => navigate("/sincronizacion"),
       },
       {
         id: "install",

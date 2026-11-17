@@ -51,8 +51,8 @@ export function useNoteCategories(space: NoteSpace = "general") {
   }, [space]);
   useEffect(() => {
     reload();
-    window.addEventListener("gt:sync-applied", reload);
-    return () => window.removeEventListener("gt:sync-applied", reload);
+    window.addEventListener("gt:data-replaced", reload);
+    return () => window.removeEventListener("gt:data-replaced", reload);
   }, [reload]);
   return { categories, reload };
 }
@@ -154,8 +154,8 @@ export function NotesBoard({ space, paths, categories, reloadCategories, embedde
 
   useEffect(() => {
     load();
-    window.addEventListener("gt:sync-applied", load);
-    return () => window.removeEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
+    return () => window.removeEventListener("gt:data-replaced", load);
   }, [load]);
 
   // Búsqueda con pequeño retardo: no se filtra en cada tecla.

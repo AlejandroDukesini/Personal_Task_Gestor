@@ -82,7 +82,7 @@ export function Finance() {
   }, [params, setParams]);
 
   async function deleteTx(tx: FinTransactionRow) {
-    if (!confirm(`¿Eliminar «${tx.concept}»? El saldo se recalculará y el borrado se sincronizará con tus otros dispositivos.`)) return;
+    if (!confirm(`¿Eliminar «${tx.concept}»? El saldo se recalculará.`)) return;
     try {
       await api.delete(`/finance/transactions/${tx.id}`);
       toast.success("Movimiento eliminado");
@@ -103,7 +103,7 @@ export function Finance() {
     <>
       <PageHeader
         title="Finanzas"
-        description="Cuentas, movimientos, presupuestos y ahorro — sincronizado entre tus dispositivos."
+        description="Cuentas, movimientos, presupuestos y ahorro."
         actions={
           hasAccounts && (
             <>

@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { loadDb } from "@/services/localDb";
 import { call, expectStatus } from "@/test/helpers";
-import { buildOffer, validateOffer } from "@/services/manualsync/engine";
 import { projectProgress } from "./progress";
 
 const project = (over: Record<string, unknown> = {}) => call("POST", "/projects", { title: `Proyecto ${Math.random().toString(36).slice(2, 7)}`, ...over });
@@ -115,16 +114,5 @@ describe("plantillas y copias", () => {
     expect(d.stages[0].activities[0].status).toBe("pending");
     await op(d.id, { op: "stage.update", stageId: d.stages[0].id, data: { title: "Cambiada" } });
     expect((await get(p.id)).stages[0].title).toBe("Etapa");
-  });
-});
-
-describe("sincronización", () => {
-  it("los proyectos con estructura ampliada viajan validados", async () => {
-    const p = await project({ from: { type: "sop", id: "sop-tpl-software" }, client: "ACME", budget: 100 });
-    const offer = buildOffer(loadDb(), { deviceId: "pc", name: "PC" } as any, null, null);
-    expect(validateOffer(offer).errors).toEqual([]);
-    const tampered = structuredClone(offer);
-    (tampered.entries.find((e: any) => e.key === `projects:${p.id}`)!.row as any).stages[0].activities[0].status = "volando";
-    expect(validateOffer(tampered).errors.length).toBeGreaterThan(0);
   });
 });

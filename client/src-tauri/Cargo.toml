@@ -25,3 +25,7 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"

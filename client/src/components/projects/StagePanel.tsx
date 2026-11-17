@@ -41,7 +41,7 @@ export function StagePanel({ stage, index, total, color, readOnly, onChange, onM
     setPercentText(String(stage.progress));
     if (stage.progress < 100) lastOpen.current = stage.progress;
   }, [stage.progress]);
-  // Cambios llegados de fuera (sincronización) mientras no se está escribiendo.
+  // Cambios llegados de fuera (otra pestaña, restaurar una copia) mientras no se está escribiendo.
   useEffect(() => {
     if (document.activeElement?.getAttribute("data-stage-title") !== stage.id) setTitle(stage.title);
   }, [stage.title, stage.id]);

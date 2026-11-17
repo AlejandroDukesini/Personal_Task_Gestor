@@ -27,6 +27,7 @@ import {
   type SmartPreview,
 } from "@/services/finance/import/types";
 import { KIND_LABEL, errorMessage } from "./shared";
+import { saveBlob } from "@/lib/share";
 
 const STATUS_COLOR: Record<RowStatus, string> = {
   valid: "#16a34a",
@@ -59,12 +60,7 @@ const EDIT_FIELDS: { field: EditableField; label: string; placeholder?: string }
 ];
 
 function download(name: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
+  void saveBlob(name, content, "text/csv;charset=utf-8");
 }
 
 /** Opciones de un perfil guardado sobre las predeterminadas (descartando cuentas que ya no existen). */

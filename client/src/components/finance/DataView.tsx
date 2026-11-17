@@ -13,14 +13,10 @@ import { MAX_IMPORT_BYTES, readImportFile, type DetectedFile } from "@/services/
 import { financeSqlDump } from "@/services/finance/sql";
 import { DynIcon, errorMessage } from "./shared";
 import { SmartImport } from "./SmartImport";
+import { saveBlob } from "@/lib/share";
 
 function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
+  void saveBlob(name, content, type);
 }
 
 const COLLECTION_LABEL: Record<string, string> = {

@@ -30,8 +30,8 @@ export function ProjectTemplates({ onUse }: { onUse: (templateId: string) => voi
 
   useEffect(() => {
     load().catch(() => setItems([]));
-    window.addEventListener("gt:sync-applied", load);
-    return () => window.removeEventListener("gt:sync-applied", load);
+    window.addEventListener("gt:data-replaced", load);
+    return () => window.removeEventListener("gt:data-replaced", load);
   }, [load]);
 
   const act = (fn: () => Promise<unknown>, msg: string) => runAction(fn, msg, load);
